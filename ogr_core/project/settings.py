@@ -14,7 +14,7 @@ Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from dataclasses import fields as dataclass_fields
 from enum import Enum
 from typing import Optional
@@ -34,6 +34,8 @@ class LEMMethod(Enum):
     CORPS_OF_ENGINEERS_1 = "corps_engineers_1"
     CORPS_OF_ENGINEERS_2 = "corps_engineers_2"
     LOWE_KARAFIATH = "lowe_karafiath"
+    # v0.1.464 (D357) -- Sarma's method with non-vertical slices.
+    SARMA = "sarma"
 
 
 class GroundwaterMethod(Enum):
@@ -1101,6 +1103,63 @@ class BackAnalysisSettings:
 
 
 @dataclass
+class SarmaSettings:
+    """The settings of Sarma's method with non-vertical slices (v0.1.464,
+    D357; ``ogr_slip2d.methods.sarma``). Its own section, not fields of
+    ``methods``: ``MethodsSettings(**data)`` raises on an unknown key, so a
+    file written with ``methods.sarma_*`` would not open in an older
+    version, and an unknown section is ignored. Written to the file only
+    when Sarma is enabled or a field differs from its default
+    (:meth:`ProjectSettings.to_dict`), so a project without Sarma keeps its
+    fingerprint.
+
+    None of the global ``methods`` settings reaches Sarma: it has its own
+    number of wedges, tolerance and iterations (Brent's, on F).
+
+    * ``num_slices`` -- the LEAST number of wedges: the boundaries are the
+      vertices of the surface, its crossings with the water table and the
+      material contacts, and divisions up to this. On a straight stretch of
+      one Mohr-Coulomb material more wedges do not change F (the wedges of a
+      straight base add up to the one they split; a division whose face
+      would cross a neighbour is dropped for that reason); on a circle, whose
+      bases are chords, and where the strength of a base depends on its
+      stress, they do.
+    * ``slice_angles`` -- the angle of the faces no vertex gives one
+      (``ogr_slip2d.sarma.angles``): ``bisector``, ``mean_normal`` or
+      ``vertical``. A face of the policy that would cross a neighbour or not
+      reach the ground is dropped with its boundary where it is a uniform
+      division, and made vertical at a vertex, a contact or a water-table
+      cut (one of a crossing pair).
+    * ``interslice_strength`` -- the strength of the faces: ``materials``
+      (the mean of the Mohr-Coulomb materials each crosses, by length),
+      ``given`` (``interslice_cohesion`` [kPa], ``interslice_phi`` [deg],
+      divided by the design standard's material factors) or ``none``.
+    * ``boundaries_at_materials`` -- a boundary where the surface crosses a
+      material contact.
+    * ``shear_sense`` -- ``fixed`` (the upper wedge moves down relative to
+      the lower one) or ``kinematic`` (the rigid wedges' own).
+    """
+    num_slices: int = 25
+    tolerance: float = 1e-4
+    max_iterations: int = 75
+    slice_angles: str = "bisector"
+    interslice_strength: str = "materials"
+    interslice_cohesion: float = 0.0
+    interslice_phi: float = 0.0
+    boundaries_at_materials: bool = True
+    shear_sense: str = "fixed"
+
+    def is_default(self) -> bool:
+        return self == SarmaSettings()
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "SarmaSettings":
+        """Unknown keys are dropped, so a later version's file opens."""
+        names = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in (data or {}).items() if k in names})
+
+
+@dataclass
 class SeismicAnalysisSettings:
     """What a seismic run reports, beyond the factor of safety.
 
@@ -1393,6 +1452,8 @@ class ProjectSettings:
     seismic: SeismicAnalysisSettings = field(
         default_factory=SeismicAnalysisSettings)
     summary: ProjectSummary = field(default_factory=ProjectSummary)
+    # v0.1.464 (D357) -- see ``SarmaSettings``.
+    sarma: SarmaSettings = field(default_factory=SarmaSettings)
 
     max_materials: int = 20
     max_supports: int = 20
@@ -1474,7 +1535,7 @@ class ProjectSettings:
 
     # ------------------------------------------------------------------
     def to_dict(self) -> dict:
-        return {
+        out = {
             "units": self.units.to_dict(),
             "methods": asdict(self.methods),
             "groundwater": asdict(self.groundwater),
@@ -1491,6 +1552,12 @@ class ProjectSettings:
             "max_materials": self.max_materials,
             "max_supports": self.max_supports,
         }
+        # v0.1.464 (D357) -- only when used, so the file and the
+        # fingerprint of a project without Sarma do not move.
+        if (LEMMethod.SARMA.value in self.methods.enabled_methods
+                or not self.sarma.is_default()):
+            out["sarma"] = asdict(self.sarma)
+        return out
 
     @classmethod
     def from_dict(cls, data: dict) -> "ProjectSettings":
@@ -1511,4 +1578,5 @@ class ProjectSettings:
             summary=ProjectSummary(**data.get("summary", {})),
             max_materials=data.get("max_materials", 20),
             max_supports=data.get("max_supports", 20),
+            sarma=SarmaSettings.from_dict(data.get("sarma") or {}),
         )

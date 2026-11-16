@@ -11,7 +11,7 @@
 Estabilidad de taludes, flujo subterráneo y mecánica de rocas — en Python,
 legible, testeado y libre.
 
-[![tests](https://img.shields.io/badge/tests-7883%20passing-brightgreen)](#tests)
+[![tests](https://img.shields.io/badge/tests-7908%20passing-brightgreen)](#tests)
 [![licence](https://img.shields.io/badge/licencia-AGPL--3.0--or--later-blue)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.11%2B-blue)](#instalación)
 [![estado](https://img.shields.io/badge/estado-en%20desarrollo%20activo-orange)](#hoja-de-ruta)
@@ -52,7 +52,7 @@ comprobar en lugar de creer.
 
 ### Equilibrio límite
 
-Nueve métodos, cada uno validado contra un caso de referencia:
+Diez métodos, cada uno validado contra un caso de referencia:
 
 | Método | Equilibrio | Error de validación |
 |---|---|---|
@@ -65,6 +65,7 @@ Nueve métodos, cada uno validado contra un caso de referencia:
 | Lowe-Karafiath | fuerzas | +0.09 % |
 | Corps of Engineers #1 | fuerzas | −0.5 % |
 | Corps of Engineers #2 | fuerzas | −0.5 % |
+| Sarma (dovelas no verticales) | fuerzas | +0.03 % |
 
 Los dos Corps of Engineers —el procedimiento Modified Swedish— están
 validados dovela a dovela contra el ejemplo resuelto que publica la
@@ -242,7 +243,7 @@ demás. La lista se escribe a propósito con
 `--write-slow-list`, nunca en una corrida, y cada corrida entera nombra los
 archivos lentos que deja dentro.
 
-Unas **84 600 líneas** de implementación y **90 700 de tests**, **7883 de
+Unas **84 600 líneas** de implementación y **90 700 de tests**, **7908 de
 ellos en verde**, sin fallos conocidos. En la misma máquina la suite
 completa tardó 39,7 minutos en serie y 20,1 con `--jobs 4` en v0.1.397. Había
 tardado de 50 a 72 en serie entre v0.1.278 y v0.1.300, y 134 en v0.1.372, que

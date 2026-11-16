@@ -83,7 +83,9 @@ def _fos(p, method="bishop_simplified"):
 def _nine():
     from ogr_slip2d.methods import method_registry
     names = sorted(method_registry())
-    assert len(names) == 9, names
+    # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+    # the count it was written with
+    assert len(names) == 10, names
     return names
 
 

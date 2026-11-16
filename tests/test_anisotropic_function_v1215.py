@@ -56,6 +56,12 @@ the example the reference documentation draws, they are the ranges
 from __future__ import annotations
 
 import math
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _sarma_registry import refused_by_its_spec  # noqa: E402
 
 #: The default table of the model (also the dialog's default): the example
 #: the reference documentation draws for this strength type.
@@ -130,7 +136,9 @@ def _solve(key, strength, method_id):
 def _nine():
     from ogr_slip2d.methods import method_registry
     ids = sorted(method_registry())
-    assert len(ids) == 9, ids
+    # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+    # the count it was written with
+    assert len(ids) == 10, ids
     return ids
 
 
@@ -169,6 +177,9 @@ class TestASlopeOfItCanBeAnalysed:
     def test_the_nine_methods_return_a_factor(self):
         for mid in _nine():
             res = _solve("default", _model(), mid)
+            # Sarma's faces refuse this model: see tests/_sarma_registry.py
+            if refused_by_its_spec(mid, res):
+                continue
             assert res.fos is not None and res.fos > 0.0, (
                 mid, res.reason, res.error_message)
 
@@ -192,7 +203,11 @@ class TestASlopeOfItCanBeAnalysed:
         from ogr_core.materials.builtin_models import MohrCoulomb
         flat = [(0.0, 8.0, 25.0), (90.0, 8.0, 25.0)]
         for mid in _nine():
-            a = _solve("flat", _model(flat), mid).fos
+            ra = _solve("flat", _model(flat), mid)
+            # Sarma's faces refuse this model: see tests/_sarma_registry.py
+            if refused_by_its_spec(mid, ra):
+                continue
+            a = ra.fos
             b = _solve("mc", MohrCoulomb(cohesion=8.0, friction_angle=25.0),
                        mid).fos
             assert a is not None and b is not None, mid
@@ -203,8 +218,12 @@ class TestASlopeOfItCanBeAnalysed:
         materials, and every method must see that."""
         flat = [(0.0, 8.0, 25.0), (90.0, 8.0, 25.0)]
         for mid in _nine():
-            a = _solve("default", _model(), mid).fos
-            b = _solve("flat", _model(flat), mid).fos
+            ra = _solve("default", _model(), mid)
+            rb = _solve("flat", _model(flat), mid)
+            # Sarma's faces refuse this model: see tests/_sarma_registry.py
+            if refused_by_its_spec(mid, ra) and refused_by_its_spec(mid, rb):
+                continue
+            a, b = ra.fos, rb.fos
             assert abs(a - b) / b > 1e-3, (mid, a, b)
 
 

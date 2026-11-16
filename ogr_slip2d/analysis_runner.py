@@ -414,6 +414,11 @@ def settings_warnings(project, method_ids=()) -> list[str]:
     control cannot be honoured.
     """
     notes: list[str] = []
+    # v0.1.464 (D357) -- none of the global convergence settings reaches
+    # Sarma's method; said once when it is in the run (rule 7)
+    if "sarma" in (method_ids or ()) and non_vertical_skip(project) is None:
+        notes.append(method_note("sarma", _mnote(
+            MN.SARMA_OWN_SETTINGS, count=project.settings.sarma.num_slices)))
     # v0.1.121 — facts about the weak layers of the model. Asked once, here,
     # because they cannot change while the model is analysed and a per-surface
     # version of the same sentence would arrive thousands of times.
@@ -1546,6 +1551,83 @@ def _method_equilibrium(method_id: str):
     return bool(cls.SATISFIES_FORCE), bool(cls.SATISFIES_MOMENT)
 
 
+def non_vertical_skip(project) -> Optional[str]:
+    """The note code under which a method with non-vertical slices is not
+    computed in this run, or None (v0.1.464, D357): a rapid drawdown, or
+    the excess pore pressure of loading. A condition of the whole run,
+    said once and not as N refused surfaces (the argument of
+    ``search._analyse`` for the drawdown gap)."""
+    from ogr_core.hydraulic.excess_pore_pressure import is_enabled
+    if project.settings.groundwater.rapid_drawdown:
+        return MN.SARMA_DRAWDOWN
+    if is_enabled(project):
+        return MN.SARMA_EXCESS
+    return None
+
+
+def sarma_setting_problem(project):
+    """``(field, value)`` of the first field of ``settings.sarma`` the
+    method cannot take, or None (v0.1.464, the adversarial review: a bad
+    value in a file opened, then raised in ``build_method`` and aborted the
+    whole run, the vertical methods included). The run skips Sarma with a
+    note naming it instead."""
+    from ogr_slip2d.methods.sarma import INTERSLICE_STRENGTHS
+    from ogr_slip2d.sarma.angles import POLICIES
+    from ogr_slip2d.sarma.solver import SHEAR_SENSES
+    sa = project.settings.sarma
+
+    def whole(v, low):
+        return (isinstance(v, int) and not isinstance(v, bool) and v >= low)
+
+    def number(v, low, high=math.inf, open_low=False):
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return False
+        v = float(v)
+        return (math.isfinite(v) and (v > low if open_low else v >= low)
+                and v < high)
+    checks = (
+        ("num_slices", whole(sa.num_slices, 1)),
+        ("tolerance", number(sa.tolerance, 0.0, open_low=True)),
+        ("max_iterations", whole(sa.max_iterations, 1)),
+        ("slice_angles", sa.slice_angles in POLICIES),
+        ("interslice_strength", sa.interslice_strength in INTERSLICE_STRENGTHS),
+        ("interslice_cohesion", number(sa.interslice_cohesion, 0.0)),
+        ("interslice_phi", number(sa.interslice_phi, 0.0, 90.0)),
+        ("boundaries_at_materials", isinstance(sa.boundaries_at_materials,
+                                               bool)),
+        ("shear_sense", sa.shear_sense in SHEAR_SENSES),
+    )
+    for name, ok in checks:
+        if not ok:
+            return name, repr(getattr(sa, name))
+    return None
+
+
+def sarma_notes(result, search=None) -> list:
+    """The notes of Sarma's method about the surface the run reports
+    (v0.1.464): faces of the policy made vertical, effective normals in
+    tension, and how many surfaces had no wedges."""
+    out = []
+    details = getattr(result, "details", None) or {}
+    count = int(details.get("sarma_verticalized") or 0)
+    if count:
+        out.append(_mnote(MN.SARMA_VERTICALIZED, count=count))
+    tension = sum(1 for x in (details.get("sarma_face_effective") or [])
+                  if x < -1e-9)
+    normals = details.get("solved_base_normal") or []
+    slices = list(getattr(result, "slices", ()) or ())
+    for n, s in zip(normals, slices):
+        if n - getattr(s, "pore_force", s.pore_pressure * s.base_length) \
+                < -1e-9:
+            tension += 1
+    if tension:
+        out.append(_mnote(MN.SARMA_TENSION, count=tension))
+    refused = int(getattr(search, "_wedges_refused", 0) or 0)
+    if refused:
+        out.append(_mnote(MN.SARMA_WEDGES_REFUSED, count=refused))
+    return out
+
+
 def m_alpha_margin_note(result) -> list[str]:
     """Warn when the reported factor rests on a near-zero ``m_alpha``.
 
@@ -1559,7 +1641,7 @@ def m_alpha_margin_note(result) -> list[str]:
     degeneracy to ``cos a`` under phi = 0 is arithmetic, not a citation.
     """
     from .checks import (M_ALPHA_LIMIT, NO_M_ALPHA_DENOMINATOR,
-                         base_m_alphas)
+                         OWN_DENOMINATOR, base_m_alphas)
 
     # v0.1.158 — the method has to be known BEFORE the value is measured,
     # because for one of them the value is not a property of the run at
@@ -1567,7 +1649,7 @@ def m_alpha_margin_note(result) -> list[str]:
     # site keeps its signature and a wrong sentence shows up as a wrong
     # sentence rather than as a TypeError.
     method_id = getattr(result, "method_id", "") or ""
-    if method_id in NO_M_ALPHA_DENOMINATOR:
+    if method_id in NO_M_ALPHA_DENOMINATOR or method_id in OWN_DENOMINATOR:
         return []
 
     vals = base_m_alphas(result)
@@ -1764,6 +1846,26 @@ def build_method(project, method_id: str, num_slices: Optional[int] = None):
         # analysis from every other route into the same method.
         kwargs["interslice_forces"] = getattr(
             s.methods, "interslice_forces", "total")
+
+    if getattr(cls, "NON_VERTICAL", False):
+        # v0.1.464 (D357) -- Sarma's method takes its own settings
+        # (``settings.sarma``), none of the global ones. A run under a rapid
+        # drawdown skips it with one note (``non_vertical_skip``); the
+        # wrapper ``wrap_for_drawdown`` gives it, a
+        # ``NonVerticalDrawdownRefusal``, is the net for any other door.
+        from .methods.sarma import face_strength_of
+        sa = s.sarma
+        method = cls(tolerance=sa.tolerance,
+                     max_iterations=sa.max_iterations,
+                     num_wedges=sa.num_slices, angle_policy=sa.slice_angles,
+                     face_strength=face_strength_of(
+                         sa.interslice_strength, sa.interslice_cohesion,
+                         sa.interslice_phi),
+                     boundaries_at_materials=sa.boundaries_at_materials,
+                     shear_sense=sa.shear_sense)
+        if num_slices is None:
+            num_slices = s.methods.num_slices
+        return wrap_for_drawdown(method, project, num_slices=int(num_slices))
 
     method = cls(**kwargs)
 
@@ -2217,7 +2319,12 @@ def run_analysis(project, method_ids=None,
     # series (``search.SliceShare``): read by each method after the first
     from .search import GridSearch, SliceShare
     from .slice_store import SliceStore, wants_store
-    n_known = sum(1 for mid in method_ids if mid in known)
+    # v0.1.464 (D357) -- the share is read by the VERTICAL methods only: a
+    # method with non-vertical slices builds its own wedges, and counting it
+    # as a follower would leave the records alive to the end (D393).
+    skip_nv = non_vertical_skip(project)
+    n_known = sum(1 for mid in method_ids if mid in known
+                  and not getattr(known[mid], "NON_VERTICAL", False))
     share = SliceShare(followers=n_known - 1) if n_known > 1 else None
     store = None
 
@@ -2230,6 +2337,17 @@ def run_analysis(project, method_ids=None,
             warnings.append(_mnote(MN.UNREGISTERED, method=mid,
                                    available=", ".join(sorted(known))))
             continue
+        non_vertical = getattr(known[mid], "NON_VERTICAL", False)
+        if non_vertical and skip_nv is not None:
+            line = method_note(mid, _mnote(skip_nv))
+            if line not in warnings:
+                warnings.append(line)
+            continue
+        bad = sarma_setting_problem(project) if non_vertical else None
+        if bad is not None:
+            warnings.append(method_note(mid, _mnote(
+                MN.SARMA_BAD_SETTING, field=bad[0], value=bad[1])))
+            continue
 
         def _progress(done, total, _i=i, _n=n_methods):
             if progress_cb is not None:
@@ -2238,7 +2356,8 @@ def run_analysis(project, method_ids=None,
         search = build_search(project, mid, progress_cb=_progress)
         if search is None:  # pragma: no cover - guarded by the check above
             continue
-        if share is not None and isinstance(search, GridSearch):
+        if (share is not None and isinstance(search, GridSearch)
+                and not non_vertical):
             search.slice_share = share
         # v0.1.408 (D383) — one store for every method of the run
         if spill_slices and wants_store(search):
@@ -2273,6 +2392,11 @@ def run_analysis(project, method_ids=None,
                     warnings.append(line)
         if crit is not None:
             for note in m_alpha_margin_note(crit):
+                line = method_note(mid, note)
+                if line not in warnings:
+                    warnings.append(line)
+        if non_vertical:
+            for note in sarma_notes(crit, search):
                 line = method_note(mid, note)
                 if line not in warnings:
                     warnings.append(line)
@@ -2397,6 +2521,18 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
             warnings.append(_mnote(MN.UNREGISTERED, method=mid,
                                    available=", ".join(sorted(known))))
             continue
+        # v0.1.464 (D357) -- the run's skip of a method with non-vertical
+        # slices, said once, as in ``run_analysis``.
+        if getattr(known[mid], "NON_VERTICAL", False):
+            _why = non_vertical_skip(project)
+            if _why is not None:
+                warnings.append(method_note(mid, _mnote(_why)))
+                continue
+            _bad = sarma_setting_problem(project)
+            if _bad is not None:
+                warnings.append(method_note(mid, _mnote(
+                    MN.SARMA_BAD_SETTING, field=_bad[0], value=_bad[1])))
+                continue
         search = build_search(project, mid)
         # v0.1.385 (V7) -- the freeze every door outside a search now takes,
         # without its fallback: a model where freezing raises let that error
@@ -2415,6 +2551,14 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
         for line in getattr(search, "_pending_notes", None) or ():
             if line not in noted:
                 warnings.append(method_note(mid, line))
+        # v0.1.464 (D357) -- Sarma's notes on the surface, as a run says
+        # them on its critical one
+        if (results[mid] is not None
+                and getattr(known[mid], "NON_VERTICAL", False)):
+            for note in sarma_notes(results[mid]):
+                line = method_note(mid, note)
+                if line not in warnings:
+                    warnings.append(line)
         if results[mid] is None:
             # v0.1.258 (D244) — WHY there is no result, from the search
             # itself. Every refusal used to come out as "the surface does
@@ -2632,6 +2776,13 @@ def run_configured_drawdown_sweep(project, method_ids=None, *,
                   or ["bishop_simplified"])
     factored, report = prepare_analysis_project(project)
     warnings = list(settings_warnings(factored, method_ids))
+    # v0.1.464 (D357) -- a sweep is a drawdown: a method with non-vertical
+    # slices is not computed, said once, as in ``run_analysis``
+    known = method_registry()
+    for mid in [m for m in method_ids
+                if getattr(known.get(m), "NON_VERTICAL", False)]:
+        warnings.append(method_note(mid, _mnote(MN.SARMA_DRAWDOWN)))
+        method_ids = [m for m in method_ids if m != mid]
     # v0.1.366 (D362) — each level's search can be stopped by a watcher of
     # this thread (``ogr_core.progress``); the bar keeps the levels, which
     # ``run_drawdown_sweep`` reports

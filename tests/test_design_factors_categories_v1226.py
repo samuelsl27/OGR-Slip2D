@@ -43,6 +43,12 @@ divisor). The Mohr-Coulomb control passes.
 from __future__ import annotations
 
 import math
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _sarma_registry import refused_by_its_spec  # noqa: E402
 
 GAMMA = 1.3            # none of the presets' values, on purpose
 CIRCLE = (38.0, 22.0, 23.0)
@@ -119,7 +125,7 @@ def _custom(project, c=1.0, phi=1.0, cu=1.0, tau=1.0, r=1.0, perm=1.0,
     return project
 
 
-def _fos(project, method_id):
+def _result(project, method_id):
     from ogr_slip2d.methods import method_registry
     from ogr_slip2d.slicer import slice_surface
     from ogr_slip2d.surface import SlipCircle
@@ -127,7 +133,11 @@ def _fos(project, method_id):
     sl = slice_surface(project, circle, num_slices=N_SLICES)
     m = method_registry()[method_id]()
     m.tolerance = 1e-12
-    res = m.compute_fos(project, circle, sl)
+    return m.compute_fos(project, circle, sl)
+
+
+def _fos(project, method_id):
+    res = _result(project, method_id)
     assert res.fos is not None, (method_id, res.reason)
     return res.fos
 
@@ -232,8 +242,15 @@ class TestTheFactorOfSafety:
             out, _rep = _factored(_custom(_project(strength), GAMMA, GAMMA,
                                           GAMMA, GAMMA))
             for mid in sorted(method_registry()):
-                a = _fos(p, mid)
-                b = _fos(out, mid)
+                ra, rb = _result(p, mid), _result(out, mid)
+                # Sarma's faces refuse these models (all but Mohr-Coulomb):
+                # see tests/_sarma_registry.py
+                if (refused_by_its_spec(mid, ra)
+                        and refused_by_its_spec(mid, rb)):
+                    continue
+                a, b = ra.fos, rb.fos
+                assert a is not None and b is not None, (
+                    name, mid, ra.reason, rb.reason)
                 # Measured on v0.1.226: 5.1e-10 at worst (Corps 1 on the
                 # Hoek-Brown slope), the iteration's own tolerance.
                 assert math.isclose(b, a / GAMMA, rel_tol=5e-9), (

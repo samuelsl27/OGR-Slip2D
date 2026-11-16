@@ -110,6 +110,21 @@ def _polarities() -> list[str]:
     return _enum_values(Polarity)
 
 
+def _sarma_policies() -> list[str]:
+    from ogr_slip2d.sarma.angles import POLICIES
+    return list(POLICIES)
+
+
+def _sarma_strengths() -> list[str]:
+    from ogr_slip2d.methods.sarma import INTERSLICE_STRENGTHS
+    return list(INTERSLICE_STRENGTHS)
+
+
+def _sarma_senses() -> list[str]:
+    from ogr_slip2d.sarma.solver import SHEAR_SENSES
+    return list(SHEAR_SENSES)
+
+
 #: Path -> callable giving the accepted values. A callable and not a list,
 #: so a method or a unit system registered later is accepted without this
 #: file being edited — the registries are the source, not a copy of them.
@@ -135,6 +150,11 @@ CHOICES: dict[str, Callable[[], list[str]]] = {
     "random_numbers.method": lambda: ["pseudo_random", "random"],
     "design_standard.standard": _standards,
     "seismic.polarity": _polarities,
+    # v0.1.464 (D357) -- Sarma's own settings (``settings.sarma``), from the
+    # modules that read them
+    "sarma.slice_angles": _sarma_policies,
+    "sarma.interslice_strength": _sarma_strengths,
+    "sarma.shear_sense": _sarma_senses,
 }
 
 #: Choices that depend on the model rather than on a registry.
@@ -188,6 +208,12 @@ _BOUNDS: dict[str, tuple[Optional[float], Optional[float], str]] = {
     "methods.num_slices": (1, None, "at least 1"),
     "methods.tolerance": (0.0, None, "positive"),
     "methods.max_iterations": (1, None, "at least 1"),
+    # v0.1.464 (D357)
+    "sarma.num_slices": (1, None, "at least 1"),
+    "sarma.tolerance": (0.0, None, "positive"),
+    "sarma.max_iterations": (1, None, "at least 1"),
+    "sarma.interslice_cohesion": (0.0, None, "at least 0"),
+    "sarma.interslice_phi": (0.0, 89.9, "between 0 and 89.9"),
     "search.grid_nx": (1, None, "at least 1"),
     "search.grid_ny": (1, None, "at least 1"),
     # v0.1.412 (D369) — 0 switches the area filter off; below 0 filtered
@@ -201,7 +227,7 @@ _BOUNDS: dict[str, tuple[Optional[float], Optional[float], str]] = {
     "design_standard.factor_variable_favourable": (0.0, 10.0,
                                                    "between 0 and 10"),
 }
-_STRICT_LOWER = {"methods.tolerance"}
+_STRICT_LOWER = {"methods.tolerance", "sarma.tolerance"}
 
 
 def section_names(settings) -> list[str]:

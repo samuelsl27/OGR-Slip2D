@@ -102,6 +102,13 @@ FIXED_POINT_ON_F = ("bishop_simplified", "janbu_simplified",
                     "corps_engineers_2", "lowe_karafiath")
 LAMBDA_SEARCH = ("spencer", "gle_morgenstern_price")
 NO_ITERATION = ("ordinary_fellenius",)
+#: v0.1.464 (D357): a fourth group, the methods whose iterations have
+#: settings of their own that the global Maximum Iterations never reaches.
+#: Sarma's method brackets F with Brent's method under
+#: ``settings.sarma.max_iterations`` and ``settings.sarma.tolerance``
+#: (``analysis_runner.build_search``), so a note about the global value
+#: would not be true of it.
+OWN_ITERATION_SETTINGS = ("sarma",)
 
 #: The three of FIXED_POINT_ON_F that raise a small value to a floor of
 #: their own, which is why the shipped default does not reach them.
@@ -501,13 +508,16 @@ class TestTheLabelDescribesTheEngineThatExists:
     """
 
     def test_the_three_groups_are_exactly_the_registry(self):
+        # four since v0.1.464: the name keeps the count it was written with
         from ogr_slip2d.methods.base import _METHOD_REGISTRY
         declared = set(FIXED_POINT_ON_F) | set(LAMBDA_SEARCH) | set(
-            NO_ITERATION)
+            NO_ITERATION) | set(OWN_ITERATION_SETTINGS)
         assert declared == set(_METHOD_REGISTRY), (
             declared ^ set(_METHOD_REGISTRY))
         assert len(declared) == (len(FIXED_POINT_ON_F) + len(LAMBDA_SEARCH)
-                                 + len(NO_ITERATION)), "a method is in two"
+                                 + len(NO_ITERATION)
+                                 + len(OWN_ITERATION_SETTINGS)), (
+            "a method is in two")
 
     def test_ordinary_has_no_iteration_to_bound(self):
         assert _mentions_max_iterations(

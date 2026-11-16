@@ -190,6 +190,14 @@ M_ALPHA_SCREENED = frozenset({
 #: and the string ``m_alpha`` does not appear in ``methods/ordinary.py``.
 NO_M_ALPHA_DENOMINATOR = frozenset({"ordinary_fellenius"})
 
+#: v0.1.464 (D357) -- methods with a denominator of their OWN, not Bishop's
+#: m_alpha: Sarma's wedges divide each face thrust by the qᵢ of the
+#: recurrence (``ogr_slip2d.sarma.solver``), which is the analogue and is
+#: published as ``details["sarma_min_q"]``. Neither screened by the m-alpha
+#: check nor noted with Bishop's margin; ``NO_M_ALPHA_DENOMINATOR`` stays
+#: what it was.
+OWN_DENOMINATOR = frozenset({"sarma"})
+
 
 # ----------------------------------------------------------------------
 def _material_tensile_strength(material) -> float:

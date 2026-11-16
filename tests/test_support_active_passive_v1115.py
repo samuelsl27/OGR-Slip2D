@@ -86,6 +86,12 @@ first place.
 from __future__ import annotations
 
 import math
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _sarma_registry import accepts_supports  # noqa: E402
 
 H = 12.0
 TOE = 30.0
@@ -100,14 +106,16 @@ FRICTION = 20.0     # degrees, the general fixture
 #: nothing about the support algebra different between the two.
 CAPACITY = 20.0
 
-#: Every method the registry offers. Not a hand-kept list on purpose: a
-#: tenth method added later must face rule 7 too.
-_SKIP: tuple = ()
-
-
 def _method_ids():
+    """Every method the registry offers that takes supports. Not a
+    hand-kept list on purpose: a method added later must face rule 7 too.
+    The one exemption is read from the class (``ACCEPTS_SUPPORTS``, see
+    tests/_sarma_registry.py), so it cannot outlive its reason: Sarma's
+    method (v0.1.464) refuses a surface with a support by its spec, and
+    has no Active or Passive to separate."""
     from ogr_slip2d.methods.base import method_registry
-    return sorted(m for m in method_registry() if m not in _SKIP)
+    return sorted(mid for mid, cls in method_registry().items()
+                  if accepts_supports(cls))
 
 
 def _circle():

@@ -303,6 +303,10 @@ class Slices:
     # Corps of Engineers #1 draws its line from
     # (``methods.modified_swedish.CHORD_TO_CRACK_TOP``).
     tension_crack_wall: Optional[tuple] = None
+    #: v0.1.464 (D357) -- not a field: what ``slice_store`` keeps of a
+    #: container besides its slices; None here, Sarma's ``Wedges`` answer
+    #: their own fields.
+    wedge_fields = None
     # v0.1.242 (D226a) -- the sense of sliding (+1 or -1) the slice weights
     # were factored by, read off the unfactored slices; None when no
     # permanent-action factor was applied.

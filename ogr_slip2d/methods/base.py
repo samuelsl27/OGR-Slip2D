@@ -111,6 +111,11 @@ REASON_UNSLICEABLE_AT_DRAWDOWN = "unsliceable_at_drawdown"
 #: (see :func:`self_consistent_envelope`), so the factor of safety is not the
 #: one of that envelope.
 REASON_ENVELOPE_NOT_CONVERGED = "envelope_not_converged"
+#: v0.1.464 (D357) -- Sarma's method refused the surface: its wedges could
+#: not be built (``ogr_slip2d.sarma.wedges``), a face is parallel to a base,
+#: or the surface carries a support, which the method does not take. The
+#: code of the result says which.
+REASON_SARMA_REFUSED = "sarma_refused"
 
 #: Every reason a method may give. A membership test against this set is
 #: what keeps the next reason from being born as a loose string.

@@ -39,6 +39,12 @@ rule. The ends, the step and the valid A and B pass.
 from __future__ import annotations
 
 import math
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _sarma_registry import refused_by_its_spec  # noqa: E402
 
 P = dict(c1=5.0, phi1=15.0, c2=20.0, phi2=30.0, A=10.0, B=30.0)
 
@@ -130,7 +136,7 @@ class TestAPlaneIsMohrCoulomb:
                                 strength=strength)]
         return p
 
-    def _fos(self, strength, method_id):
+    def _result(self, strength, method_id):
         from ogr_core.geometry import Polyline, Vertex
         from ogr_slip2d.methods import method_registry
         from ogr_slip2d.slicer import slice_surface
@@ -142,7 +148,10 @@ class TestAPlaneIsMohrCoulomb:
         sl = slice_surface(p, plane, num_slices=N_SLICES)
         m = method_registry()[method_id]()
         m.tolerance = 1e-12
-        res = m.compute_fos(p, plane, sl)
+        return m.compute_fos(p, plane, sl)
+
+    def _fos(self, strength, method_id):
+        res = self._result(strength, method_id)
         assert res.fos is not None, (method_id, res.reason)
         return res.fos
 
@@ -153,7 +162,12 @@ class TestAPlaneIsMohrCoulomb:
         mc = MohrCoulomb(cohesion=c,
                          friction_angle=math.degrees(math.atan(tan_phi)))
         for mid in sorted(method_registry()):
-            a = self._fos(_al(), mid)
+            ra = self._result(_al(), mid)
+            # Sarma's faces refuse this model: see tests/_sarma_registry.py
+            if refused_by_its_spec(mid, ra):
+                continue
+            assert ra.fos is not None, (mid, ra.reason)
+            a = ra.fos
             b = self._fos(mc, mid)
             assert math.isclose(a, b, rel_tol=1e-11), (mid, a, b)
 

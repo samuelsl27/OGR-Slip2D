@@ -65,6 +65,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from _sarma_registry import refused_by_its_spec  # noqa: E402
+
 _GW = 9.81
 _REL = 1e-12
 _PARENT_GAMMA = 19.0
@@ -178,10 +180,14 @@ def _sliced(p):
     return work, c, sl
 
 
-def _fos(p, method="bishop_simplified"):
+def _result(p, method="bishop_simplified"):
     from ogr_slip2d.methods import get_method
     work, c, sl = _sliced(p)
-    r = get_method(method)(tolerance=1e-12).compute_fos(work, c, sl)
+    return get_method(method)(tolerance=1e-12).compute_fos(work, c, sl)
+
+
+def _fos(p, method="bishop_simplified"):
+    r = _result(p, method)
     assert r.fos is not None, (method, getattr(r, "reason", None))
     return float(r.fos)
 
@@ -189,7 +195,9 @@ def _fos(p, method="bishop_simplified"):
 def _nine():
     from ogr_slip2d.methods import method_registry
     names = sorted(method_registry())
-    assert len(names) == 9, names
+    # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+    # the count it was written with
+    assert len(names) == 10, names
     return names
 
 
@@ -227,22 +235,40 @@ class TestIdentities:
                 children=[("a", "wt", _mc(10.0, 30.0)),
                           ("b", "wt", _mc(5.0, 35.0))])[0]
         for m in _nine():
-            on, off = _fos(build(True), m), _fos(build(False), m)
+            r_on, r_off = _result(build(True), m), _result(build(False), m)
+            # Sarma's faces refuse this model: see tests/_sarma_registry.py
+            if refused_by_its_spec(m, r_on) and refused_by_its_spec(m, r_off):
+                continue
+            on, off = r_on.fos, r_off.fos
+            assert on is not None and off is not None, (
+                m, r_on.reason, r_off.reason)
             assert _close(on, off), (m, on, off)
 
     def test_switch_off_is_the_plain_material_with_the_childs_water(self):
         for m in _nine():
-            g = _fos(_one_range(False), m)
+            r_g = _result(_one_range(False), m)
+            # Sarma's faces refuse this model: see tests/_sarma_registry.py
+            if refused_by_its_spec(m, r_g):
+                continue
+            assert r_g.fos is not None, (m, r_g.reason)
+            g = float(r_g.fos)
             plain = _fos(_plain("p1"), m)
             assert _close(g, plain), (m, g, plain)
 
     def test_switch_on_is_the_plain_material_with_the_parents_water(self):
         for m in _nine():
-            on = _fos(_one_range(True), m)
+            r_on, r_off = (_result(_one_range(True), m),
+                           _result(_one_range(False), m))
+            # Sarma's faces refuse this model: see tests/_sarma_registry.py
+            if refused_by_its_spec(m, r_on) and refused_by_its_spec(m, r_off):
+                continue
+            assert r_on.fos is not None and r_off.fos is not None, (
+                m, r_on.reason, r_off.reason)
+            on = float(r_on.fos)
             plain = _fos(_plain("wt"), m)
             assert _close(on, plain), (m, on, plain)
             # Rule 7: the switch moves the number.
-            off = _fos(_one_range(False), m)
+            off = float(r_off.fos)
             assert abs(off / on - 1.0) > 0.01, (m, on, off)
 
 

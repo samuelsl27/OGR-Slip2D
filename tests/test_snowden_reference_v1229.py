@@ -45,6 +45,12 @@ from __future__ import annotations
 
 import copy
 import math
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _sarma_registry import refused_by_its_spec  # noqa: E402
 
 #: A dry circle whose bases run from about -18 to +62 degrees.
 CIRCLE = (38.0, 22.0, 23.0)
@@ -135,7 +141,7 @@ def _slope(strength, mirror=False):
     return p
 
 
-def _fos(strength, method_id="bishop_simplified", mirror=False):
+def _result(strength, method_id="bishop_simplified", mirror=False):
     from ogr_slip2d.methods import method_registry
     from ogr_slip2d.slicer import slice_surface
     from ogr_slip2d.surface import SlipCircle
@@ -143,7 +149,11 @@ def _fos(strength, method_id="bishop_simplified", mirror=False):
     xc, yc, r = CIRCLE
     circle = SlipCircle(60.0 - xc if mirror else xc, yc, r)
     sl = slice_surface(p, circle, num_slices=N_SLICES)
-    res = method_registry()[method_id]().compute_fos(p, circle, sl)
+    return method_registry()[method_id]().compute_fos(p, circle, sl)
+
+
+def _fos(strength, method_id="bishop_simplified", mirror=False):
+    res = _result(strength, method_id, mirror)
     assert res.fos is not None, (method_id, res.reason)
     return res.fos
 
@@ -266,9 +276,17 @@ class TestIdentities:
         from ogr_slip2d.methods import method_registry
         al, sn = self._al_pair()
         mids = sorted(method_registry())
-        assert len(mids) == 9
+        # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+        # the count it was written with
+        assert len(mids) == 10
         for mid in mids:
-            a, b = _fos(al, mid), _fos(sn, mid)
+            ra, rb = _result(al, mid), _result(sn, mid)
+            # Sarma's faces refuse these models: see tests/_sarma_registry.py
+            if refused_by_its_spec(mid, ra) and refused_by_its_spec(mid, rb):
+                continue
+            a, b = ra.fos, rb.fos
+            assert a is not None and b is not None, (
+                mid, ra.reason, rb.reason)
             assert math.isclose(a, b, rel_tol=1e-12), (mid, a, b)
 
     def test_the_mirror_of_the_model(self):

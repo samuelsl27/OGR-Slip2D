@@ -56,6 +56,12 @@ two identities, the cache and the controls pass.
 from __future__ import annotations
 
 import math
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _sarma_registry import refused_by_its_spec  # noqa: E402
 
 #: The documented example of the Anisotropic Strength Function, written as
 #: Generalized Anisotropic ranges of Mohr-Coulomb children.
@@ -300,8 +306,11 @@ class TestIdentities:
         from ogr_slip2d.methods import method_registry
         asf = AnisotropicStrengthFunction(rows=DOC_ROWS)
         for mid in sorted(method_registry()):
-            a = _fos(_ga(), mid).fos
-            b = _fos(asf, mid).fos
+            ra, rb = _fos(_ga(), mid), _fos(asf, mid)
+            # Sarma's faces refuse these models: see tests/_sarma_registry.py
+            if refused_by_its_spec(mid, ra) and refused_by_its_spec(mid, rb):
+                continue
+            a, b = ra.fos, rb.fos
             assert a is not None and math.isclose(a, b, rel_tol=1e-12), (
                 mid, a, b)
 

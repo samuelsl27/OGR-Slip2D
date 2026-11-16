@@ -37,6 +37,8 @@ bedding is read, and without a surface the global angle is.
 from __future__ import annotations
 
 import math
+import sys
+from pathlib import Path
 
 from ogr_core.geometry import Boundary, BoundaryType, Polyline, Vertex
 from ogr_core.materials import Material
@@ -46,6 +48,9 @@ from ogr_core.project import Project
 from ogr_slip2d.methods import method_registry
 from ogr_slip2d.search import GridSearch
 from ogr_slip2d.surface import SlipCircle
+
+sys.path.insert(0, str(Path(__file__).parent))
+from _sarma_registry import refused_by_its_spec  # noqa: E402
 
 def _cphi(c: float, phi: float) -> dict:
     return {"model_id": "c_phi_function", "params": {},
@@ -106,6 +111,11 @@ def _fos(project, method_id: str = "bishop_simplified") -> float:
                    grid_nx=3, grid_ny=3, radius_increment=3)
     res = g.evaluate_circle(project, SlipCircle(centre_x=60.0, centre_y=62.0,
                                                 radius=48.0))
+    # v0.1.464 (D357): Sarma refusing for a reason of its spec (a face
+    # through a material that is not Mohr-Coulomb) is a result with its code
+    # (tests/_sarma_registry.py); any other None still fails
+    if refused_by_its_spec(method_id, res):
+        return None
     assert res is not None and res.is_valid, "the trial circle did not solve"
     return res.fos
 
@@ -129,6 +139,9 @@ class TestTheSurfaceIsRead:
         for mid in sorted(method_registry()):
             a = _fos(_slope(bedding_angle=0.0, surface=_straight(25.0)), mid)
             b = _fos(_slope(bedding_angle=25.0), mid)
+            if a is None or b is None:
+                assert a is None and b is None, (mid, a, b)
+                continue
             if not math.isclose(a, b, rel_tol=1e-9):
                 bad.append("%s: %.10f vs %.10f" % (mid, a, b))
         assert not bad, "\n".join(bad)

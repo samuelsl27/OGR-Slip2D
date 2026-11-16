@@ -320,7 +320,7 @@ class _MethodsPage(QWidget):
         LEM.BISHOP_SIMPLIFIED, LEM.JANBU_SIMPLIFIED, LEM.JANBU_CORRECTED,
         LEM.ORDINARY_FELLENIUS, LEM.SPENCER, LEM.GLE_MORGENSTERN_PRICE,
         LEM.CORPS_OF_ENGINEERS_1, LEM.CORPS_OF_ENGINEERS_2,
-        LEM.LOWE_KARAFIATH,
+        LEM.LOWE_KARAFIATH, LEM.SARMA,
     ]
 
     #: The methods that read ``interslice_forces``. Same three ids as
@@ -399,7 +399,11 @@ class _MethodsPage(QWidget):
             "inter-slice inclination, and above %d also the budget of the "
             "fixed point solved inside every sample of that search, which "
             "keeps its %d passes at or below %d.")
-            % (_BRANCH_PASSES, _BRANCH_PASSES, _BRANCH_PASSES))
+            % (_BRANCH_PASSES, _BRANCH_PASSES, _BRANCH_PASSES)
+            # v0.1.464 (D357) -- a sentence of its own, so the one above
+            # keeps its translation
+            + "\n" + tr("Sarma (non-vertical slices): nothing; it has its own "
+                        "iterations, in its group below."))
         form.addRow(tr("Number of slices:"), self.spn_slices)
         form.addRow(tr("Tolerance:"), self.dsp_tol)
         form.addRow(tr("Maximum iterations (scope differs by method):"),
@@ -460,6 +464,10 @@ class _MethodsPage(QWidget):
             "Corps of Engineers #1 and #2."))
         form.addRow(tr("Interslice forces:"), self.cbo_zf)
         root.addWidget(conv)
+        # v0.1.464 (D357) -- Sarma's own settings (``settings.sarma``),
+        # greyed out while the method is not ticked; the given c and phi,
+        # also while the face strength is not «given».
+        root.addWidget(self._sarma_group(s))
 
         gle = self.checkboxes.get(LEM.GLE_MORGENSTERN_PRICE.value)
         if gle is not None:
@@ -469,6 +477,89 @@ class _MethodsPage(QWidget):
             if cb is not None:
                 cb.toggled.connect(self._refresh_interslice)
         self._refresh_interslice()
+
+    def _sarma_group(self, s: ProjectSettings) -> QWidget:
+        sa = s.sarma
+        grp = QGroupBox(tr('Sarma (non-vertical slices)'))
+        form = QFormLayout(grp)
+        self.spn_sarma_n = QSpinBox()
+        self.spn_sarma_n.setRange(1, 500)
+        self.spn_sarma_n.setValue(sa.num_slices)
+        self.spn_sarma_n.setToolTip(tr('The least number of wedges. The boundaries are the vertices of the surface, its crossings with the water table and with the material contacts, and divisions up to this number. On a straight stretch of one Mohr-Coulomb material more wedges do not change the factor of safety: the wedges of a straight base add up to the one they split. On a circle, whose bases are chords, and where the strength of a base depends on its stress, they do.'))
+        form.addRow(tr('Least number of wedges:'), self.spn_sarma_n)
+        self.dsp_sarma_tol = QDoubleSpinBox()
+        self.dsp_sarma_tol.setDecimals(8)
+        self.dsp_sarma_tol.setRange(1e-8, 1.0)
+        self.dsp_sarma_tol.setValue(sa.tolerance)
+        self.dsp_sarma_tol.setToolTip(tr("Tolerance of the root of Kc(F) = kh on the factor of safety. The global tolerance does not reach Sarma's method."))
+        form.addRow(tr('Tolerance on F:'), self.dsp_sarma_tol)
+        self.spn_sarma_iter = QSpinBox()
+        self.spn_sarma_iter.setRange(1, 1000)
+        self.spn_sarma_iter.setValue(sa.max_iterations)
+        self.spn_sarma_iter.setToolTip(tr("Iterations of the root of Kc(F) = kh; past them, no factor. The global maximum does not reach Sarma's method."))
+        form.addRow(tr('Iterations:'), self.spn_sarma_iter)
+        self.cbo_sarma_angles = QComboBox()
+        for label, value in ((tr('Bisector'), "bisector"),
+                             (tr('Mean normal'), "mean_normal"),
+                             (tr('Vertical faces'), "vertical")):
+            self.cbo_sarma_angles.addItem(label, value)
+        self.cbo_sarma_angles.setCurrentIndex(
+            max(0, self.cbo_sarma_angles.findData(sa.slice_angles)))
+        self.cbo_sarma_angles.setToolTip(tr("The angle of the faces no vertex gives one. Bisector: the bisector of the two bases that meet; mean normal: their normals weighted by the lengths of the bases; vertical: the vertical methods' slices. A face that would cross a neighbour or not reach the ground is dropped with its boundary where it is a uniform division, and made vertical at a vertex, a contact or a water-table cut."))
+        form.addRow(tr('Face angles:'), self.cbo_sarma_angles)
+        self.cbo_sarma_strength = QComboBox()
+        for label, value in ((tr('From the materials'), "materials"),
+                             (tr('Given c and φ'), "given"),
+                             (tr('No face strength'), "none")):
+            self.cbo_sarma_strength.addItem(label, value)
+        self.cbo_sarma_strength.setCurrentIndex(
+            max(0, self.cbo_sarma_strength.findData(sa.interslice_strength)))
+        self.cbo_sarma_strength.setToolTip(tr("The shear strength of the faces between wedges, which F divides as it divides the bases'. Materials: the mean of the Mohr-Coulomb materials each face crosses, by length; given: the cohesion and friction angle below, divided by the design standard's material factors; none: the faces carry no shear."))
+        form.addRow(tr('Face strength:'), self.cbo_sarma_strength)
+        self.dsp_sarma_c = QDoubleSpinBox()
+        self.dsp_sarma_c.setDecimals(3)
+        self.dsp_sarma_c.setRange(0.0, 1e6)
+        self.dsp_sarma_c.setValue(sa.interslice_cohesion)
+        self.dsp_sarma_c.setToolTip(tr('Used only with a given face strength.'))
+        form.addRow(tr('Face cohesion [kPa]:'), self.dsp_sarma_c)
+        self.dsp_sarma_phi = QDoubleSpinBox()
+        self.dsp_sarma_phi.setDecimals(3)
+        self.dsp_sarma_phi.setRange(0.0, 89.9)
+        self.dsp_sarma_phi.setValue(sa.interslice_phi)
+        self.dsp_sarma_phi.setToolTip(tr('Used only with a given face strength.'))
+        form.addRow(tr('Face friction angle [°]:'), self.dsp_sarma_phi)
+        self.chk_sarma_contacts = QCheckBox(tr('Boundaries at material contacts'))
+        self.chk_sarma_contacts.setChecked(sa.boundaries_at_materials)
+        self.chk_sarma_contacts.setToolTip(tr('A boundary between wedges where the slip surface crosses a material contact, so that each base lies in one material.'))
+        form.addRow(self.chk_sarma_contacts)
+        self.cbo_sarma_sense = QComboBox()
+        for label, value in ((tr('Fixed: the upper wedge moves down'), "fixed"),
+                             (tr("Kinematic: the rigid wedges' own"), "kinematic")):
+            self.cbo_sarma_sense.addItem(label, value)
+        self.cbo_sarma_sense.setCurrentIndex(
+            max(0, self.cbo_sarma_sense.findData(sa.shear_sense)))
+        self.cbo_sarma_sense.setToolTip(tr('Fixed: the upper wedge moves down relative to the lower one on every face. Kinematic: the sense the motion of the rigid wedges gives; they differ where a base is less steep than the one below it.'))
+        form.addRow(tr('Sense of the face shear:'), self.cbo_sarma_sense)
+        self._sarma_widgets = (
+            self.spn_sarma_n, self.dsp_sarma_tol, self.spn_sarma_iter,
+            self.cbo_sarma_angles, self.cbo_sarma_strength,
+            self.chk_sarma_contacts, self.cbo_sarma_sense)
+        cb = self.checkboxes.get(LEM.SARMA.value)
+        if cb is not None:
+            cb.toggled.connect(self._refresh_sarma)
+        self.cbo_sarma_strength.currentIndexChanged.connect(
+            self._refresh_sarma)
+        self._refresh_sarma()
+        return grp
+
+    def _refresh_sarma(self, *_args) -> None:
+        cb = self.checkboxes.get(LEM.SARMA.value)
+        on = bool(cb is not None and cb.isChecked() and cb.isEnabled())
+        for w in self._sarma_widgets:
+            w.setEnabled(on)
+        given = on and self.cbo_sarma_strength.currentData() == "given"
+        self.dsp_sarma_c.setEnabled(given)
+        self.dsp_sarma_phi.setEnabled(given)
 
     def _refresh_interslice(self) -> None:
         gle = self.checkboxes.get(LEM.GLE_MORGENSTERN_PRICE.value)
@@ -487,6 +578,17 @@ class _MethodsPage(QWidget):
         self.s.methods.max_iterations = self.spn_iter.value()
         self.s.methods.interslice_function = self.cbo_f.currentData()
         self.s.methods.interslice_forces = self.cbo_zf.currentData()
+        # v0.1.464 (D357)
+        sa = self.s.sarma
+        sa.num_slices = self.spn_sarma_n.value()
+        sa.tolerance = self.dsp_sarma_tol.value()
+        sa.max_iterations = self.spn_sarma_iter.value()
+        sa.slice_angles = self.cbo_sarma_angles.currentData()
+        sa.interslice_strength = self.cbo_sarma_strength.currentData()
+        sa.interslice_cohesion = self.dsp_sarma_c.value()
+        sa.interslice_phi = self.dsp_sarma_phi.value()
+        sa.boundaries_at_materials = self.chk_sarma_contacts.isChecked()
+        sa.shear_sense = self.cbo_sarma_sense.currentData()
 
 
 # ----------------------------------------------------------------------
@@ -1470,7 +1572,11 @@ class _AdvancedPage(QWidget):
             "costs passes and can lose the branch.\n\n"
             "Where it applies it converges to the same root: on the "
             "reference-validated circle both agree to 1e-11, in 7 passes "
-            "instead of 19."))
+            "instead of 19.")
+            # v0.1.464 (D357) -- a sentence of its own
+            + "\n\n" + tr("Sarma (non-vertical slices): no. It brackets the "
+                          "factor of safety and closes on it by Brent's "
+                          "method, which has no iteration to extrapolate."))
         form.addRow("", self.chk_steffensen)
 
         # v0.1.97 — parallel search. Two controls and not one, because

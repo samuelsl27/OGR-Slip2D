@@ -54,6 +54,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from _sarma_registry import refused_by_its_spec  # noqa: E402
+
 _REL = 1e-12
 #: The dry slope of ``test_generalized_links_v1228``, its circle (bases from
 #: about -18 to +62 degrees).
@@ -107,7 +109,7 @@ def _slope(strength):
     return p
 
 
-def _fos(p, method="bishop_simplified", circle=_CIRCLE, n=50):
+def _result(p, method="bishop_simplified", circle=_CIRCLE, n=50):
     from ogr_core.project import prepare_analysis_project
     from ogr_slip2d.methods import get_method
     from ogr_slip2d.slicer import slice_surface
@@ -115,7 +117,11 @@ def _fos(p, method="bishop_simplified", circle=_CIRCLE, n=50):
     work = prepare_analysis_project(p)[0]
     c = SlipCircle(**circle)
     sl = slice_surface(work, c, num_slices=n)
-    r = get_method(method)(tolerance=1e-12).compute_fos(work, c, sl)
+    return get_method(method)(tolerance=1e-12).compute_fos(work, c, sl)
+
+
+def _fos(p, method="bishop_simplified", circle=_CIRCLE, n=50):
+    r = _result(p, method, circle, n)
     assert r.fos is not None, (method, getattr(r, "reason", None))
     return float(r.fos)
 
@@ -123,7 +129,9 @@ def _fos(p, method="bishop_simplified", circle=_CIRCLE, n=50):
 def _nine():
     from ogr_slip2d.methods import method_registry
     names = sorted(method_registry())
-    assert len(names) == 9, names
+    # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+    # the count it was written with
+    assert len(names) == 10, names
     return names
 
 
@@ -147,7 +155,12 @@ class TestIdentities:
     def test_and_in_the_nine_methods(self):
         al, ga = self._al_pair()
         for m in _nine():
-            a, b = _fos(_slope(al), m), _fos(_slope(ga), m)
+            ra, rb = _result(_slope(al), m), _result(_slope(ga), m)
+            # Sarma's faces refuse these models: see tests/_sarma_registry.py
+            if refused_by_its_spec(m, ra) and refused_by_its_spec(m, rb):
+                continue
+            a, b = ra.fos, rb.fos
+            assert a is not None and b is not None, (m, ra.reason, rb.reason)
             assert _close(a, b), (m, a, b)
 
     def test_without_the_weaker_base_it_is_snowden(self):
@@ -273,8 +286,13 @@ class TestTutorial20:
 
     def test_the_equivalent_angle_or_surface_is_the_same(self):
         for m in _nine():
-            a = _fos(_tutorial20(), m, circle=_T20_CIRCLE, n=25)
-            b = _fos(_tutorial20(True), m, circle=_T20_CIRCLE, n=25)
+            ra = _result(_tutorial20(), m, circle=_T20_CIRCLE, n=25)
+            rb = _result(_tutorial20(True), m, circle=_T20_CIRCLE, n=25)
+            # Sarma's faces refuse these models: see tests/_sarma_registry.py
+            if refused_by_its_spec(m, ra) and refused_by_its_spec(m, rb):
+                continue
+            a, b = ra.fos, rb.fos
+            assert a is not None and b is not None, (m, ra.reason, rb.reason)
             assert _close(a, b), (m, a, b)
 
 

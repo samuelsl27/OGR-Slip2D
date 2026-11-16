@@ -1011,7 +1011,7 @@ class TestEveryRefusalHasItsCode:
     def test_each(self):
         from ogr_core.geometry import Boundary, BoundaryType
         from ogr_core.materials import Material, MohrCoulomb
-        from ogr_core.materials.builtin_models import Undrained
+        from ogr_core.materials.builtin_models import VerticalStressRatio
         from ogr_slip2d import messages as msg
         from ogr_slip2d.sarma.angles import VERTICAL
         p, s = _slope(load=False)
@@ -1044,7 +1044,10 @@ class TestEveryRefusalHasItsCode:
         p.materials.remove(gone)
         code, args = self._refused(p, s)
         assert code == msg.SARMA_WEDGE_OUTSIDE, (code, args)
-        p, s = _slope(load=False, strength=Undrained(cohesion=30.0))
+        # (an undrained material is c = cu on a face since v0.1.464; a
+        # vertical-stress ratio has no strength a face can read)
+        p, s = _slope(load=False, strength=VerticalStressRatio(
+            K=0.4, min_strength=2.0))
         code, args = self._refused(p, s)
         assert code == msg.SARMA_FACE_STRENGTH and args["material"] == "soil"
 

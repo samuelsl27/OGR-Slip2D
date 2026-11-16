@@ -92,6 +92,8 @@ METHOD_ALIASES = {
     "coe1": "corps_engineers_1",
     "coe2": "corps_engineers_2",
     "modified_swedish": "corps_engineers_1",
+    # v0.1.464 (D357)
+    "sarma": "sarma",
 }
 
 
@@ -156,6 +158,9 @@ def compute(
                    "in the project. `methods` lists them all."),
     slices: Optional[int] = typer.Option(
         None, help="Number of slices per surface [project setting]"),
+    sarma_slices: Optional[int] = typer.Option(
+        None, help="Least number of wedges of Sarma's method "
+                   "[project setting]"),
     nx: Optional[int] = typer.Option(
         None, help="Grid divisions along X [project setting]"),
     ny: Optional[int] = typer.Option(
@@ -188,6 +193,9 @@ def compute(
     s = p.settings
     if slices is not None:
         s.methods.num_slices = int(slices)
+    # v0.1.464 (D357) -- Sarma's own: the global count does not reach it
+    if sarma_slices is not None:
+        s.sarma.num_slices = int(sarma_slices)
     if search is not None:
         s.search.search_method = search.strip().lower()
     if nx is not None:

@@ -276,7 +276,15 @@ def render_png(project, *, surfaces: Iterable = (), width: int = 900,
             continue
         colour = _SURFACE_COLOURS[i % len(_SURFACE_COLOURS)]
         xs, ys = path
-        if slice_lines and i == 0:
+        faces = getattr(getattr(res, "slices", None), "faces", None)
+        if slice_lines and i == 0 and faces:
+            # v0.1.464 (D357) -- Sarma's wedges: their inclined faces, from
+            # the base to the ground, not the vertical lines of slices
+            for f in faces:
+                if f.length > 0.0:
+                    ax.plot([f.x_base, f.x_top], [f.y_base, f.y_top],
+                            color=colour, linewidth=0.5, alpha=0.5, zorder=8)
+        elif slice_lines and i == 0:
             for s in res.slices:
                 top = getattr(s, "top_y_left", None)
                 if top is not None and math.isfinite(top):

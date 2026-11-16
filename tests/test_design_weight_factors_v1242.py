@@ -54,6 +54,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from _sarma_registry import refused_by_its_spec  # noqa: E402
+
 _CX, _CY, _R = 55.0, 58.0, 34.0      # the circle of test_..._v1109
 _SLICES = 160
 #: The iterative methods stop at 1e-12 on F; measured here, an identity
@@ -119,10 +121,14 @@ def _sliced(project, mirror=False, n=_SLICES):
     return work, c, sl
 
 
-def _fos(project, method="bishop_simplified", mirror=False, n=_SLICES):
+def _result(project, method="bishop_simplified", mirror=False, n=_SLICES):
     from ogr_slip2d.methods import get_method
     work, c, sl = _sliced(project, mirror, n)
-    r = get_method(method)(tolerance=1e-12).compute_fos(work, c, sl)
+    return get_method(method)(tolerance=1e-12).compute_fos(work, c, sl)
+
+
+def _fos(project, method="bishop_simplified", mirror=False, n=_SLICES):
+    r = _result(project, method, mirror, n)
     assert r.fos is not None, (method, getattr(r, "reason", None))
     return float(r.fos)
 
@@ -130,7 +136,9 @@ def _fos(project, method="bishop_simplified", mirror=False, n=_SLICES):
 def _nine():
     from ogr_slip2d.methods import method_registry
     names = sorted(method_registry())
-    assert len(names) == 9, names
+    # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+    # the count it was written with
+    assert len(names) == 10, names
     return names
 
 
@@ -173,8 +181,13 @@ class TestWhatIsProportionalToTheWeight:
         from ogr_core.materials.builtin_models import VerticalStressRatio
         vsr = VerticalStressRatio(K=0.6, min_strength=0.0)
         for m in _nine():
-            a = _fos(_slope(vsr), m)
-            b = _fos(_standard(_slope(vsr), "eurocode7_da1c1"), m)
+            ra = _result(_slope(vsr), m)
+            rb = _result(_standard(_slope(vsr), "eurocode7_da1c1"), m)
+            # Sarma's faces refuse this model: see tests/_sarma_registry.py
+            if refused_by_its_spec(m, ra) and refused_by_its_spec(m, rb):
+                continue
+            a, b = ra.fos, rb.fos
+            assert a is not None and b is not None, (m, ra.reason, rb.reason)
             assert _close(a, b), (m, a, b)
 
     def test_the_seismic_force_follows_the_weight(self):

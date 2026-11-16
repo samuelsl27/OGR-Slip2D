@@ -71,7 +71,7 @@ tests»).
 | Ruta | Contenido |
 |---|---|
 | `ogr_core/` | Geometría, materiales, cargas, soportes, proyecto, hidráulica, estadística, anotaciones, DXF |
-| `ogr_slip2d/` | Motor LEM: 9 métodos, 7 búsquedas, rebanado, foco, optimización, retroanálisis |
+| `ogr_slip2d/` | Motor LEM: 10 métodos, 7 búsquedas, rebanado, foco, optimización, retroanálisis |
 | `ogr_fem2d/` | Elementos finitos: mallado y solvers de filtración |
 | `ogr_gui/` | Interfaz PySide6: lienzo, ~30 diálogos, ventanas de interpretación, i18n |
 | `ogr_cli/` | Interfaz de línea de comandos |

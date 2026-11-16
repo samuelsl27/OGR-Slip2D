@@ -15,6 +15,7 @@ from .modified_swedish import (
 )
 from .ordinary import OrdinaryFellenius
 from .spencer import Spencer
+from .sarma import SarmaNonVertical  # v0.1.464 (D357)
 
 __all__ = [
     "LEMMethod",
@@ -24,6 +25,7 @@ __all__ = [
     "JanbuCorrected",
     "OrdinaryFellenius",
     "Spencer",
+    "SarmaNonVertical",
     "GLEMorgensternPrice",
     "LoweKarafiath",
     "CorpsOfEngineers1",

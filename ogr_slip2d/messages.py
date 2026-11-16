@@ -65,6 +65,9 @@ SARMA_FACES_CROSS = "lem.sarma_faces_cross"
 SARMA_WEDGE_INVALID = "lem.sarma_wedge_invalid"
 SARMA_WEDGE_OUTSIDE = "lem.sarma_wedge_outside"
 SARMA_FACE_STRENGTH = "lem.sarma_face_strength"
+# v0.1.464: the registered method
+SARMA_SUPPORTS = "lem.sarma_supports"
+SARMA_DRAWDOWN = "lem.sarma_drawdown"
 # -- the post-analysis screens (``checks.screen_verdict``) -------------
 SCREEN_TENSILE_STRESS = "screen.tensile_stress"
 SCREEN_M_ALPHA = "screen.m_alpha"
@@ -170,6 +173,11 @@ for _spec in (
                 "Face {face} crosses material '{material}', whose strength "
                 "is not Mohr-Coulomb: give the face its c and φ",
                 group_by=("material",)),
+    MessageSpec(SARMA_DRAWDOWN,
+                "Sarma's method does not compute a rapid drawdown"),
+    MessageSpec(SARMA_SUPPORTS,
+                "Sarma's method does not take supports, and this surface "
+                "crosses one"),
     MessageSpec(SCREEN_TENSILE_STRESS,
                 "tensile stress on {count} slice base(s) (error -120)"),
     MessageSpec(SCREEN_M_ALPHA, "m_alpha < {limit} on {count} slice(s)",

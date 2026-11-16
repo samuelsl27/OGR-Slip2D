@@ -166,7 +166,9 @@ class TestEveryMethodAgrees:
     def test_all_nine_return_zero_and_say_why(self):
         project = _slope(cohesion=0.0, friction_deg=0.0)
         ids = _all_method_ids()
-        assert len(ids) == 9, ids          # a new method must join this test
+        # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+        # the count it was written with
+        assert len(ids) == 10, ids          # a new method must join this test
         for method_id in ids:
             res = _evaluate(project, method_id)
             assert res is not None, method_id

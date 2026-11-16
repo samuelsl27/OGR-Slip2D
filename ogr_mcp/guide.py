@@ -18,7 +18,7 @@ Author: Samuel Sáez López (UPCT)
 SOURCE_URL = "https://github.com/samuelsl27/OGR-Slip2D"
 
 INSTRUCTIONS = """\
-OGR Slip2D: 2-D slope stability by limit equilibrium (9 methods, 7 searches).
+OGR Slip2D: 2-D slope stability by limit equilibrium (10 methods, 7 searches).
 Units are SI everywhere: m, kN, kPa, kN/m3, degrees. x to the right, y up.
 Workflow: project_new -> model_define (geometry + materials + water in one
 call) -> project_validate -> analysis_configure -> analysis_run ->
@@ -202,7 +202,9 @@ water surface when use_sat_unit_weight is true.
   warning in project_validate.
 * methods: bishop_simplified, janbu_simplified, janbu_corrected, spencer,
   gle_morgenstern_price, ordinary_fellenius, lowe_karafiath,
-  corps_engineers_1, corps_engineers_2.
+  corps_engineers_1, corps_engineers_2, sarma (non-vertical slices: its own
+  settings in the 'sarma' section; not computed under a rapid drawdown or
+  the excess pore pressure of loading; no supports).
 * With a design standard on, a factor is an OVER-DESIGN factor (must be
   above 1), not a factor of safety; a Ky or a Newmark displacement stays
   what it is, computed with the partial factors applied, and need not be

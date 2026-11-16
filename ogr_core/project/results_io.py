@@ -197,6 +197,20 @@ def save_results(
                         d["surface_pressure"],
                     )
                 sg.create_dataset("slices", data=rows, compression="gzip")
+                # v0.1.464 (D357) -- Sarma's wedges: their faces (base and
+                # top points, length, PW) and the method's Kc(1); only with
+                # them, so every other file is what it was.
+                faces = getattr(res.slices, "faces", None)
+                if faces:
+                    sg.create_dataset("faces", data=np.array(
+                        [(f.x_base, f.y_base, f.x_top, f.y_top, f.length,
+                          f.water_force) for f in faces], dtype="f8"),
+                        compression="gzip")
+                    sg["faces"].attrs["columns"] = (
+                        "x_base,y_base,x_top,y_top,length,water_force")
+                kc = (getattr(res, "details", None) or {}).get("sarma_kc")
+                if kc is not None:
+                    sg.attrs["sarma_kc"] = float(kc)
 
         # Summary
         summary = f.create_group("summary")

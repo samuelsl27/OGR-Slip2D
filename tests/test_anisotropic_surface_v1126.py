@@ -46,6 +46,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import pytest  # noqa: E402
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).parent))
+from _sarma_registry import refused_by_its_spec  # noqa: E402
 
 from ogr_core.geometry import (  # noqa: E402
     Boundary,
@@ -109,11 +113,16 @@ def _slope(bedding_angle: float = 0.0, surface: Polyline | None = None,
     return p
 
 
-def _fos(project, method_id: str = "bishop_simplified") -> float:
+def _fos(project, method_id: str = "bishop_simplified") -> float | None:
     g = GridSearch(method=method_registry()[method_id](), num_slices=40,
                    grid_nx=3, grid_ny=3, radius_increment=3)
     res = g.evaluate_circle(project, SlipCircle(centre_x=60.0, centre_y=62.0,
                                                 radius=48.0))
+    # v0.1.464 (D357): Sarma refusing for a reason of its spec (a face
+    # through a material that is not Mohr-Coulomb) is a result with its code
+    # (tests/_sarma_registry.py); any other None still fails
+    if refused_by_its_spec(method_id, res):
+        return None
     assert res is not None and res.is_valid, "the trial circle did not solve"
     return res.fos
 
@@ -202,6 +211,9 @@ class TestTheIdentity:
         for mid in sorted(method_registry()):
             a = _fos(_slope(bedding_angle=0.0, surface=surf), mid)
             b = _fos(_slope(bedding_angle=alpha), mid)
+            if a is None or b is None:
+                assert a is None and b is None, (mid, a, b)
+                continue
             if a != pytest.approx(b, rel=1e-9):
                 bad.append("%s: %.10f vs %.10f" % (mid, a, b))
         assert not bad, "\n".join(bad)

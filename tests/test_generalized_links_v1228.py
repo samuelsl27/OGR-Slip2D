@@ -126,7 +126,11 @@ def _evaluate(project, method_ids):
     from ogr_slip2d.surface import SlipCircle
     out = evaluate_surfaces(project, SlipCircle(*CIRCLE), list(method_ids),
                             allow_unconfigured=True)
-    return {mid: (r.fos if r is not None else None)
+    # v0.1.464 (D357): a refusal of Sarma's by its spec is the string of
+    # its code, so a test can tell it from a missing number
+    from _sarma_registry import refused_by_its_spec
+    return {mid: (r.message_code if refused_by_its_spec(mid, r)
+                  else (r.fos if r is not None else None))
             for mid, r in out.results.items()}
 
 
@@ -151,9 +155,16 @@ class TestTheAnalysisTakesTheMaterial:
         linked, _g, _c = _linked_project()
         a = _evaluate(linked, mids)
         b = _evaluate(_asf_project(), mids)
-        assert len(mids) == 9, mids
+        # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+        # the count it was written with
+        assert len(mids) == 10, mids
         for mid in mids:
             assert a[mid] is not None and b[mid] is not None, (mid, a, b)
+            if isinstance(a[mid], str) or isinstance(b[mid], str):
+                # Sarma refusing both for the same reason of its spec
+                # (tests/_sarma_registry.py)
+                assert a[mid] == b[mid], (mid, a[mid], b[mid])
+                continue
             assert math.isclose(a[mid], b[mid], rel_tol=1e-12), (
                 mid, a[mid], b[mid])
 

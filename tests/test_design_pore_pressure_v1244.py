@@ -46,6 +46,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from _sarma_registry import refused_by_its_spec  # noqa: E402
+
 _CX = 55.0
 _RU = 0.25
 _SLICES = 160
@@ -129,10 +131,14 @@ def _sliced(p):
     return work, c, sl
 
 
-def _fos(p, method="bishop_simplified"):
+def _result(p, method="bishop_simplified"):
     from ogr_slip2d.methods import get_method
     work, c, sl = _sliced(p)
-    r = get_method(method)(tolerance=1e-12).compute_fos(work, c, sl)
+    return get_method(method)(tolerance=1e-12).compute_fos(work, c, sl)
+
+
+def _fos(p, method="bishop_simplified"):
+    r = _result(p, method)
     assert r.fos is not None, (method, getattr(r, "reason", None))
     return float(r.fos)
 
@@ -140,7 +146,9 @@ def _fos(p, method="bishop_simplified"):
 def _nine():
     from ogr_slip2d.methods import method_registry
     names = sorted(method_registry())
-    assert len(names) == 9, names
+    # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+    # the count it was written with
+    assert len(names) == 10, names
     return names
 
 
@@ -159,10 +167,15 @@ class TestHomogeneity:
 
     def _nine_scale(self, build):
         for m in _nine():
-            a = _fos(build(), m)
-            b = _fos(_da1c1(build()), m)
+            runs = [_result(build(), m), _result(_da1c1(build()), m),
+                    _result(_custom(build(), 1.35, 1.35, False), m)]
+            # Sarma does not compute the B-bar excess: see
+            # tests/_sarma_registry.py
+            if all(refused_by_its_spec(m, r) for r in runs):
+                continue
+            a, b, c = (r.fos for r in runs)
+            assert None not in (a, b, c), (m, [r.reason for r in runs])
             assert _close(a, b), (m, a, b, b / a)
-            c = _fos(_custom(build(), 1.35, 1.35, False), m)
             assert _close(a, c), (m, a, c, c / a)
 
     def test_with_ru(self):

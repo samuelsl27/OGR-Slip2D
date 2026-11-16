@@ -444,7 +444,9 @@ class TestTheCensusCannotDriftFromTheEngine:
         """The sentence on screen enumerates nine; a tenth would orphan it."""
         from ogr_slip2d.methods.base import method_registry
 
-        assert len(method_registry()) == 9, sorted(method_registry())
+        # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+        # the count it was written with
+        assert len(method_registry()) == 10, sorted(method_registry())
 
     def test_the_engine_tuple_agrees_with_this_file(self):
         from ogr_slip2d.analysis_runner import (_STEFFENSEN_CIRCULAR_ONLY,

@@ -212,7 +212,13 @@ def _inscribed(circle_def, x_left, x_right, n_chords):
 
 def _drift(project, method_id, circle_def, n_chords, num_slices=_SLICES):
     """Relative difference between the inscribed polyline and its arc."""
-    method = method_registry()[method_id]()
+    if method_id == "sarma":
+        # v0.1.464 (D357): built from the settings, so the faces the test
+        # asks for (``settings.sarma``) reach it
+        from ogr_slip2d.analysis_runner import build_method
+        method = build_method(project, method_id)
+    else:
+        method = method_registry()[method_id]()
     circle, arc = _resolved_circle(project, method, circle_def, num_slices)
     assert arc is not None and arc.is_valid, "the arc itself did not solve"
     surf = _inscribed(circle_def, circle.x_left, circle.x_right, n_chords)
@@ -237,6 +243,15 @@ class TestTheIdentityHoldsWithTheTrueCentre:
         project = _two_layer_slope()
         project.settings.search.axis_x = _DEEP[0]
         project.settings.search.axis_y = _DEEP[1]
+        # v0.1.464 (D357): Sarma's method with vertical faces. With the
+        # bisector its faces are where the vertices are, and the inscribed
+        # polyline puts one at each: on this model a contact crosses the
+        # surface 0.24 m from a vertex, their faces cross, and the faces
+        # made vertical in chain move it 4.6 % off the arc (measured in
+        # v0.1.464: 1.4055 against 1.3430; with vertical faces 1.61013
+        # against 1.61014). The inscribed polyline reproduces the arc for
+        # the same faces, which is what this test asks.
+        project.settings.sarma.slice_angles = "vertical"
         bad = []
         for mid in sorted(method_registry()):
             rel, arc, poly = _drift(project, mid, _DEEP, _CHORDS[-1])

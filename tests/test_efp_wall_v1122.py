@@ -110,6 +110,12 @@ wall.
 from __future__ import annotations
 
 import math
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _sarma_registry import accepts_supports  # noqa: E402
 
 # --- the published fixtures -------------------------------------------
 #: Verification problem 110: a 5-unit wall, pressure 0 at the crest and 125
@@ -182,8 +188,14 @@ def _fos(method_id, project, surface, num_slices=25):
 
 
 def _method_ids():
+    """Every registered method that takes supports. The exemption is read
+    from the class (``ACCEPTS_SUPPORTS``, see tests/_sarma_registry.py),
+    not kept by hand: Sarma's method refuses a surface with a support by
+    its spec, so it has no wall force to compare, and a later method that
+    does take supports is in the loop without anyone adding it."""
     from ogr_slip2d.methods.base import method_registry
-    return sorted(method_registry())
+    return sorted(mid for mid, cls in method_registry().items()
+                  if accepts_supports(cls))
 
 
 def _effect(project, num_slices=25):

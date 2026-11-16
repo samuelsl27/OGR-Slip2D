@@ -3538,6 +3538,21 @@ class InterpretWindow(QMainWindow):
         pen = QPen(QColor("#e63946"), 0.8)
         pen.setCosmetic(True)
         for target in self._slice_surfaces():
+            faces = getattr(target.slices, "faces", None)
+            if faces:
+                # v0.1.464 (D357) -- Sarma's wedges: their inclined faces.
+                # The rest of what Interpret draws of a wedge (its forces,
+                # its free body) comes in v0.1.466.
+                for f in faces:
+                    if f.length <= 0.0:
+                        continue
+                    line = QGraphicsLineItem(f.x_base, f.y_base, f.x_top,
+                                             f.y_top)
+                    line.setPen(pen)
+                    line._is_slice_line = True
+                    line.setZValue(6.5)
+                    scene.addItem(line)
+                continue
             for s in target.slices:
                 top_y = s.top_y_left
                 bot_y = s.base_y_left
@@ -3631,12 +3646,17 @@ class InterpretWindow(QMainWindow):
         self._clear_slice_highlight()
         scene = self.canvas.scene()
 
-        poly = QPolygonF([
-            QPointF(s.base_x_left, s.base_y_left),
-            QPointF(s.base_x_right, s.base_y_right),
-            QPointF(s.base_x_right, s.top_y_right),
-            QPointF(s.base_x_left, s.top_y_left),
-        ])
+        ring = getattr(s, "polygon", None)
+        if ring:
+            # v0.1.464 (D357) -- a wedge of Sarma's: its own polygon
+            poly = QPolygonF([QPointF(x, y) for x, y in ring])
+        else:
+            poly = QPolygonF([
+                QPointF(s.base_x_left, s.base_y_left),
+                QPointF(s.base_x_right, s.base_y_right),
+                QPointF(s.base_x_right, s.top_y_right),
+                QPointF(s.base_x_left, s.top_y_left),
+            ])
         body = QGraphicsPolygonItem(poly)
         body.setBrush(QBrush(QColor(255, 200, 0, 90)))
         pen = QPen(QColor("#e67e22"), 1.6); pen.setCosmetic(True)
@@ -4079,6 +4099,15 @@ class InterpretWindow(QMainWindow):
             from PySide6.QtWidgets import QDialog, QVBoxLayout
         except ImportError:
             self._info(tr("matplotlib not installed."))
+            return
+
+        # v0.1.464 (D357) -- a wedge of Sarma's has inclined faces and the
+        # forces the method solved on them; this diagram draws a vertical
+        # slice. Said on the status bar (not a modal box) until v0.1.466.
+        if "sarma_kc" in (getattr(target, "details", None) or {}):
+            self.statusBar().showMessage(tr(
+                "The free body diagram of a wedge of Sarma's method comes in "
+                "a later version: its faces are drawn on the model."), 6000)
             return
 
         from ogr_slip2d.postprocess import compute_interslice_state

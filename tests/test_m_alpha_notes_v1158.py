@@ -44,6 +44,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from test_block_population_v1135 import _cohesive_slope, _STEEP  # noqa: E402
 
+# v0.1.464 (D357): methods that divide by a denominator of their own, not
+# Bishop's m_alpha (Sarma's q of the recurrence). The note reports Bishop's
+# margin, so they are skipped like the Ordinary Method, read from the set
+# the engine keeps rather than named here.
+from ogr_slip2d.checks import OWN_DENOMINATOR  # noqa: E402
+
 _ROOT = Path(__file__).resolve().parents[1]
 _CACHE: dict = {}
 
@@ -115,6 +121,8 @@ class TestTheNoteIsTrueOfTheMethodItNames:
 
     def test_a_force_method_is_not_called_a_method_of_moments(self):
         for mid in _families()["force"]:
+            if mid in OWN_DENOMINATOR:
+                continue
             _res, notes = _note_for(mid)
             assert notes, mid
             note = notes[0]
@@ -143,12 +151,23 @@ class TestTheNoteIsTrueOfTheMethodItNames:
         assert notes == [], notes
         assert "m_alpha" not in _source("ogr_slip2d/methods/ordinary.py")
 
+    def test_a_method_with_its_own_denominator_gets_no_note_at_all(self):
+        """v0.1.464 (D357): Sarma's wedges divide each face thrust by the
+        q of their own recurrence (``checks.OWN_DENOMINATOR``), whose
+        analogue is published as ``sarma_min_q``; a note about Bishop's
+        m_alpha would describe a denominator the method never forms."""
+        assert OWN_DENOMINATOR, "the loop below would pass by being vacuous"
+        for mid in sorted(OWN_DENOMINATOR):
+            res, notes = _note_for(mid)
+            assert res is not None and res.method_id == mid, (mid, res)
+            assert notes == [], (mid, notes)
+
     def test_every_note_still_names_m_alpha_and_its_value(self):
         """The first half of the sentence is unchanged; other tests and
         the verification bank read it."""
         for members in _families().values():
             for mid in members:
-                if mid == "ordinary_fellenius":
+                if mid == "ordinary_fellenius" or mid in OWN_DENOMINATOR:
                     continue
                 _res, notes = _note_for(mid)
                 assert re.search(r"m_alpha down to \d\.\d{4}", notes[0]), (
@@ -163,7 +182,7 @@ class TestTheNoteDoesNotContradictItself:
     def test_a_clearance_is_not_described_as_a_number_near_zero(self):
         for mid in _families()["complete"] + _families()["force"] + \
                 _families()["moment"]:
-            if mid == "ordinary_fellenius":
+            if mid == "ordinary_fellenius" or mid in OWN_DENOMINATOR:
                 continue
             _res, notes = _note_for(mid)
             assert "near zero" not in notes[0], (mid, notes[0])

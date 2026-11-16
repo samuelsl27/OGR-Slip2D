@@ -696,6 +696,8 @@ def _rich():
     from ogr_core.statistics import available_variables
     from ogr_core.support import GroutedTieback, SupportInstance
     p = build_demo_project()
+    # v0.1.464 (D357): with Sarma, so its section is written too
+    p.settings.methods.enabled_methods.append("sarma")
     g = GroutedTieback()
     p.support_types = [g]
     p.supports = [SupportInstance(type_id="grouted_tieback", type_ref=g.id,
@@ -741,7 +743,9 @@ _NULLABLE = {"water_pressure_grid", "fem_mesh", "seepage_bcs",
              "seepage_result", "transient_initial_result",
              "transient_results", "random_variables", "annotations",
              "focus_objects", "user_surfaces", "user_polylines"}
-_NULLABLE_SETTINGS = {"search", "advanced", "design_standard"}
+_NULLABLE_SETTINGS = {"search", "advanced", "design_standard",
+                      # v0.1.464 (D357): ``or {}`` reads the defaults
+                      "sarma"}
 
 
 def _function_keys(src, cls, fn):
@@ -846,7 +850,8 @@ class TestEveryValidFileOpensTheSame:
         cases += [([k], None) for k in set(SECTIONS) - _NULLABLE]
         cases += [(["settings", k], None)
                   for k in set(SETTINGS_SECTIONS) - _NULLABLE_SETTINGS]
-        assert len(cases) == 42 + 11 + 8, len(cases)
+        # v0.1.464 (D357): + 3, the three falsy values of «sarma»
+        assert len(cases) == 42 + 11 + 8 + 3, len(cases)
         for path, value in cases:
             try:
                 Project.from_dict(_put(path, value)(_base()))

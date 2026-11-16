@@ -42,6 +42,12 @@ controls pass.
 from __future__ import annotations
 
 import math
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _sarma_registry import refused_by_its_spec  # noqa: E402
 
 #: The documented example, which is also the model's default table.
 DOC_ROWS = [(-30.0, 10.0, 35.0), (0.0, 1.0, 20.0), (90.0, 5.0, 10.0)]
@@ -189,16 +195,22 @@ class TestRangesAreNotPoints:
         from ogr_slip2d.methods import method_registry
         other = [(-30.0, 60.0, 5.0)] + DOC_ROWS[1:]
         for mid in sorted(method_registry()):
-            a = _fos(_model(DOC_ROWS), mid).fos
-            b = _fos(_model(other), mid).fos
+            ra, rb = _fos(_model(DOC_ROWS), mid), _fos(_model(other), mid)
+            # Sarma's faces refuse this model: see tests/_sarma_registry.py
+            if refused_by_its_spec(mid, ra) and refused_by_its_spec(mid, rb):
+                continue
+            a, b = ra.fos, rb.fos
             assert a is not None and a == b, (mid, a, b)
 
     def test_a_range_the_bases_reach_moves_it(self):
         from ogr_slip2d.methods import method_registry
         other = DOC_ROWS[:1] + [(0.0, 8.0, 20.0)] + DOC_ROWS[2:]
         for mid in sorted(method_registry()):
-            a = _fos(_model(DOC_ROWS), mid).fos
-            b = _fos(_model(other), mid).fos
+            ra, rb = _fos(_model(DOC_ROWS), mid), _fos(_model(other), mid)
+            # Sarma's faces refuse this model: see tests/_sarma_registry.py
+            if refused_by_its_spec(mid, ra) and refused_by_its_spec(mid, rb):
+                continue
+            a, b = ra.fos, rb.fos
             assert abs(a - b) > 1e-3 * a, (mid, a, b)
 
 

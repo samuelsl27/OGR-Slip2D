@@ -242,6 +242,28 @@ def apply_design_factors(project, settings=None):
             rep.materials.append({"name": mat.name, "changes": changed,
                                   "category": category})
 
+    # v0.1.464 (D357) -- the strength given to the faces of Sarma's wedges
+    # (``settings.sarma``) is a strength like a material's, and takes the
+    # same factors by the same function: a Mohr-Coulomb with that c and φ,
+    # factored. Reported as a material named «Sarma», a proper name that
+    # reads the same in both languages.
+    sa = getattr(factored.settings, "sarma", None)
+    if (sa is not None and sa.interslice_strength == "given"
+            and "sarma" in factored.settings.methods.enabled_methods):
+        from ogr_core.materials.builtin_models import MohrCoulomb
+        done = MohrCoulomb(cohesion=sa.interslice_cohesion,
+                           friction_angle=sa.interslice_phi
+                           ).design_factored(mf)
+        c_d = done.model.params["cohesion"]
+        phi_d = done.model.params["friction_angle"]
+        if (c_d, phi_d) != (sa.interslice_cohesion, sa.interslice_phi):
+            rep.materials.append({
+                "name": "Sarma",
+                "changes": {"cohesion": (sa.interslice_cohesion, c_d),
+                            "friction_angle": (sa.interslice_phi, phi_d)},
+                "category": done.category})
+        sa.interslice_cohesion, sa.interslice_phi = c_d, phi_d
+
     loads = (list(getattr(factored, "distributed_loads", None) or [])
              + list(getattr(factored, "line_loads", None) or []))
     if not by_action and f_var != 1.0:

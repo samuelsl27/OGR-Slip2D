@@ -3374,6 +3374,9 @@ _DICTS: dict[str, dict[str, str]] = {
         # the Hoek-Brown calculator and the texts the AST census could not see
         'Bishop Simplified':
             'Bishop simplificado',
+        # v0.1.464 (D357)
+        'Sarma (non-vertical)':
+            'Sarma (dovelas no verticales)',
         'Janbu Simplified':
             'Janbu simplificado',
         'Janbu Corrected':
@@ -4268,6 +4271,109 @@ _DICTS: dict[str, dict[str, str]] = {
         "Mohr-Coulomb: give the face its c and φ":
             "La cara {face} atraviesa el material «{material}», cuya "
             "resistencia no es de Mohr-Coulomb: dale a la cara su c y su φ",
+        # v0.1.464 (D357) — the Sarma group of the Methods page
+        "The free body diagram of a wedge of Sarma's method comes in a later "
+        "version: its faces are drawn on the model.":
+            "El diagrama de cuerpo libre de una cuña del método de Sarma llega "
+            "en una versión posterior: sus caras se dibujan sobre el modelo.",
+        'Sarma (non-vertical slices): nothing; it has its own iterations, in its group below.':
+            'Sarma (dovelas no verticales): nada; tiene sus propias iteraciones, en su grupo de abajo.',
+        "Sarma (non-vertical slices): no. It brackets the factor of safety and closes on it by Brent's method, which has no iteration to extrapolate.":
+            'Sarma (dovelas no verticales): no. Acota el factor de seguridad y lo cierra por el método de Brent, que no tiene iteración que extrapolar.',
+        'Sarma (non-vertical slices)':
+            'Sarma (dovelas no verticales)',
+        'Least number of wedges:':
+            'Número mínimo de cuñas:',
+        'The least number of wedges. The boundaries are the vertices of the surface, its crossings with the water table and with the material contacts, and divisions up to this number. On a straight stretch of one Mohr-Coulomb material more wedges do not change the factor of safety: the wedges of a straight base add up to the one they split. On a circle, whose bases are chords, and where the strength of a base depends on its stress, they do.':
+            'El número mínimo de cuñas. Las fronteras son los vértices de la superficie, sus cruces con el nivel freático y con los contactos de material, y divisiones hasta este número. En un tramo recto de un solo material de Mohr-Coulomb, más cuñas no cambian el factor de seguridad: las cuñas de una base recta suman la que parten. En un círculo, cuyas bases son cuerdas, y donde la resistencia de una base depende de su tensión, sí.',
+        'Tolerance on F:':
+            'Tolerancia en F:',
+        "Tolerance of the root of Kc(F) = kh on the factor of safety. The global tolerance does not reach Sarma's method.":
+            'Tolerancia de la raíz de Kc(F) = kh en el factor de seguridad. La tolerancia global no llega al método de Sarma.',
+        'Iterations:':
+            'Iteraciones:',
+        "Iterations of the root of Kc(F) = kh; past them, no factor. The global maximum does not reach Sarma's method.":
+            'Iteraciones de la raíz de Kc(F) = kh; pasadas, no hay factor. El máximo global no llega al método de Sarma.',
+        'Face angles:':
+            'Ángulo de las caras:',
+        "The angle of the faces no vertex gives one. Bisector: the bisector of the two bases that meet; mean normal: their normals weighted by the lengths of the bases; vertical: the vertical methods' slices. A face that would cross a neighbour or not reach the ground is dropped with its boundary where it is a uniform division, and made vertical at a vertex, a contact or a water-table cut.":
+            'El ángulo de las caras que ningún vértice da. Bisectriz: la bisectriz de las dos bases que se encuentran; normal media: sus normales ponderadas por la longitud de las bases; vertical: las dovelas de los métodos verticales. Una cara que se cruzaría con una vecina o no llegaría al terreno se quita con su frontera si es una división uniforme, y se pone vertical en un vértice, un contacto o un corte del nivel freático.',
+        'Bisector':
+            'Bisectriz',
+        'Mean normal':
+            'Normal media',
+        'Vertical faces':
+            'Caras verticales',
+        'Face strength:':
+            'Resistencia de las caras:',
+        "The shear strength of the faces between wedges, which F divides as it divides the bases'. Materials: the mean of the Mohr-Coulomb materials each face crosses, by length; given: the cohesion and friction angle below, divided by the design standard's material factors; none: the faces carry no shear.":
+            'La resistencia al corte de las caras entre cuñas, que F divide como divide la de las bases. Materiales: la media de los materiales de Mohr-Coulomb que cruza cada cara, por longitud; dada: la cohesión y el ángulo de rozamiento de abajo, divididos por los coeficientes parciales de material de la norma; ninguna: las caras no llevan cortante.',
+        'From the materials':
+            'De los materiales',
+        'Given c and φ':
+            'c y φ dadas',
+        'No face strength':
+            'Sin resistencia en las caras',
+        'Face cohesion [kPa]:':
+            'Cohesión de las caras [kPa]:',
+        'Face friction angle [°]:':
+            'Ángulo de rozamiento de las caras [°]:',
+        'Used only with a given face strength.':
+            'Solo se usa con una resistencia de cara dada.',
+        'Boundaries at material contacts':
+            'Fronteras en los contactos de material',
+        'A boundary between wedges where the slip surface crosses a material contact, so that each base lies in one material.':
+            'Una frontera entre cuñas donde la superficie de rotura cruza un contacto de material, para que cada base esté en un solo material.',
+        'Sense of the face shear:':
+            'Sentido del cortante en las caras:',
+        'Fixed: the upper wedge moves down relative to the lower one on every face. Kinematic: the sense the motion of the rigid wedges gives; they differ where a base is less steep than the one below it.':
+            'Fijo: la cuña de arriba baja respecto a la de abajo en todas las caras. Cinemático: el sentido que da el movimiento de las cuñas rígidas; difieren donde una base es menos empinada que la de debajo.',
+        'Fixed: the upper wedge moves down':
+            'Fijo: la cuña de arriba baja',
+        "Kinematic: the rigid wedges' own":
+            'Cinemático: el de las cuñas rígidas',
+        # v0.1.464 (D357) — Sarma's notes of a run
+        "not computed: its setting '{field}' has a value it cannot take "
+        "({value}).":
+            "no calculado: su ajuste «{field}» tiene un valor que no "
+            "admite ({value}).",
+        "uses its own number of wedges ({count}), tolerance and iterations "
+        "(Sarma group of the Methods page): the global ones do not reach it.":
+            "usa su propio número de cuñas ({count}), tolerancia e "
+            "iteraciones (grupo Sarma de la página Métodos): los globales no "
+            "le llegan.",
+        "not computed: a rapid drawdown rewrites the strength of "
+        "vertical slices stage by stage, and Sarma's wedges are not "
+        "that.":
+            "no calculado: un desembalse rápido reescribe la resistencia de "
+            "dovelas verticales etapa a etapa, y las cuñas de Sarma no lo "
+            "son.",
+        "not computed: the excess pore pressure of loading (B-bar) is "
+        "not read on wedges with inclined faces.":
+            "no calculado: la presión intersticial en exceso de la carga "
+            "(B-barra) no se lee en cuñas de caras inclinadas.",
+        "{count} face(s) of the reported surface were made vertical: at "
+        "the angle of the policy they crossed a neighbour or did not "
+        "reach the ground.":
+            "{count} cara(s) de la superficie del resultado se pusieron "
+            "verticales: al ángulo de la política cruzaban a una vecina o "
+            "no llegaban al terreno.",
+        "on the reported surface {count} base(s) or face(s) carry an "
+        "effective normal force in tension; Sarma (1973) asks for the "
+        "solution to be physically acceptable.":
+            "en la superficie del resultado, {count} base(s) o cara(s) "
+            "llevan una fuerza normal efectiva de tracción; Sarma (1973) "
+            "pide que la solución sea físicamente aceptable.",
+        "{count} surface(s) have no factor because their wedges could not "
+        "be built (their code says why).":
+            "{count} superficie(s) no tienen factor porque no se pudieron "
+            "construir sus cuñas (su código dice por qué).",
+        "Sarma's method does not compute a rapid drawdown":
+            "El método de Sarma no calcula un desembalse rápido",
+        "Sarma's method does not take supports, and this surface crosses "
+        "one":
+            "El método de Sarma no admite soportes, y esta superficie cruza "
+            "uno",
         "tensile stress on {count} slice base(s) (error -120)":
             "tracción en la base de {count} dovela(s) (error -120)",
         "m_alpha < {limit} on {count} slice(s)":

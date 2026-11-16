@@ -87,7 +87,9 @@ _RUN_COUNTERS = ("_unsliceable", "_outside_model", "_orphan_material",
                  "_on_model_edge",
                  "_end_below_ground", "_end_above_ground",
                  "_base_above_ground", "_outside_slope_limits",
-                 "_misses_ground", "_leaves_external")
+                 "_misses_ground", "_leaves_external",
+                 # v0.1.464 (D357): surfaces whose wedges were refused
+                 "_wedges_refused")
 
 #: v0.1.445 (D420) — the counters the census reads (``run`` copies them onto
 #: the result at the D263 point): rejections of the SEARCH's population that
@@ -1785,7 +1787,20 @@ class BaseSearch(ABC):
                 if not self._base_angle_ok(project, trial, slices):
                     steep_refused = True
                     continue
-                res = self._analyse(project, trial, slices)
+                # v0.1.464 (D357) -- a method with non-vertical slices
+                # (Sarma) is analysed on its wedges, built on the slices
+                # every filter above has just judged. The flag is read on
+                # the object that is analysed, which may be a wrapper.
+                if getattr(self.method, "NON_VERTICAL", False):
+                    wedges = self._wedge_trial(project, trial, slices)
+                    # The method's own refusal of the surface (its wedges
+                    # cannot be built), with the code, like the solver's:
+                    # a single-surface door then says why, not a filter.
+                    res = (self._analyse(project, trial, wedges)
+                           if wedges is not None
+                           else self._wedge_refusal(trial, slices))
+                else:
+                    res = self._analyse(project, trial, slices)
                 if res is None:
                     continue
                 if best is None:
@@ -1808,6 +1823,32 @@ class BaseSearch(ABC):
                 self, "_outside_slope_limits", 0) + 1
             self._last_refusal = REFUSED_OUTSIDE_SLOPE_LIMITS
         return best
+
+    def _wedge_trial(self, project: Project, trial, slices):
+        """The wedges of a non-vertical method on ``trial`` (v0.1.464,
+        D357), or None when the constructor refuses them: counted, with the
+        code of the last refusal, for the run's note."""
+        why: list = []
+        wedges = self.method.wedges_for(project, trial, slices, reasons=why)
+        if wedges is None:
+            self._wedges_refused = getattr(self, "_wedges_refused", 0) + 1
+            self._last_wedge_refusal = next(
+                (r for r in why if isinstance(r, tuple)), None)
+        return wedges
+
+    def _wedge_refusal(self, trial, slices):
+        """The result of a surface whose wedges were refused (v0.1.464): no
+        factor, the constructor's code; None when the refusal was the
+        slicer's (no code of the constructor), which is counted as one."""
+        from .methods.base import REASON_SARMA_REFUSED
+        refusal = getattr(self, "_last_wedge_refusal", None)
+        if refusal is None:
+            return None
+        code, args = refusal
+        return LEMResult(fos=None, converged=False, iterations=0,
+                         method_id=self.method.METHOD_ID, surface=trial,
+                         slices=slices, reason=REASON_SARMA_REFUSED,
+                         **msg.failure(code, **args))
 
     def _slice_trial(self, project: Project, trial, reasons: list):
         """``slice_surface`` for one trial surface — through the run's

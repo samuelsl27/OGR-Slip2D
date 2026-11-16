@@ -35,6 +35,14 @@ from ogr_core.messages import Coded, MessageSpec, as_nested, coded
 
 # --- the run --------------------------------------------------------------
 UNREGISTERED = "method.unregistered"
+# v0.1.464 (D357) -- Sarma's method with non-vertical slices
+SARMA_DRAWDOWN = "method.sarma_drawdown"
+SARMA_EXCESS = "method.sarma_excess"
+SARMA_VERTICALIZED = "method.sarma_verticalized"
+SARMA_TENSION = "method.sarma_tension"
+SARMA_WEDGES_REFUSED = "method.sarma_wedges_refused"
+SARMA_OWN_SETTINGS = "method.sarma_own_settings"
+SARMA_BAD_SETTING = "method.sarma_bad_setting"
 
 # --- the inter-slice inclination (Spencer, GLE) ---------------------------
 LAMBDA_FALLBACK = "method.lambda_fallback"
@@ -244,6 +252,31 @@ def _parts():
 
 
 METHOD_NOTES = {s.code: s for s in (
+    MessageSpec(SARMA_DRAWDOWN,
+                "not computed: a rapid drawdown rewrites the strength of "
+                "vertical slices stage by stage, and Sarma's wedges are not "
+                "that."),
+    MessageSpec(SARMA_EXCESS,
+                "not computed: the excess pore pressure of loading (B-bar) is "
+                "not read on wedges with inclined faces."),
+    MessageSpec(SARMA_VERTICALIZED,
+                "{count} face(s) of the reported surface were made vertical: at "
+                "the angle of the policy they crossed a neighbour or did not "
+                "reach the ground."),
+    MessageSpec(SARMA_TENSION,
+                "on the reported surface {count} base(s) or face(s) carry an "
+                "effective normal force in tension; Sarma (1973) asks for the "
+                "solution to be physically acceptable."),
+    MessageSpec(SARMA_BAD_SETTING,
+                "not computed: its setting '{field}' has a value it cannot "
+                "take ({value})."),
+    MessageSpec(SARMA_OWN_SETTINGS,
+                "uses its own number of wedges ({count}), tolerance and "
+                "iterations (Sarma group of the Methods page): the global ones "
+                "do not reach it."),
+    MessageSpec(SARMA_WEDGES_REFUSED,
+                "{count} surface(s) have no factor because their wedges could "
+                "not be built (their code says why)."),
     MessageSpec(UNREGISTERED,
                 "'{method}' is not a registered analysis method, so it was "
                 "not computed. Available: {available}.",

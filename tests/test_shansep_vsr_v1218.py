@@ -41,6 +41,12 @@ which has neither model (0 of 7995 .ogr).
 from __future__ import annotations
 
 import math
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _sarma_registry import refused_by_its_spec  # noqa: E402
 
 S_RATIO, M_EXP = 0.25, 0.8
 GAMMA, GAMMA_W = 20.0, 9.81
@@ -117,7 +123,9 @@ def _solve(key, strength, method_id, ru=None):
 def _nine():
     from ogr_slip2d.methods import method_registry
     ids = sorted(method_registry())
-    assert len(ids) == 9, ids
+    # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+    # the count it was written with
+    assert len(ids) == 10, ids
     return ids
 
 
@@ -183,7 +191,11 @@ class TestAnArtesianColumn:
         from ogr_core.materials import Undrained
         bad = []
         for mid in _nine():
-            a = _solve("artesian", _shansep(A=20.0), mid, ru=self.RU).fos
+            ra = _solve("artesian", _shansep(A=20.0), mid, ru=self.RU)
+            # Sarma's faces refuse this model: see tests/_sarma_registry.py
+            if refused_by_its_spec(mid, ra):
+                continue
+            a = ra.fos
             b = _solve("cu20", Undrained(cohesion=20.0), mid,
                        ru=self.RU).fos
             if a is None or b is None or not math.isclose(a, b,

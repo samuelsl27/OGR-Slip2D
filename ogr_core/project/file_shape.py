@@ -80,6 +80,9 @@ SETTINGS_SECTIONS = {
     "advanced": OBJECT_OR_NULL,
     "seismic": OBJECT,
     "summary": OBJECT,
+    # v0.1.464 (D357) -- written only when Sarma is used; the reader takes a
+    # null as the defaults (``SarmaSettings.from_dict(... or {})``)
+    "sarma": OBJECT_OR_NULL,
 }
 
 #: The keys a project's file holds besides its sections: an object with

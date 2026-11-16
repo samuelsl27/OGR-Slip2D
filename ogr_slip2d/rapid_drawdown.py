@@ -1335,6 +1335,38 @@ def drawdown_gap(project, method) -> Optional[str]:
                               method.__class__.__name__), ""))
 
 
+class NonVerticalDrawdownRefusal:
+    """A method with non-vertical slices under a rapid drawdown (v0.1.464,
+    D357): every surface is refused with ``lem.sarma_drawdown``. The
+    procedures of this module rewrite the strength of vertical slices stage
+    by stage, and Sarma's wedges are not that."""
+
+    PERFORMS_DRAWDOWN = True
+    NON_VERTICAL = True
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    @property
+    def METHOD_ID(self):
+        return self.inner.METHOD_ID
+
+    @property
+    def DISPLAY_NAME(self):
+        return self.inner.DISPLAY_NAME
+
+    def wedges_for(self, *args, **kwargs):
+        return self.inner.wedges_for(*args, **kwargs)
+
+    def compute_fos(self, project, surface, slices):
+        from .methods.base import REASON_DRAWDOWN_NOT_APPLICABLE, LEMResult
+        return LEMResult(fos=None, converged=False, iterations=0,
+                         method_id=self.METHOD_ID, surface=surface,
+                         slices=slices,
+                         reason=REASON_DRAWDOWN_NOT_APPLICABLE,
+                         **msg.failure(msg.SARMA_DRAWDOWN))
+
+
 def wrap_for_drawdown(method, project, num_slices: int = 25):
     """Wrap ``method`` when the project asks for a rapid drawdown.
 
@@ -1355,6 +1387,11 @@ def wrap_for_drawdown(method, project, num_slices: int = 25):
     gw = project.settings.groundwater
     if not gw.rapid_drawdown:
         return method
+    if getattr(method, "NON_VERTICAL", False):
+        # v0.1.464 (D357) -- the net: the run skips Sarma under a drawdown
+        # with one note, and a door that does not ask gets a refusal with
+        # its code, never a drawdown on vertical slices under its name.
+        return NonVerticalDrawdownRefusal(method)
     why = check_drawdown_settings(project)
     if why:
         # v0.1.350 (D335) -- the run-level refusal with its code too

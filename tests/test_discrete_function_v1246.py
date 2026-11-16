@@ -47,6 +47,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from _sarma_registry import refused_by_its_spec  # noqa: E402
+
 _REL = 1e-12
 #: Four points around the sliding mass.
 _XY = ((20.0, 10.0), (90.0, 10.0), (55.0, 40.0), (40.0, 25.0))
@@ -72,12 +74,16 @@ def _sliced(p):
     return c, slice_surface(p, c, num_slices=160)
 
 
-def _fos(p, method="bishop_simplified"):
+def _result(p, method="bishop_simplified"):
     from ogr_core.project.design_factors import prepare_analysis_project
     from ogr_slip2d.methods import get_method
     work, _rep = prepare_analysis_project(p)
     c, sl = _sliced(work)
-    r = get_method(method)(tolerance=1e-12).compute_fos(work, c, sl)
+    return get_method(method)(tolerance=1e-12).compute_fos(work, c, sl)
+
+
+def _fos(p, method="bishop_simplified"):
+    r = _result(p, method)
     assert r.fos is not None, (method, getattr(r, "reason", None))
     return float(r.fos)
 
@@ -85,7 +91,9 @@ def _fos(p, method="bishop_simplified"):
 def _nine():
     from ogr_slip2d.methods import method_registry
     names = sorted(method_registry())
-    assert len(names) == 9, names
+    # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+    # the count it was written with
+    assert len(names) == 10, names
     return names
 
 
@@ -106,8 +114,15 @@ class TestAConstantFieldIsTheMaterialOfThatConstant:
                      m)
             for method in ("inverse_distance", "tin", "thin_plate_spline",
                            "linear_by_elevation"):
-                a = _fos(_slope(_df("undrained", cu, method)), m)
-                b = _fos(_slope(_df("drained", cphi, method)), m)
+                ra = _result(_slope(_df("undrained", cu, method)), m)
+                rb = _result(_slope(_df("drained", cphi, method)), m)
+                # Sarma's faces refuse this model: see
+                # tests/_sarma_registry.py
+                if refused_by_its_spec(m, ra) and refused_by_its_spec(m, rb):
+                    continue
+                a, b = ra.fos, rb.fos
+                assert a is not None and b is not None, (
+                    m, method, ra.reason, rb.reason)
                 assert _close(a, u, 1e-12), (m, method, a, u)
                 assert _close(b, d, 1e-12), (m, method, b, d)
 

@@ -68,7 +68,8 @@ method sees (spec 009, «Rebanar en vertical primero»).
 * **The strength of a face**: the one given for its vertex, else the one
   given for every face, else the mean of the materials it crosses
   weighted by length (c and tan φ), each of which must then be
-  Mohr–Coulomb; or none.
+  Mohr–Coulomb or undrained (c = cu, φ = 0: its envelope at any stress;
+  v0.1.464); or none.
 
 Conventions are the solver's (:mod:`ogr_slip2d.sarma.solver`): lists in
 increasing x, faces from 1 at the left end to n + 1 at the right one in
@@ -106,7 +107,7 @@ from ogr_core.hydraulic.excess_pore_pressure import (
 from ogr_core.hydraulic.ponded_water import ponded_depth_at
 from ogr_core.loads.overburden import (_line_load_components,
                                        _surface_pressures_at)
-from ogr_core.materials.builtin_models import MohrCoulomb
+from ogr_core.materials.builtin_models import MohrCoulomb, Undrained
 from ogr_core.materials.material import PorePressureType
 from ogr_core.materials.strength_model import local_c_phi
 
@@ -115,8 +116,13 @@ from ogr_slip2d import slicer as _slicer
 from ogr_slip2d.external_forces import seismic_soil_part, slice_forces
 from ogr_slip2d.methods.janbu import slide_sense
 from ogr_slip2d.sarma import angles as _angles
+from ogr_slip2d.sarma.angles import VERTICAL
 from ogr_slip2d.sarma.solver import FIXED, Base, Face, SarmaSolution, solve
 from ogr_slip2d.slicer import Slice, Slices
+
+#: The ``angle_source`` of a face of the policy made vertical because it did
+#: not reach the ground or crossed a neighbour (v0.1.464).
+VERTICALIZED = "verticalized"
 
 #: Where the strength of a face comes from when no vertex gives it one.
 MATERIALS = "materials"
@@ -167,7 +173,8 @@ class WedgeFace:
     #: c̄ [kPa] and tan φ̄, before the reduction by F.
     cohesion: float = 0.0
     tan_phi: float = 0.0
-    #: Where the angle came from: ``end``, ``vertex`` or the policy.
+    #: Where the angle came from: ``end``, ``vertex``, the policy, or
+    #: ``verticalized`` (a policy face made vertical, v0.1.464).
     angle_source: str = ""
     #: Where the strength came from: ``end``, ``vertex``, ``given``,
     #: ``materials`` or ``none``.
@@ -193,6 +200,18 @@ class Wedges(Slices):
     angle_policy: str = ""
     #: Per-vertex data no boundary took, as ``(kind, (x, y))``.
     unused_vertex_data: list = field(default_factory=list)
+    #: How many faces of the policy were made vertical (v0.1.464).
+    verticalized: int = 0
+
+    @property
+    def wedge_fields(self) -> dict:
+        """The fields of a ``Wedges`` that ``Slices`` has not, for
+        ``slice_store`` to give back the class it spilled (v0.1.464)."""
+        return {"faces": self.faces, "vertical": self.vertical,
+                "boundaries": self.boundaries,
+                "angle_policy": self.angle_policy,
+                "unused_vertex_data": self.unused_vertex_data,
+                "verticalized": self.verticalized}
 
 
 class SolverInput(NamedTuple):
@@ -457,6 +476,15 @@ def boundaries_on(project, surface, x_l: float, x_r: float, num_wedges: int,
     return _slicer._share_out(segments, num_wedges, x_l, x_r)
 
 
+def _mandatory(project, surface, x_l, x_r, at_materials) -> list:
+    """The interior boundaries :func:`boundaries_on` must keep: the
+    vertices of the surface and its crossings with the water table and the
+    contacts. The others are uniform divisions, there only to make up the
+    least number (v0.1.464)."""
+    xs = boundaries_on(project, surface, x_l, x_r, 1, at_materials)
+    return xs[1:-1]
+
+
 def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
                  angles: str = _angles.BISECTOR,
                  vertex_angles: Optional[dict] = None,
@@ -519,53 +547,113 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
     grid_tol = _slicer._model_grid_tol(project)
     xs = boundaries_on(project, surface, x_l, x_r, num_wedges,
                        boundaries_at_materials)
-    columns = _slicer.slice_surface(project, surface, cuts=xs,
-                                    reasons=reasons)
-    if columns is None:
-        return None
-    cols = list(columns)
-    n = len(cols)
-    V = [(c.base_x_left, c.base_y_left) for c in cols]
-    V.append((cols[-1].base_x_right, cols[-1].base_y_right))
-    alpha = [c.base_angle for c in cols]
-    lengths = [c.base_length for c in cols]
+    marks = _mandatory(project, surface, x_l, x_r, boundaries_at_materials)
+    mark_tol = 1e-9 * (x_r - x_l)
+
+    def plain(x):
+        """A uniform division, not a vertex, contact or water-table cut."""
+        return all(abs(x - m) > mark_tol for m in marks)
 
     external = project.external_boundary()
     ground = _slicer._ground_surface_from_external(external)
     gpts = [(v.x, v.y) for v in ground.vertices]
 
-    # The faces: angle, top, position of the top along the ground.
-    interior = {k: V[k] for k in range(1, n)}
-    ang_by, unused_a = _by_vertex(vertex_angles, interior, grid_tol)
-    str_by, unused_s = _by_vertex(vertex_strength, interior, grid_tol)
-    tops = [(x_l, cols[0].top_y_left)]
-    thetas = [0.5 * math.pi]
-    sources = ["end"]
-    for k in range(1, n):
-        if k in ang_by:
-            theta = _angles.upward(float(ang_by[k]))
-            if theta is None:
-                return _refuse(reasons, msg.SARMA_FACE_HORIZONTAL,
-                               face=k + 1, angle=float(ang_by[k]))
-            sources.append("vertex")
-        else:
-            theta = _angles.policy_angle(angles, alpha[k - 1], alpha[k],
-                                         lengths[k - 1], lengths[k])
-            sources.append(angles)
-        top = ray_ground_exit(ground, V[k][0], V[k][1], theta, grid_tol)
-        if top is None:
-            return _refuse(reasons, msg.SARMA_FACE_NO_EXIT, face=k + 1,
-                           angle=math.degrees(theta))
-        tops.append((float(top[0]), float(top[1])))
-        thetas.append(theta)
-    tops.append((x_r, cols[-1].top_y_right))
-    thetas.append(0.5 * math.pi)
-    sources.append("end")
-    pos = [_path_position(gpts, x, y) for x, y in tops]
-    for k in range(n):
-        if not pos[k] < pos[k + 1]:
-            return _refuse(reasons, msg.SARMA_FACES_CROSS, face=k + 1,
-                           next=k + 2)
+    # v0.1.464 (owner's decisions, 2026-11-16, after the adversarial
+    # review): a face of the policy that crosses its neighbour, or does not
+    # reach the ground, is
+    #
+    # * dropped with its boundary when it is a uniform division: two wedges
+    #   on one straight base of one material add up to the wedge they split
+    #   (``TestFacesOnAStraightStretch`` of v1463), so the factor does not
+    #   move, and the count stays a minimum the divisions try to meet;
+    # * made vertical, ONE of the pair (the further from vertical), at a
+    #   vertex, a contact or a water-table cut, which two vertical faces
+    #   never cross (the surface is single-valued in x).
+    #
+    # Making every crossing face vertical, as the first version did,
+    # chained: a vertical face at a concave vertex crosses the next normal
+    # face, and so on. On the slope of the test F went 2.5431 (1 to 20
+    # wedges), 2.6740 (25, twelve faces made vertical) and 2.6971 (100).
+    # A face given at a vertex is never moved: if it crosses, the surface
+    # is refused. Each pass drops a boundary or makes a face vertical, so
+    # it ends.
+    while True:
+        columns = _slicer.slice_surface(project, surface, cuts=xs,
+                                        reasons=reasons)
+        if columns is None:
+            return None
+        cols = list(columns)
+        n = len(cols)
+        V = [(c.base_x_left, c.base_y_left) for c in cols]
+        V.append((cols[-1].base_x_right, cols[-1].base_y_right))
+        alpha = [c.base_angle for c in cols]
+        lengths = [c.base_length for c in cols]
+
+        # The faces: angle, top, position of the top along the ground.
+        interior = {k: V[k] for k in range(1, n)}
+        ang_by, unused_a = _by_vertex(vertex_angles, interior, grid_tol)
+        str_by, unused_s = _by_vertex(vertex_strength, interior, grid_tol)
+        tops = [(x_l, cols[0].top_y_left)]
+        thetas = [0.5 * math.pi]
+        sources = ["end"]
+        drop = None
+        for k in range(1, n):
+            if k in ang_by:
+                theta = _angles.upward(float(ang_by[k]))
+                if theta is None:
+                    return _refuse(reasons, msg.SARMA_FACE_HORIZONTAL,
+                                   face=k + 1, angle=float(ang_by[k]))
+                sources.append("vertex")
+            else:
+                theta = _angles.policy_angle(angles, alpha[k - 1], alpha[k],
+                                             lengths[k - 1], lengths[k])
+                sources.append(angles)
+            top = ray_ground_exit(ground, V[k][0], V[k][1], theta, grid_tol)
+            if top is None and sources[-1] != "vertex":
+                if plain(xs[k]):
+                    drop = k
+                    break
+                theta, sources[-1] = 0.5 * math.pi, VERTICALIZED
+                top = ray_ground_exit(ground, V[k][0], V[k][1], theta,
+                                      grid_tol)
+            if top is None:
+                return _refuse(reasons, msg.SARMA_FACE_NO_EXIT, face=k + 1,
+                               angle=math.degrees(theta))
+            tops.append((float(top[0]), float(top[1])))
+            thetas.append(theta)
+        if drop is not None:
+            xs = xs[:drop] + xs[drop + 1:]
+            continue
+        tops.append((x_r, cols[-1].top_y_right))
+        thetas.append(0.5 * math.pi)
+        sources.append("end")
+        pos = [_path_position(gpts, x, y) for x, y in tops]
+        while True:
+            k = next((k for k in range(n) if not pos[k] < pos[k + 1]), None)
+            if k is None:
+                break
+            policy = [j for j in (k, k + 1)
+                      if sources[j] not in ("end", "vertex", VERTICALIZED)]
+            plains = [j for j in policy if plain(xs[j])]
+            if plains:
+                drop = plains[-1]
+                break
+            if not policy:
+                return _refuse(reasons, msg.SARMA_FACES_CROSS, face=k + 1,
+                               next=k + 2)
+            j = max(policy, key=lambda j: abs(thetas[j] - 0.5 * math.pi))
+            top = ray_ground_exit(ground, V[j][0], V[j][1], 0.5 * math.pi,
+                                  grid_tol)
+            if top is None:
+                return _refuse(reasons, msg.SARMA_FACE_NO_EXIT, face=j + 1,
+                               angle=90.0)
+            thetas[j], sources[j] = 0.5 * math.pi, VERTICALIZED
+            tops[j] = (float(top[0]), float(top[1]))
+            pos[j] = _path_position(gpts, *tops[j])
+        if drop is not None:
+            xs = xs[:drop] + xs[drop + 1:]
+            continue
+        break
 
     # The polygons, and that they tile the mass.
     polys = []
@@ -678,7 +766,9 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
     out = Wedges(slices=wedges, faces=faces, vertical=vertical,
                  boundaries=tuple(xs), angle_policy=angles,
                  unused_vertex_data=([("angle", p) for p in unused_a]
-                                     + [("strength", p) for p in unused_s]))
+                                     + [("strength", p) for p in unused_s]),
+                 verticalized=sum(1 for f in faces
+                                  if f.angle_source == VERTICALIZED))
     if _slicer.DESIGN_WEIGHT_FACTORS:
         from ogr_slip2d.design_actions import apply_action_factors
         apply_action_factors(project, out,
@@ -946,6 +1036,11 @@ def _face_strength(project, face, by_vertex, given, policy, water, reasons):
         mat = project.material_at(p[0] + t * (q[0] - p[0]),
                                   p[1] + t * (q[1] - p[1]))
         strength = getattr(mat, "strength", None)
+        if isinstance(strength, Undrained):
+            # v0.1.464 (owner's decision, 2026-11-16): τ = cu at any stress,
+            # so c̄ = cu and φ̄ = 0 is its envelope on a face too
+            c_sum += strength.params["cohesion"] * (b - a)
+            continue
         if not isinstance(strength, MohrCoulomb):
             _refuse(reasons, msg.SARMA_FACE_STRENGTH, face=face.index + 1,
                     material=getattr(mat, "name", None) or "-")
@@ -1001,6 +1096,54 @@ def _face_factor(face, toe_side: float, head_side: float) -> float:
     if abs(face.theta - 0.5 * math.pi) <= 1e-12:
         return 0.5 * (toe_side + head_side)
     return toe_side if face.theta < 0.5 * math.pi else head_side
+
+
+def vertical_faces(project, slices, face_strength=MATERIALS, reasons=None):
+    """The faces of a set of VERTICAL slices (v0.1.464), with the strength
+    and the water a face takes in :func:`build_wedges`: the n + 1 slice
+    boundaries from the base to the top, the two ends carrying nothing.
+    The registered method reads vertical slices it is handed this way
+    (spec 009, the two entries of ``compute_fos``); with ``NO_STRENGTH``
+    they are ``sarma.vertical``'s. None, with the reason, if a face
+    crosses a material that is not Mohr–Coulomb."""
+    given = None
+    if not isinstance(face_strength, str):
+        given = _strength(face_strength)
+    elif face_strength not in FACE_STRENGTHS:
+        raise ValueError("face strength must be one of %s or (c, phi), "
+                         "not %r" % (FACE_STRENGTHS, face_strength))
+    s_list = list(slices)
+    n = len(s_list)
+    edges = [(s_list[0].base_x_left, s_list[0].base_y_left,
+              s_list[0].top_y_left)]
+    edges += [(s.base_x_right, s.base_y_right, s.top_y_right)
+              for s in s_list]
+    if excess_is_enabled(project):
+        _refuse(reasons, msg.SARMA_EXCESS_PORE_PRESSURE)
+        return None
+    external = project.external_boundary()
+    water = _Water(project, _slicer._ground_surface_from_external(external))
+    faces = []
+    for k, (x, yb, yt) in enumerate(edges):
+        face = WedgeFace(index=k, x_base=x, y_base=yb, x_top=x,
+                         y_top=max(yb, yt), theta=0.5 * math.pi,
+                         length=max(0.0, yt - yb), angle_source=VERTICAL)
+        if k in (0, n) or face.length <= 0.0:
+            face.strength_source = "end" if k in (0, n) else "none"
+        elif _face_strength(project, face, None, given, face_strength,
+                            water, reasons):
+            return None
+        elif (s_list[k - 1].weight_factor != 1.0
+              or s_list[k].weight_factor != 1.0):
+            # Ru with a design standard: the face between two slices reads
+            # the mean of their factors (``_face_factor`` on a vertical face)
+            face.water_force = _face_water(
+                project, face, water, _face_factor(
+                    face, s_list[k - 1].weight_factor,
+                    s_list[k].weight_factor))[0]
+        faces.append(face)
+    return [Face(delta=0.0, length=f.length, water_force=f.water_force,
+                 cohesion=f.cohesion, tan_phi=f.tan_phi) for f in faces]
 
 
 # ---------------------------------------------------------------- solver

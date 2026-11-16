@@ -42,6 +42,8 @@ METHOD_NAMES = {
     LEMMethod.CORPS_OF_ENGINEERS_1.value: "Corps of Engineers #1",
     LEMMethod.CORPS_OF_ENGINEERS_2.value: "Corps of Engineers #2",
     LEMMethod.LOWE_KARAFIATH.value: "Lowe-Karafiath",
+    # v0.1.464 (D357)
+    LEMMethod.SARMA.value: "Sarma (non-vertical)",
 }
 
 PORE_PRESSURE = {

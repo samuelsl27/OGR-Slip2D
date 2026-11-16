@@ -139,6 +139,7 @@ _METHOD_NAMES = {
     "gle_morgenstern_price": "GLE / Morgenstern-Price",
     "morgenstern_price": "GLE / Morgenstern-Price",
     "lowe_karafiath": "Lowe-Karafiath",
+    "sarma": "Sarma (non-vertical)",
     "corps_engineers_1": "Corps of Engineers #1",
     "corps_engineers_2": "Corps of Engineers #2",
 }
@@ -556,10 +557,14 @@ def generate_report(
             ]
         # Slice-area sum
         try:
-            area = sum(sl.width * max(
-                0.5 * ((sl.top_y_left - sl.base_y_left)
-                       + (sl.top_y_right - sl.base_y_right)), 0.0)
-                for sl in crit.slices.slices)
+            if getattr(crit.slices, "wedge_fields", None) is not None:
+                # v0.1.464 (D357) -- Sarma's wedges: their polygons
+                area = sum(sl.area for sl in crit.slices.slices)
+            else:
+                area = sum(sl.width * max(
+                    0.5 * ((sl.top_y_left - sl.base_y_left)
+                           + (sl.top_y_right - sl.base_y_right)), 0.0)
+                    for sl in crit.slices.slices)
             rows.append((T("Total Slice Area"), f"{_fmt(area)} m²"))
         except Exception:  # noqa: BLE001
             pass

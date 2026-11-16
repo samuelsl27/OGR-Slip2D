@@ -169,6 +169,11 @@ def _samples() -> dict:
         m.SARMA_WEDGE_OUTSIDE: (
             {"wedge": 1},
             f"Part of wedge {1} lies in no region with a material"),
+        m.SARMA_DRAWDOWN: (
+            {}, "Sarma's method does not compute a rapid drawdown"),
+        m.SARMA_SUPPORTS: (
+            {}, "Sarma's method does not take supports, and this surface "
+                "crosses one"),
         m.SARMA_FACE_STRENGTH: (
             {"face": 2, "material": "Rock"},
             "Face 2 crosses material 'Rock', whose strength is not "

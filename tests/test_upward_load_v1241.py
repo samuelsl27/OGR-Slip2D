@@ -117,7 +117,9 @@ class TestAnUpwardLoadTakesWeightOff:
         for s, d in zip(reduced.slices, _pressed()):
             s.weight -= d
         names = sorted(method_registry())
-        assert len(names) == 9, names
+        # v0.1.464 (D357): ten with Sarma's method; the test's name keeps
+        # the count it was written with
+        assert len(names) == 10, names
         for name in names:
             m = get_method(name)(tolerance=1e-10)
             fa = m.compute_fos(p, c, up)

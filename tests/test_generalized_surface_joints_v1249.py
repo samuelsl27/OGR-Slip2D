@@ -39,6 +39,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from _sarma_registry import refused_by_its_spec  # noqa: E402
+
 _REL = 1e-12
 _THETA = 20.0
 
@@ -99,7 +101,12 @@ class TestIdentity:
         for m in A._nine():
             p_s, _b = _slope_with(lambda sid: _ga(sid), pts)
             p_a, _b = _slope_with(lambda sid: _ga(None), pts)
-            a, b = A._fos(p_a, m), A._fos(p_s, m)
+            ra, rb = A._result(p_a, m), A._result(p_s, m)
+            # Sarma's faces refuse this model: see tests/_sarma_registry.py
+            if refused_by_its_spec(m, ra) and refused_by_its_spec(m, rb):
+                continue
+            a, b = ra.fos, rb.fos
+            assert a is not None and b is not None, (m, ra.reason, rb.reason)
             assert _close(a, b), (m, a, b)
 
     def test_the_slices_carry_the_orientation(self):

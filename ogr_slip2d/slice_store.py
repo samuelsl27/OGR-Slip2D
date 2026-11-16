@@ -102,7 +102,23 @@ _LEVEL = 1
 
 # The scalars of ``Slices`` besides the list; a SpilledSlices keeps them.
 _SCALARS = ("tension_crack_force", "tension_crack_arm", "tension_crack_wall",
-            "design_sense", "load_factors")
+            "design_sense", "load_factors",
+            # v0.1.464 (D357) -- None on Slices; on Sarma's Wedges, their own
+            # fields (faces, the vertical slices...), so a spilled result
+            # comes back as the class it was (``_container``)
+            "wedge_fields")
+
+
+def _container(slices: list, scalars: dict):
+    """The container a record's ``slices`` came in: ``Slices``, or, with
+    ``wedge_fields``, Sarma's ``Wedges`` (v0.1.464)."""
+    from .slicer import Slices
+    scalars = dict(scalars)
+    extra = scalars.pop("wedge_fields", None)
+    if extra is None:
+        return Slices(slices=slices, **scalars)
+    from .sarma.wedges import Wedges
+    return Wedges(slices=slices, **scalars, **extra)
 
 _LOADING = threading.local()
 
@@ -136,8 +152,7 @@ def _from_record(data: bytes, table: list, count: int, scalars: dict,
     if arrivals is not None and xs is not None:
         return arrivals.respill(data, table, count, scalars, base, xs, ys,
                                 area)
-    from .slicer import Slices
-    return Slices(slices=_unpickle(data, table, base), **scalars)
+    return _container(_unpickle(data, table, base), scalars)
 
 
 class _Arrivals:
@@ -526,11 +541,17 @@ class SpilledSlices:
     def to_list(self) -> list:
         return [s.to_dict() for s in self.slices]
 
+    @property
+    def faces(self):
+        """v0.1.464 (D357) -- the faces of Sarma's wedges, kept with the
+        stub (``wedge_fields``), so what draws a spilled result draws them;
+        None for slices."""
+        return (getattr(self, "wedge_fields", None) or {}).get("faces")
+
     def materialize(self):
         """A ``Slices`` of its own, read from the file."""
-        from .slicer import Slices
-        return Slices(slices=self._store.load(self._off, self._n, self._base),
-                      **{k: getattr(self, k) for k in _SCALARS})
+        return _container(self._store.load(self._off, self._n, self._base),
+                          {k: getattr(self, k) for k in _SCALARS})
 
     def __eq__(self, other):
         if isinstance(other, SpilledSlices):

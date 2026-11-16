@@ -32,6 +32,12 @@ Author: Samuel Sáez López — UPCT
 from __future__ import annotations
 
 import math
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _sarma_registry import accepts_supports  # noqa: E402
 
 # Published in the reference's verification problem 111, all of it from
 # the hand calculation and its Table 111.1.
@@ -151,8 +157,14 @@ def _fos(method_id, project, surface=None, num_slices=50):
 
 
 def _method_ids():
+    """Every registered method that takes supports. The exemption is read
+    from the class (``ACCEPTS_SUPPORTS``, see tests/_sarma_registry.py),
+    not kept by hand: Sarma's method refuses a surface with a support by
+    its spec, so it has no anchor force to compare, and a later method that
+    does take supports is in the loop without anyone adding it."""
     from ogr_slip2d.methods.base import method_registry
-    return sorted(method_registry())
+    return sorted(mid for mid, cls in method_registry().items()
+                  if accepts_supports(cls))
 
 
 # ======================================================================

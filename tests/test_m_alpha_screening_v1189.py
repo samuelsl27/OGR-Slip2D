@@ -234,9 +234,12 @@ class TestTheSetsCannotDriftApart:
         prescrita = {mid for mid, cls in method_registry().items()
                      if getattr(cls, "_march", None)
                      is PrescribedInclinationMethod._march}
-        from ogr_slip2d.checks import NO_M_ALPHA_DENOMINATOR
+        from ogr_slip2d.checks import NO_M_ALPHA_DENOMINATOR, OWN_DENOMINATOR
+        # v0.1.464 (D357): a fourth bucket, the methods that divide by a
+        # denominator of their own and not by m_alpha (Sarma's wedges, the
+        # q of their recurrence): neither screened nor without denominator.
         cubos = (set(M_ALPHA_SCREENED), prescrita,
-                 set(NO_M_ALPHA_DENOMINATOR))
+                 set(NO_M_ALPHA_DENOMINATOR), set(OWN_DENOMINATOR))
         union = set().union(*cubos)
         assert union == reg, sorted(reg ^ union)
         for i, a in enumerate(cubos):

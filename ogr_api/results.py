@@ -156,8 +156,21 @@ def lem_summary(res, *, with_slices: bool = False) -> Optional[dict]:
             out[key] = code
             out[args] = json_args(getattr(res, args, None) or {})
     extras = {k: _r(details[k]) for k in ("lambda", "ky", "ky_fos",
-                                         "newmark_displacement")
-              if k in details and isinstance(details[k], (int, float))}
+                                         "newmark_displacement",
+                                         # v0.1.464 (D357) -- Sarma's
+                                         "sarma_kc", "sarma_min_q",
+                                         "sarma_max_force_ratio",
+                                         "sarma_verticalized")
+              if k in details and isinstance(details[k], (int, float))
+              and not isinstance(details[k], bool)}
+    # v0.1.464 (D357) -- the faces of Sarma's wedges: E (total), E′ and X
+    # per face, in increasing x [kN/m], as the method solved them.
+    if "sarma_face_thrusts" in details and details["sarma_face_thrusts"]:
+        extras["sarma_faces"] = [
+            {"E": _r(e), "E_effective": _r(ee), "X": _r(x)}
+            for e, ee, x in zip(details["sarma_face_thrusts"],
+                                details.get("sarma_face_effective") or [],
+                                details.get("sarma_face_shears") or [])]
     # v0.1.213 (D84) -- the slices that resisted nothing because their
     # strength estimate was clipped, only when there are any (0-based, in
     # the slicer's order, as the method published them).
