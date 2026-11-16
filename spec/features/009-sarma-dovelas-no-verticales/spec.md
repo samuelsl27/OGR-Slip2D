@@ -11,8 +11,11 @@ las superficies no circulares del usuario, donde se le dan los ángulos y la c/�
 Hay mecanismos de cuñas que las dovelas verticales no representan, porque no transmiten el empuje de una cuña a
 otra a través de una cara inclinada: escombreras sobre un suelo débil inclinado, núcleos de presa, roturas por
 una veta.
-- En el problema 4 del manual 03 del banco, Bishop da 3,77 donde el mecanismo de dos cuñas da 1,198. Por eso
+- En el problema 4 del manual 03 del banco, Bishop daba 3,77 donde el mecanismo de dos cuñas da 1,198. Por eso
   las filas del 4 están en NO COMPARABLE (D122) y la del 5 en «DISCREPANCIA de método» (D123).
+  - **(v0.1.462, D447) El 3,77 no era el método:** era el material de la base. Las 25 dovelas del pie, que van
+    sobre el contacto, leían la escombrera de encima. Con el más débil de los dos, el suelo cizallado, Bishop da
+    1,199 en seco. En saturado sí queda una diferencia de método: 0,208 con dovelas verticales frente a 0,434.
 - Kc es además la medida sísmica natural del método: «el talud aguanta 0,05 g».
 
 ## Fuentes (decisión de la propietaria, 2026-11-04)
@@ -41,7 +44,7 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 - [x] Con el sentido de cortante fijo y el cinemático: iguales donde la compatibilidad da el sentido por
       defecto, distintos donde no.
 
-### Casos publicados (0.1.462, la referencia externa)
+### Casos publicados (0.1.463, la referencia externa)
 
 - [ ] Problema 4 del manual 03, con la interfaz de (108; 6,4) a (82,85; 56,89):
   - seco: 1,198 ± 1 %;
@@ -61,7 +64,7 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 - [ ] **Regla de raíz:** F es la raíz MAYOR de Kc(F) = kh. El 4 saturado da 0,4347 y no la otra raíz, 0,1467,
       aunque la primera esté a ~1,4 % de un polo.
 
-### Integración (0.1.463–0.1.464)
+### Integración (0.1.464–0.1.465)
 
 - [ ] No se activa por defecto, y ninguno de los nueve métodos mueve un número:
   - la suite entera en verde;
@@ -92,7 +95,7 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
   - en gris con tipo circular;
   - se deshacen.
 
-### Ventana (0.1.463–0.1.466)
+### Ventana (0.1.464–0.1.467)
 
 - [ ] La casilla de Sarma y su grupo de ajustes en Métodos, en gris cuando no aplican.
 - [ ] La tabla de ángulo, c y φ por vértice, desde el menú Superficies y desde el menú contextual del vértice.
@@ -100,7 +103,7 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 - [ ] Interpret dibuja las cuñas: polígonos, caras inclinadas y filas de cara.
 - [ ] Todo texto nuevo pasa por `tr()` con su español, y toda acción está en un menú.
 
-### Ángulos optimizados (0.1.467)
+### Ángulos optimizados (0.1.468)
 
 - [ ] F optimizado ≤ el de cada política (vertical, bisectriz, normal media) en la misma superficie, y se
       repite igual dos veces.

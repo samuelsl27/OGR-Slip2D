@@ -747,7 +747,15 @@ def rapid_drawdown_fos(
 
     # ---- Stage 1: full reservoir, effective stresses -----------------
     p1 = _level_project(project, use_drawdown=False)
-    sl1 = slice_surface(p1, surface, num_slices=num_slices)
+    # v0.1.462 (D447) -- a base along a contact keeps the material ABOVE
+    # here, as before v0.1.462. The weaker of the two is decided with the
+    # drained c', phi' and the water of the level being sliced, so the two
+    # stages decided differently on the same base and the factor rose 14 to
+    # 25 % (Duncan-Wright, Corps 2, Lowe-Karafiath, B-bar; the review of
+    # v0.1.462). Deciding it once, with the strength each stage uses, is
+    # its own entry of the bank (owner's decision, 2026-11-16).
+    sl1 = slice_surface(p1, surface, num_slices=num_slices,
+                        base_on_contact="above")
     if sl1 is None:
         raise _refusal(msg.DRAWDOWN_UNSLICEABLE_INITIAL)
     r1 = method.compute_fos(p1, surface, sl1)
@@ -772,7 +780,8 @@ def rapid_drawdown_fos(
 
     # ---- Stage 2: drawn-down level, undrained strengths --------------
     p2 = _level_project(project, use_drawdown=True)
-    sl2 = slice_surface(p2, surface, num_slices=num_slices)
+    sl2 = slice_surface(p2, surface, num_slices=num_slices,
+                        base_on_contact="above")   # as stage 1 (D447)
     if sl2 is None:
         raise _refusal(msg.DRAWDOWN_UNSLICEABLE_DRAWN_DOWN)
 
@@ -1265,7 +1274,10 @@ class BBarDrawdownMethod:
         from .slicer import slice_surface
 
         p2 = level_project(project, use_drawdown=True)
-        sl2 = slice_surface(p2, surface, num_slices=self.num_slices)
+        # v0.1.462 (D447) -- the material above on a contact, as the
+        # multi-stage procedures (see ``rapid_drawdown_fos``).
+        sl2 = slice_surface(p2, surface, num_slices=self.num_slices,
+                            base_on_contact="above")
         if sl2 is None:
             from .methods.base import REASON_UNSLICEABLE_AT_DRAWDOWN
             return LEMResult(

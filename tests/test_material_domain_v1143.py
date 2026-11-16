@@ -211,27 +211,47 @@ class TestTheLiftDoesNotOvershootTheGround:
             "material" % wrong[:8])
 
     def test_the_lift_still_wins_where_it_does_not_overshoot(self):
-        """A base ON a contact keeps taking the material ABOVE it.
+        """A base ON a contact is read through the lift, never through the
+        fallback at the base.
 
         The lift exists so that a base running along a material contact
         resolves to the mass it carries instead of landing on a region
         edge where point-in-polygon is ambiguous. Asking at the base is a
         fallback for the overshoot, not a replacement, and this pins that
-        ordering.
+        ordering: under ``BASE_ON_CONTACT = "above"`` the base on the
+        contact is the upper layer.
+
+        v0.1.462 (D447) -- this test used to pin "the material ABOVE" as
+        the rule itself. That was a snapshot of the code, not a reference,
+        and it is the rule D447 changed: by default a base on a contact now
+        takes the WEAKER of the two (``slicer.BASE_ON_CONTACT``,
+        ``test_base_on_contact_v1462``). Here, under 20 m of the upper layer
+        (σ′ = 300 kPa), that is the lower one: 50 + 300 tan 20° = 159 kPa
+        against 5 + 300 tan 30° = 178 kPa.
         """
+        import ogr_slip2d.slicer as S
         from ogr_slip2d.slicer import slice_surface
 
         p = _block()
         flat = _polyline_surface([
             (10.0, GROUND_Y), (20.0, SPLIT_Y), (80.0, SPLIT_Y),
             (90.0, GROUND_Y)])
-        sl = slice_surface(p, flat, num_slices=40)
-        assert sl is not None
-        on_contact = [s for s in sl.slices
-                      if abs(0.5 * (s.base_y_left + s.base_y_right)
-                             - SPLIT_Y) < 1e-9]
-        assert on_contact, "the fixture no longer runs along the contact"
-        assert all(s.material.name == "Upper" for s in on_contact)
+
+        def on_contact():
+            sl = slice_surface(p, flat, num_slices=40)
+            assert sl is not None
+            return [s for s in sl.slices
+                    if abs(0.5 * (s.base_y_left + s.base_y_right)
+                           - SPLIT_Y) < 1e-9]
+        old = S.BASE_ON_CONTACT
+        S.BASE_ON_CONTACT = "above"
+        try:
+            above = on_contact()
+        finally:
+            S.BASE_ON_CONTACT = old
+        assert above, "the fixture no longer runs along the contact"
+        assert all(s.material.name == "Upper" for s in above)
+        assert all(s.material.name == "Lower" for s in on_contact())
 
 
 # ======================================================================

@@ -26,14 +26,15 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Iterator, Optional
 
 from ogr_core.geometry import (
     Boundary, BoundaryType, Polyline, Vertex, distance_to_profile,
     envelope_y_at, ground_surface,
 )
-from ogr_core.geometry.anisotropic_surface import anisotropy_angle_at
+from ogr_core.geometry.anisotropic_surface import (anisotropy_angle_at,
+                                                   surface_angles_at)
 from ogr_core.hydraulic.excess_pore_pressure import (
     excess_at,
     is_enabled as excess_is_enabled,
@@ -546,9 +547,100 @@ def _ground_low_at(ground, x: float) -> Optional[float]:
     return min(heights) if heights else None
 
 
+#: v0.1.462 (D447) -- the material a slice base takes where it RUNS ALONG a
+#: contact between two materials (its two ends and its middle on one
+#: material boundary, :func:`_runs_along_contact`):
+#:
+#: * ``"weaker"``: the one with the lower shear strength at the base's static
+#:   Fellenius effective stress, each with its own water
+#:   (:func:`_weaker_on_contact`);
+#: * ``"above"``: the one above, D48r's lift alone, as every version before
+#:   v0.1.462 did.
+#:
+#: Why the weaker: the three published cases of the verification bank whose
+#: surface runs on a contact ask for it, and no one-sided rule meets them
+#: all. Duncan, Wright and Brandon (2014, §7.7.6, Fig. 7.29: James Bay)
+#: give the flat run on the till the lacustrine clay above; the spoil heap
+#: on a sheared floor of Coulthard (1979) and Hoek (1987) needs the floor
+#: below (1.199 with Bishop against the published 1.198, 3.768 with the
+#: spoil above); a spoil heap on rock of the same manual needs the spoil
+#: above. Measured on the whole bank (230 models, 812 surfaces; D447): only
+#: the eight published surfaces of that spoil heap move.
+#:
+#: A module switch so the bank can attribute what the rule moves, read at
+#: call time; ``slice_surface(base_on_contact=...)`` overrides it per call,
+#: which rapid drawdown does (see there).
+BASE_ON_CONTACT = "weaker"
+BASE_ON_CONTACT_RULES = ("weaker", "above")
+
+#: v0.1.462 (D447) -- how far below a base the material on the other side of
+#: a contact is read, in units of ``_model_grid_tol`` (1e-6 of the model's
+#: diagonal): 1e-4 of the diagonal, relative so that a model drawn in
+#: millimetres and one drawn in metres decide alike (the review measured an
+#: absolute 0.01 changing the material of a base 8 mm off a contact in a
+#: 1/50 copy and not in the original). It has to be deeper than the
+#: detection, one grid cell (:func:`_runs_along_contact`), or a base on the
+#: contact within the model's resolution would not see the other side; and
+#: a layer thinner than it is not seen, the one under it is.
+_BELOW_IN_GRID = 100.0
+
+
+def _lift_and_below(project: Project, xc: float, base_y_mid: float,
+                    below_by: float):
+    """(the material at the lift, the material ``below_by`` under the base),
+    in ONE lookup of the regions: ``materials_at`` validates the regions'
+    cache once for both points (v0.1.63), and asking twice through
+    ``_material_at`` made slicing a layered model 10 to 29 % slower
+    (measured on problems 3, 15 and 24 of the bank, v0.1.462). The same
+    answers, through the same ``_material_in``."""
+    above, below = project.materials_at(
+        [(xc, base_y_mid + 0.01), (xc, base_y_mid - below_by)])
+    return above, below
+
+
+def _point_to_segment(px, py, ax, ay, bx, by) -> float:
+    dx, dy = bx - ax, by - ay
+    L2 = dx * dx + dy * dy
+    t = 0.0 if L2 == 0.0 else max(0.0, min(1.0, ((px - ax) * dx
+                                               + (py - ay) * dy) / L2))
+    return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+
+def _runs_along_contact(project: Project, xl: float, yl: float, xr: float,
+                        yr: float, tol: float) -> bool:
+    """v0.1.462 (D447) -- does the base from (xl, yl) to (xr, yr) RUN ALONG a
+    material boundary: its two ends and its middle within ``tol`` (the
+    model's own resolution) of one MATERIAL boundary? A base that only
+    passes near a contact, as the bottom of a circle tangent to it does, is
+    cut in one material and keeps it (the review of v0.1.462 found two such
+    bases of problem 28 reading the layer below, 0 to 14 mm off it).
+
+    The middle decides a base that spans a dip of the contact (ends on it,
+    middle off). The ends add nothing under this slicer, which cuts a base
+    wherever the surface meets a contact (a crossing, a touch, and both
+    ends of a run along it: measured, v0.1.462), so no base has its middle
+    on a contact and an end off it. They stay because the definition
+    should not lean on that cutting, which a wedge constructor may be asked
+    not to do."""
+    xm, ym = 0.5 * (xl + xr), 0.5 * (yl + yr)
+    for b in project.boundaries:
+        if b.btype != BoundaryType.MATERIAL:
+            continue
+        v = b.polyline.vertices
+        segs = list(zip(v, v[1:]))
+        if b.polyline.closed and len(v) > 2:
+            segs.append((v[-1], v[0]))
+        if all(min(_point_to_segment(px, py, a.x, a.y, c.x, c.y)
+                   for a, c in segs) <= tol
+               for px, py in ((xl, yl), (xm, ym), (xr, yr))):
+            return True
+    return False
+
+
 def _base_material(project: Project, xc: float, base_y_mid: float,
                    grid_tol: float,
-                   reasons: Optional[list] = None) -> Optional[Material]:
+                   reasons: Optional[list] = None,
+                   contact: Optional[list] = None) -> Optional[Material]:
     """The material the base of a slice cuts, or None if there is no soil.
 
     Three questions, asked in order, and each answers something the one
@@ -587,8 +679,24 @@ def _base_material(project: Project, xc: float, base_y_mid: float,
     geometry, so the slice it rescues is narrower than the resolution of
     the regions it is asking about and weighs, measurably, zero. Said here
     rather than left to be rediscovered.
+
+    v0.1.462 (D447) -- ``contact``, a list, receives the material just below
+    the base (``_BELOW_IN_GRID`` grid cells), when the lift answered and
+    that is soil and another material: the base MAY run along their contact,
+    which the caller then checks (:func:`_runs_along_contact`) before
+    deciding by ``BASE_ON_CONTACT``. What this function returns does not
+    change, and without ``contact`` (the ``"above"`` rule) or with a model
+    of one material nothing more is asked than before v0.1.462.
     """
-    mat = _material_at(project, Vertex(xc, base_y_mid + 0.01))
+    if contact is not None and len(project.materials) > 1:
+        mat, below = _lift_and_below(project, xc, base_y_mid,
+                                     _BELOW_IN_GRID * grid_tol)
+        # Identity is enough: ``materials_at`` answers with the objects of
+        # ``project.materials`` (``material_by_id``).
+        if mat is not None and below is not None and below is not mat:
+            contact.append(below)
+    else:
+        mat = _material_at(project, Vertex(xc, base_y_mid + 0.01))
     if mat is None:
         mat = _material_at(project, Vertex(xc, base_y_mid))
     if mat is None:
@@ -1398,6 +1506,70 @@ def _base_pore_pressure(project: Project, mat, xc: float, base_y_mid: float,
     return u, u_raw, c_suction
 
 
+def _contact_strength(s: Slice, mat: Material) -> float:
+    """The shear strength ``mat`` offers the base of ``s`` at the base's
+    static Fellenius effective stress, max(0, W cos α − u·l)/l with W the
+    slice's whole vertical load (soil, loads and ponded water, no seismic
+    coefficient), read through ``local_c_phi`` with the slice's own context:
+    τ = c + σ′·tan φ (the estimate the moment and force methods start from;
+    Fellenius 1936). The same σ′ for every method, so the material a base
+    gets does not depend on who analyses it."""
+    from ogr_core.materials.strength_model import local_c_phi
+    length = max(s.base_length, 1e-9)
+    sigma = max(0.0, (s.weight + s.water_weight) * math.cos(s.base_angle)
+                - s.pore_pressure * s.base_length) / length
+    c, tan_phi = local_c_phi(s, mat, sigma)
+    return c + sigma * tan_phi
+
+
+def _weaker_on_contact(project: Project, sl: Slice, lower: Material,
+                       top_y_mid: float, u_cutoff, line_shares,
+                       aniso_by_material, joints_by_material
+                       ) -> Optional[Slice]:
+    """v0.1.462 (D447) -- the slice whose base runs along the contact
+    between ``sl.material`` (above) and ``lower``, with the WEAKER of the
+    two (``BASE_ON_CONTACT``).
+
+    The candidate below is the same slice read with ``lower``: its water
+    (``water_material``, the pore pressure, the unsaturated policy and the
+    excess of the loads, through ``_base_pore_pressure``), its bedding and
+    joint orientations, and the top of its layer, which is the contact the
+    base runs on. Weight and loads do not depend on the base material and
+    are the same. The weaker is the one with the lower
+    :func:`_contact_strength`; a tie keeps the one above, as before.
+
+    None when the water surface of the lower material does not reach the
+    base: the surface is refused, as it is (v0.1.96) when the water of the
+    base's own material does not reach it. Keeping the one above would be a
+    default that cannot be told from a measurement (owner's decision,
+    2026-11-16)."""
+    xc, alpha = sl.x_centre, sl.base_angle
+    base_y_mid = sl.base_y_mid
+    wmat = water_material(project, lower, alpha)
+    if not water_surface_defined_at(project, wmat, xc):
+        return None
+    u, u_raw, c_suction = _base_pore_pressure(
+        project, wmat, xc, base_y_mid, top_y_mid, sl.width, u_cutoff,
+        weight_material=lower if wmat is not lower else None,
+        line_shares=line_shares)
+    bedding = None
+    if aniso_by_material:
+        pl = aniso_by_material.get(getattr(lower, "id", None))
+        if pl is not None:
+            bedding = anisotropy_angle_at(pl, xc, base_y_mid)
+    angles = (surface_angles_at(joints_by_material.get(
+        getattr(lower, "id", None), {}), xc, base_y_mid)
+        if joints_by_material else None)
+    below = replace(sl, material=lower, pore_pressure=u,
+                    raw_pore_pressure=u_raw, suction_cohesion=c_suction,
+                    bedding_angle_deg=bedding, surface_angles=angles,
+                    layer_top_y=base_y_mid,
+                    water_material=wmat if wmat is not lower else None)
+    if _contact_strength(below, lower) < _contact_strength(sl, sl.material):
+        return below
+    return sl
+
+
 def reads_the_weight(project: Project, material) -> bool:
     """Whether the pore pressure of ``material`` reads the weight of the
     soil or the loads above it: Ru, or the excess of B-bar loading (v0.1.244,
@@ -1779,8 +1951,12 @@ def slice_surface(
     num_slices: int = 50,
     *,
     reasons: Optional[list] = None,
+    base_on_contact: Optional[str] = None,
 ) -> Optional[Slices]:
     """Build the list of slices for a given slip surface.
+
+    v0.1.462 (D447) -- ``base_on_contact`` overrides ``BASE_ON_CONTACT`` for
+    this call (one of ``BASE_ON_CONTACT_RULES``); None reads the switch.
 
     Returns None if the surface does not intersect the ground twice, the
     failure mass is degenerate, or — since v0.1.109 — the surface lies
@@ -1880,6 +2056,12 @@ def slice_surface(
         return None
 
     grid_tol = _model_grid_tol(project)
+    # v0.1.462 (D447) -- the rule for a base that runs along a contact.
+    contact_rule = (BASE_ON_CONTACT if base_on_contact is None
+                    else base_on_contact)
+    if contact_rule not in BASE_ON_CONTACT_RULES:
+        raise ValueError("base_on_contact must be one of %s, not %r"
+                         % (BASE_ON_CONTACT_RULES, contact_rule))
     bounds = _slice_boundaries(project, surface, x_l, x_r, num_slices)
     if bounds is None:
         # More mandatory cuts than slices to spend: the reference reports
@@ -1914,8 +2096,7 @@ def slice_surface(
     aniso_by_material = _anisotropic_surfaces(project)
     # v0.1.249 (D231b) -- and the surfaces of the joints of "Angle or
     # Surface" materials, once per call; empty without any.
-    from ogr_core.geometry.anisotropic_surface import (joint_surfaces,
-                                                       surface_angles_at)
+    from ogr_core.geometry.anisotropic_surface import joint_surfaces
     joints_by_material = joint_surfaces(project)
 
     # v0.1.121 — the stretches where a weak layer IS the surface, resolved to
@@ -2152,7 +2333,11 @@ def slice_surface(
         # in ``_base_material``. The last one may report
         # ``TOUCHED_MODEL_EDGE`` into ``reasons`` — which is NOT a refusal,
         # and the caller has to tell the two apart.
-        mat = _base_material(project, xc, base_y_mid, grid_tol, reasons)
+        # v0.1.462 (D447) -- and the material just below, if the base may
+        # run along a contact; decided once the slice exists (see below).
+        _contact: Optional[list] = [] if contact_rule == "weaker" else None
+        mat = _base_material(project, xc, base_y_mid, grid_tol, reasons,
+                             contact=_contact)
 
         # v0.1.143 — no soil at the base is a REFUSAL, not a default.
         #
@@ -2373,6 +2558,20 @@ def slice_surface(
         for _fh, _fv, _y, _load in _dist:
             if _fh:
                 sl.add_water_force(f_h=_fh, y=_y)
+        # v0.1.462 (D447) -- a base that runs along a contact takes the
+        # weaker of the two materials (``BASE_ON_CONTACT``), compared once
+        # the slice and its loads exist, because the comparison reads its
+        # effective stress. A weak layer has already replaced the material
+        # and wins.
+        if (_contact and weak_layer_id is None
+                and _runs_along_contact(project, xl, y_base_l, xr, y_base_r,
+                                        grid_tol)):
+            sl = _weaker_on_contact(
+                project, sl, _contact[0], top_y_mid, _u_cutoff,
+                _lines if _overburden.LOAD_SHARE_AT_EDGES else None,
+                aniso_by_material, joints_by_material)
+            if sl is None:
+                return None
         result.slices.append(sl)
 
     if len(result) < 3:
