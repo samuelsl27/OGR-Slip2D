@@ -95,7 +95,7 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
   - en gris con tipo circular;
   - se deshacen.
 
-### Ventana (0.1.464–0.1.467)
+### Ventana (0.1.464–0.1.468)
 
 - [ ] La casilla de Sarma y su grupo de ajustes en Métodos, en gris cuando no aplican.
 - [ ] La tabla de ángulo, c y φ por vértice, desde el menú Superficies y desde el menú contextual del vértice.
@@ -103,7 +103,7 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 - [ ] Interpret dibuja las cuñas: polígonos, caras inclinadas y filas de cara.
 - [ ] Todo texto nuevo pasa por `tr()` con su español, y toda acción está en un menú.
 
-### Ángulos optimizados (0.1.468)
+### Ángulos optimizados (0.1.469)
 
 - [ ] F optimizado ≤ el de cada política (vertical, bisectriz, normal media) en la misma superficie, y se
       repite igual dos veces.

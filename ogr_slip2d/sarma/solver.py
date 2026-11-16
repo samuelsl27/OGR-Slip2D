@@ -79,8 +79,14 @@ A geometry NEAR such a coincidence (a base bent by Δα, say) has a true
 root next to a true pole, and the largest root then carries face forces
 that grow as 1/Δα (88 times the weight of the mass at 0.06°, 10 at 0.57°,
 1.9 at 5.7°, against 1.2 with the straight base, in the test's toe). It is
-a root of the equation, so it is returned, with ``max_force_ratio`` for
-whoever reads the result to say so (owner's decision, 2026-11-15).
+a root of the equation, so it is returned, with ``max_force_ratio`` and
+``min_abs_q`` for whoever reads the result to say so (owner's decision,
+2026-11-15); the method says it with a note (``method.sarma_near_pole``,
+v0.1.466, D451), and which root a near pole should leave is open (D452).
+And a near coincidence the GEOMETRY made, not the model, is no longer
+made: the wedges are cut on the ends the vertical slicing resolved
+(``wedges._with_resolved_ends``), so a straight end stretch whose end the
+slicer put on the ground stays straight and its pair cancels exactly.
 
 Author: Samuel Sáez López (UPCT)
 
@@ -225,6 +231,10 @@ class SarmaSolution:
     #: analogue of m_α: a thrust next to a pole has its q next to zero).
     #: The q of the head face counts only with a crack's thrust on it.
     min_q: Optional[float] = None
+    #: v0.1.466 (D451) -- min |qᵢ| over the same q: how close the root sits
+    #: to a pole of Kc, whatever the sign of q (a negative q is ordinary: the
+    #: published saturated problem 4 has one). A diagnostic; no root moves.
+    min_abs_q: Optional[float] = None
     #: max |N′|, |E′|, |X| over the total vertical load: how far the root
     #: sits from a pole. 0.82 on the published saturated problem 4 (the
     #: toe's base normal), 1.2 on the toe of the test; a root next to a
@@ -559,7 +569,8 @@ def kc(bases: Sequence[Base], faces: Sequence[Face], F: float, *,
 
 def _forces(fr: _Frame, F: float, kh: float):
     """N′ per base and (E, E′, X) per face at F, in the frame, and the min
-    q of ``SarmaSolution.min_q``. None where a q vanishes at F itself."""
+    q and min |q| of ``SarmaSolution``. None where a q vanishes at F
+    itself."""
     g = 1.0 / F
     rows, tf, S = _coefficients(fr, g)
     n = len(fr.alpha)
@@ -593,7 +604,8 @@ def _forces(fr: _Frame, F: float, kh: float):
     dividing = [rows[i][3] for i in range(n - 1)]
     if fr.head != 0.0:
         dividing.append(rows[n - 1][3])
-    return normals, E, eff, X, (min(dividing) if dividing else None)
+    return (normals, E, eff, X, (min(dividing) if dividing else None),
+            (min(abs(q) for q in dividing) if dividing else None))
 
 
 def _sweep() -> list:
@@ -735,7 +747,7 @@ def solve(bases: Sequence[Base], faces: Sequence[Face], *, kh: float = 0.0,
                         kinematically_admissible=all(s > 0.0 for s in v))
     forces = _forces(fr, F, kh)
     if forces is not None:
-        normals, E, eff, X, out.min_q = forces
+        normals, E, eff, X, out.min_q, out.min_abs_q = forces
         load = abs(sum(fr.weight))
         if load > 0.0:
             out.max_force_ratio = max(

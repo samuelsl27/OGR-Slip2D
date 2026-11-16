@@ -48,7 +48,10 @@ _ROOT = Path(__file__).resolve().parent.parent
 #: ``{code, args, english[, prefix]}``: the line v0.1.347 wrote with those
 #: values. A nested value is ``{"$code", "$args"}`` (``{"$nothing"}`` for a
 #: clause left out), and ``prefix`` the method in front of the line.
-_V1347 = [{'code': 'method.sarma_vertex_data_unused',
+_V1347 = [{'code': 'method.sarma_near_pole',
+  'english': 'the factor of the reported surface, 0.9004, is a root of Kc(F) = kh next to a pole: the least |q| of its faces is 8.4e-07, under 0.2, and its forces reach 6.52e+05 times the total vertical load. Such a root can move with the number of wedges and may not be the branch the published cases follow.',
+  'args': {'factor': 0.9004042925510508, 'q': 8.378376107343044e-07, 'limit': 0.2, 'ratio': 652301.0928836846}},
+ {'code': 'method.sarma_vertex_data_unused',
   'english': '2 datum (data) given at vertices of the reported surface did not reach it (a crack cut the vertex off, Optimize moved it, or a weak layer clipped the surface): its faces took the policy and the face strength of the settings.',
   'args': {'count': 2}},
  {'code': 'method.sarma_bad_setting',

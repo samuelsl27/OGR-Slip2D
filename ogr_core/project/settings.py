@@ -1121,7 +1121,10 @@ class SarmaSettings:
       material contacts, and divisions up to this. On a straight stretch of
       one Mohr-Coulomb material more wedges do not change F (the wedges of a
       straight base add up to the one they split; a division whose face
-      would cross a neighbour is dropped for that reason); on a circle, whose
+      would cross a neighbour is dropped for that reason), also when the
+      slicer put an end of the stretch on the ground: since v0.1.466 the
+      wedges are cut on that end, on a polyline and on a weak-layer clip of
+      one (D451), and before it the stretch came out bent; on a circle, whose
       bases are chords, and where the strength of a base depends on its
       stress, they do.
     * ``slice_angles`` -- the angle of the faces no vertex gives one

@@ -4409,6 +4409,18 @@ _DICTS: dict[str, dict[str, str]] = {
             "en la superficie del resultado, {count} base(s) o cara(s) "
             "llevan una fuerza normal efectiva de tracción; Sarma (1973) "
             "pide que la solución sea físicamente aceptable.",
+        # v0.1.466 (D451)
+        "the factor of the reported surface, {factor:.4g}, is a root of "
+        "Kc(F) = kh next to a pole: the least |q| of its faces is {q:.2g}, "
+        "under {limit:g}, and its forces reach {ratio:.3g} times the total "
+        "vertical load. Such a root can move with the number of wedges and "
+        "may not be the branch the published cases follow.":
+            "el factor de la superficie del resultado, {factor:.4g}, es una "
+            "raíz de Kc(F) = kh junto a un polo: el menor |q| de sus caras es "
+            "{q:.2g}, por debajo de {limit:g}, y sus fuerzas llegan a "
+            "{ratio:.3g} veces la carga vertical total. Una raíz así puede "
+            "moverse con el número de cuñas y puede no ser la rama que siguen "
+            "los casos publicados.",
         "{count} surface(s) have no factor because their wedges could not "
         "be built (their code says why).":
             "{count} superficie(s) no tienen factor porque no se pudieron "

@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.465"
+    VERSION = "0.1.466"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2935,7 +2935,7 @@ class MainWindow(QMainWindow):
 
         With several surfaces, which one is chosen first, named as the
         manager names them. The vertex's own context menu comes with the
-        angle tool (v0.1.467).
+        angle tool (v0.1.468).
         """
         from PySide6.QtWidgets import QInputDialog
         from ogr_gui.dialogs.sarma_vertex_dialog import SarmaVertexDialog

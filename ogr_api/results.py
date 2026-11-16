@@ -159,6 +159,8 @@ def lem_summary(res, *, with_slices: bool = False) -> Optional[dict]:
                                          "newmark_displacement",
                                          # v0.1.464 (D357) -- Sarma's
                                          "sarma_kc", "sarma_min_q",
+                                         # v0.1.466 (D451)
+                                         "sarma_min_abs_q",
                                          "sarma_max_force_ratio",
                                          "sarma_verticalized")
               if k in details and isinstance(details[k], (int, float))

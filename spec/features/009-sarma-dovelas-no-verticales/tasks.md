@@ -112,16 +112,22 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - las precedencias;
   - F/γ.
 
-## 0.1.466 — Interpret
+## 0.1.466 — D451, la raíz junto a un polo
+
+- [x] Un tramo recto sigue recto: las cuñas se cortan sobre los extremos que resolvió el rebanado vertical.
+- [x] Una raíz con fuerzas de más de diez veces el peso no es un factor (`lem.sarma_near_pole`).
+- [x] Test `tests/test_sarma_pole_v1466.py`.
+
+## 0.1.467 — Interpret
 
 - [ ] 28. Cuñas como polígonos, selección, diagrama de cuerpo libre, filas de cara y tabla del informe.
 
-## 0.1.467 — Herramienta de ángulos
+## 0.1.468 — Herramienta de ángulos y menú contextual del vértice
 
 - [ ] 29. Definir y quitar ángulos con el ratón o tecleando, atajos en el vértice y deshacer, con sus tests en
       el lienzo mostrado.
 
-## 0.1.468 — Ángulos optimizados
+## 0.1.469 — Ángulos optimizados
 
 - [ ] 30. Digitalizar las figuras 1.2 y 1.3 del problema 1, con la lectura declarada.
 - [ ] 31. Optimizador determinista; `optimized_global` y `optimized_all`; Block y Path con la crítica

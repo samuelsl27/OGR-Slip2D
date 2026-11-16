@@ -40,6 +40,8 @@ SARMA_DRAWDOWN = "method.sarma_drawdown"
 SARMA_EXCESS = "method.sarma_excess"
 SARMA_VERTICALIZED = "method.sarma_verticalized"
 SARMA_TENSION = "method.sarma_tension"
+#: v0.1.466 (D451): the factor is a root next to a pole of Kc
+SARMA_NEAR_POLE = "method.sarma_near_pole"
 SARMA_WEDGES_REFUSED = "method.sarma_wedges_refused"
 SARMA_OWN_SETTINGS = "method.sarma_own_settings"
 SARMA_BAD_SETTING = "method.sarma_bad_setting"
@@ -269,6 +271,13 @@ METHOD_NOTES = {s.code: s for s in (
                 "on the reported surface {count} base(s) or face(s) carry an "
                 "effective normal force in tension; Sarma (1973) asks for the "
                 "solution to be physically acceptable."),
+    MessageSpec(SARMA_NEAR_POLE,
+                "the factor of the reported surface, {factor:.4g}, is a root "
+                "of Kc(F) = kh next to a pole: the least |q| of its faces is "
+                "{q:.2g}, under {limit:g}, and its forces reach {ratio:.3g} "
+                "times the total vertical load. Such a root can move with the "
+                "number of wedges and may not be the branch the published "
+                "cases follow."),
     MessageSpec(SARMA_VERTEX_DATA_UNUSED,
                 "{count} datum (data) given at vertices of the reported "
                 "surface did not reach it (a crack cut the vertex off, "

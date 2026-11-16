@@ -435,7 +435,7 @@ def compute_interslice_state(result: LEMResult,
     # with E horizontal and X from ``boundary_ratios`` (0 without them), and
     # would draw a state the method did not solve, on wedges or on vertical
     # faces with strength alike. The method publishes its own face forces
-    # (``details["sarma_face_thrusts"]``); Interpret draws them in v0.1.466.
+    # (``details["sarma_face_thrusts"]``); Interpret draws them in v0.1.467.
     if "sarma_kc" in (result.details or {}) or getattr(
             result.slices, "wedge_fields", None) is not None:
         return st

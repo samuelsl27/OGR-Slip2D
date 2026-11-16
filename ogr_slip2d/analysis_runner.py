@@ -1622,6 +1622,18 @@ def sarma_notes(result, search=None) -> list:
             tension += 1
     if tension:
         out.append(_mnote(MN.SARMA_TENSION, count=tension))
+    # v0.1.466 (D451) -- a factor that is a root next to a pole: said, not
+    # taken away (the owner's decision; which root to report is D452). With
+    # no forces at all a q vanished at the root itself: the closest case.
+    if "sarma_min_abs_q" in details and getattr(result, "fos", None) is not None:
+        from ogr_slip2d.methods.sarma import NEAR_POLE_MIN_Q
+        q = details.get("sarma_min_abs_q")
+        if q is None or not q >= NEAR_POLE_MIN_Q:
+            ratio = details.get("sarma_max_force_ratio")
+            out.append(_mnote(MN.SARMA_NEAR_POLE, factor=result.fos,
+                              q=0.0 if q is None else q,
+                              limit=NEAR_POLE_MIN_Q,
+                              ratio=math.inf if ratio is None else ratio))
     # v0.1.465 (D357) -- per-vertex data that did not reach the surface
     unused = getattr(getattr(result, "slices", None), "wedge_fields",
                      None) or {}

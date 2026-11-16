@@ -3542,7 +3542,7 @@ class InterpretWindow(QMainWindow):
             if faces:
                 # v0.1.464 (D357) -- Sarma's wedges: their inclined faces.
                 # The rest of what Interpret draws of a wedge (its forces,
-                # its free body) comes in v0.1.466.
+                # its free body) comes in v0.1.467.
                 for f in faces:
                     if f.length <= 0.0:
                         continue
@@ -4103,7 +4103,7 @@ class InterpretWindow(QMainWindow):
 
         # v0.1.464 (D357) -- a wedge of Sarma's has inclined faces and the
         # forces the method solved on them; this diagram draws a vertical
-        # slice. Said on the status bar (not a modal box) until v0.1.466.
+        # slice. Said on the status bar (not a modal box) until v0.1.467.
         if "sarma_kc" in (getattr(target, "details", None) or {}):
             self.statusBar().showMessage(tr(
                 "The free body diagram of a wedge of Sarma's method comes in "

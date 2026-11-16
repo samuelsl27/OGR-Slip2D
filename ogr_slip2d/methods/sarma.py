@@ -69,6 +69,22 @@ _REASONS = {
     msg.NOT_CONVERGED: REASON_NOT_CONVERGED,
 }
 
+#: v0.1.466 (D451) -- below this least |q| of the faces (``min_abs_q`` of
+#: the solution, the analogue of m_alpha: each face thrust is divided by its
+#: q) the factor is a root of Kc(F) = kh next to a pole, and the run says so
+#: (``method.sarma_near_pole``) without taking the factor away: by the
+#: owner's decision of 2026-11-16, after the adversarial review, which root
+#: such a surface should report is open (D452). The review measured why
+#: the first guard, a refusal above ten times the weight on the
+#: ``max_force_ratio``, failed both ways: a vertex drawn 2 m off the scarp
+#: of problem 4 left a root above a pole with forces of 7.5 times the
+#: weight (least |q| 0.074), and a straight base with a face cohesion of
+#: 6000 kPa, far from any pole (least |q| 0.88, the factor equal to
+#: Janbu's), reached 10.9 because X carries c̄′d. 0.2 is the limit of the
+#: m-alpha check (Whitman & Bailey 1967), taken by analogy and declared as
+#: such. A constant, not a setting.
+NEAR_POLE_MIN_Q = 0.2
+
 #: The strength of the faces, as ``settings.sarma.interslice_strength``.
 INTERSLICE_STRENGTHS = ("materials", "given", "none")
 
@@ -227,6 +243,8 @@ class SarmaNonVertical(LEMMethod):
                                        for b, n_eff in zip(bases, normals)],
                 "sarma_kc": sol.kc_at_1,
                 "sarma_min_q": sol.min_q,
+                # v0.1.466 (D451): None when a q vanishes at the root itself
+                "sarma_min_abs_q": sol.min_abs_q,
                 "sarma_max_force_ratio": sol.max_force_ratio,
                 "sarma_shear_sense": self.shear_sense,
                 "sarma_kinematically_admissible":

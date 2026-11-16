@@ -6,8 +6,8 @@ y los riesgos.
 
 ## Enfoque
 
-Son ocho versiones, una por commit, y cada una se publica con la suite entera en verde. **Desde el 2026-11-06 las
-siete del método van en 0.1.461 y de 0.1.463 a 0.1.468:** la propietaria decidió arreglar antes los once defectos que encontró
+Son ocho versiones, una por commit, y cada una se publica con la suite entera en verde. **Las siete del método van
+hoy en 0.1.461, de 0.1.463 a 0.1.465 y de 0.1.467 a 0.1.469** (0.1.462 fue D447 y 0.1.466 es D451). Desde el 2026-11-06: la propietaria decidió arreglar antes los once defectos que encontró
 la revisión de 0.1.427 (tanda P10, D396–D404), y esta spec se renumeró +9 en el commit de 0.1.428. La revisión de
 0.1.429 añadió a la tanda dos fichas más, D405 en 0.1.430 y D406, y la spec se renumeró +2 en el commit de 0.1.429.
 La de 0.1.430 añadió D408 (el informe PDF de una corrida Ky) y D409 (a qué kh es el factor que Interpretar llama
@@ -25,7 +25,9 @@ commit de 0.1.436. Los nombres de los tests, que se habían quedado en la renume
 (`test_sarma_solver_v1437`…), pasan a la versión de su sección. El 2026-11-15, al empezar las cuñas, salió D447 (una
 base sobre un contacto lee el material de encima, y en el problema 4 eso, y no el método, era casi toda la diferencia
 en seco); la propietaria la puso delante, en 0.1.462, y las seis versiones que quedaban se renumeraron +1 en su
-commit (0.1.463–0.1.468).
+commit (0.1.463–0.1.468). El 2026-11-16, al preparar el banco de 0.1.465, salió D451 (la raíz de Kc(F) = kh junto a
+un polo salía como factor sin aviso); la propietaria la puso en su propia versión, 0.1.466, y las tres que quedaban
+se renumeraron +1 en su commit (0.1.467–0.1.469).
 
 | Versión | Qué |
 |---|---|
@@ -34,9 +36,10 @@ commit (0.1.463–0.1.468).
 | 0.1.463 | Las cuñas: rebanado no vertical y cargas |
 | 0.1.464 | El método registrado, con sus ajustes y una ventana que no engaña |
 | 0.1.465 | Los datos por vértice, de punta a punta |
-| 0.1.466 | Interpret con cuñas |
-| 0.1.467 | La herramienta de ángulos con el ratón |
-| 0.1.468 | Los ángulos optimizados |
+| 0.1.466 | D451: la raíz junto a un polo no es un factor, y un tramo recto sigue recto |
+| 0.1.467 | Interpret con cuñas |
+| 0.1.468 | La herramienta de ángulos con el ratón, y el menú contextual del vértice |
+| 0.1.469 | Los ángulos optimizados |
 
 Después, el banco cierra D357.
 
@@ -114,9 +117,10 @@ Sᵢ    = c̄′ᵢ dᵢ − PWᵢ tan φ̄′ᵢ
 | 0.1.464 | `ogr_core/project/settings.py`, `ogr_api/settings_schema.py`, `ogr_api/results.py`, `ogr_cli/__main__.py` | `settings.sarma`, esquema, resultados y CLI |
 | 0.1.464 | `ogr_gui/dialogs/project_settings_dialog.py`, `labels.py`, `ogr_api/render.py`, `report_generator.py` | casilla, grupo, tooltips y guardas |
 | 0.1.465 | `user_polyline.py`, `ogr_api/ops/*`, `ogr_mcp`, `ogr_gui/dialogs/` | datos por vértice, `user_surface_edit` y tabla |
-| 0.1.466 | `ogr_gui/interpret_window.py`, `report_generator.py` | cuñas en Interpret y en el informe |
-| 0.1.467 | `ogr_gui/canvas/*`, `main_window.py` | herramienta de ángulos |
-| 0.1.468 | `ogr_slip2d/sarma/optimize_angles.py` | nuevo: optimizador de ángulos |
+| 0.1.466 | `ogr_slip2d/sarma/wedges.py`, `ogr_slip2d/methods/sarma.py` | D451: extremos resueltos, `NEAR_POLE_FORCE_RATIO` |
+| 0.1.467 | `ogr_gui/interpret_window.py`, `report_generator.py` | cuñas en Interpret y en el informe |
+| 0.1.468 | `ogr_gui/canvas/*`, `main_window.py` | herramienta de ángulos y menú contextual del vértice |
+| 0.1.469 | `ogr_slip2d/sarma/optimize_angles.py` | nuevo: optimizador de ángulos |
 
 ## Decisiones de diseño
 

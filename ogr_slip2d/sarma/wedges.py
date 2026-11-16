@@ -497,6 +497,62 @@ def _mandatory(project, surface, x_l, x_r, at_materials) -> list:
     return xs[1:-1]
 
 
+def _with_resolved_ends(surface, vertical):
+    """``surface`` with its two ends where the slicing of ``vertical``
+    resolved them, for cutting the wedges (v0.1.466, D451).
+
+    The slicer puts the base of an end slice on the ground when the end
+    vertex of a polyline is above it by no more than
+    ``slicer.ABOVE_GROUND_REL`` of the width (``y_base = y_top``), which is
+    right for vertical slices. The wedges' boundaries inside that end
+    stretch were cut on the ORIGINAL line, so a straight stretch came out
+    bent at each of them, and the solver's exact cancellation of a straight
+    base cut by a face (``solver._pairs``) missed the bend: the saturated
+    problem 4 of manual 03, whose published end (128; 67.6737) is 3.3e-5
+    above the ground, gave 0.9004 with 25 wedges (a root next to a pole,
+    with forces of 6.5e5 times the vertical load) instead of 0.4347, and the
+    dry one moved by 2.3e-7. On the copy the end vertex sits where the
+    slicing put it, so every boundary of the stretch lies on its chord.
+
+    For a polyline (``SlipSurface``), and for a weak-layer clip whose base
+    is one (a non-circular search with weak layers, a user's polyline): its
+    BASE gets the ends (the review of v0.1.466: the saturated problem 4
+    with a weak joint still gave the root by the pole). Only within the
+    slicer's own tolerance: an end a weak layer lifts is no end the slicer
+    put on the ground, and moving the base's vertex there would move the
+    base. The bases of a circle or a composite are chords of an arc, bent
+    by construction, and are cut as they were. The copy has lists of its
+    own: the slicer appends a crack's wall to ``tension_cracks``. A copy
+    can also come from the last digit of ``base_y_at`` at an end, which is
+    harmless: it is the same surface."""
+    from ogr_slip2d.surface import SlipSurface, WeakLayerSurface
+    cols = list(vertical)
+    if not cols:
+        return surface
+    if type(surface) is WeakLayerSurface and type(surface.base) is SlipSurface:
+        base = _with_resolved_ends(surface.base, cols)
+        if base is surface.base:
+            return surface
+        return replace(surface, base=base,
+                       tension_cracks=list(surface.tension_cracks or []))
+    if type(surface) is not SlipSurface:
+        return surface
+    verts = list(surface.polyline.vertices)
+    if len(verts) < 2:
+        return surface
+    tol = _slicer.ABOVE_GROUND_REL * (cols[-1].base_x_right
+                                      - cols[0].base_x_left)
+    new = list(verts)
+    for k, x, y in ((0, cols[0].base_x_left, cols[0].base_y_left),
+                    (-1, cols[-1].base_x_right, cols[-1].base_y_right)):
+        if verts[k].x == x and verts[k].y != y and abs(verts[k].y - y) <= tol:
+            new[k] = replace(verts[k], y=y)
+    if new == verts:
+        return surface
+    return replace(surface, polyline=replace(surface.polyline, vertices=new),
+                   tension_cracks=list(surface.tension_cracks or []))
+
+
 def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
                  angles: str = _angles.BISECTOR,
                  vertex_angles: Optional[dict] = None,
@@ -589,8 +645,11 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
     # A face given at a vertex is never moved: if it crosses, the surface
     # is refused. Each pass drops a boundary or makes a face vertical, so
     # it ends.
+    # v0.1.466 (D451) -- cut on the ends the vertical slicing resolved, so a
+    # straight end stretch stays straight (``_with_resolved_ends``)
+    cut_surface = _with_resolved_ends(surface, s_list)
     while True:
-        columns = _slicer.slice_surface(project, surface, cuts=xs,
+        columns = _slicer.slice_surface(project, cut_surface, cuts=xs,
                                         reasons=reasons)
         if columns is None:
             return None
