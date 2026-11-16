@@ -4245,6 +4245,29 @@ _DICTS: dict[str, dict[str, str]] = {
             "seguridad hasta {f_min:g}",
         "Face {face} is parallel to the base of wedge {wedge}":
             "La cara {face} es paralela a la base de la cuña {wedge}",
+        # v0.1.463 (D357) — Sarma's wedges
+        "Sarma's method does not compute the excess pore pressure of "
+        "undrained loading (B-bar)":
+            "El método de Sarma no calcula la presión intersticial en exceso "
+            "de la carga sin drenaje (B-barra)",
+        "The angle given to face {face} ({angle:g}°) is horizontal":
+            "El ángulo dado a la cara {face} ({angle:g}°) es horizontal",
+        "Face {face}, at {angle:.4g}°, does not reach the ground inside the "
+        "model":
+            "La cara {face}, a {angle:.4g}°, no llega al terreno dentro del "
+            "modelo",
+        "Faces {face} and {next} cross inside the sliding mass":
+            "Las caras {face} y {next} se cruzan dentro de la masa que desliza",
+        "Wedge {wedge} is not a polygon inside the sliding mass: a face of "
+        "it leaves the mass through the slip surface":
+            "La cuña {wedge} no es un polígono dentro de la masa que desliza: "
+            "una de sus caras sale de la masa por la superficie de rotura",
+        "Part of wedge {wedge} lies in no region with a material":
+            "Parte de la cuña {wedge} no está en ninguna región con material",
+        "Face {face} crosses material '{material}', whose strength is not "
+        "Mohr-Coulomb: give the face its c and φ":
+            "La cara {face} atraviesa el material «{material}», cuya "
+            "resistencia no es de Mohr-Coulomb: dale a la cara su c y su φ",
         "tensile stress on {count} slice base(s) (error -120)":
             "tracción en la base de {count} dovela(s) (error -120)",
         "m_alpha < {limit} on {count} slice(s)":

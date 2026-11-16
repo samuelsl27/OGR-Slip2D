@@ -11,7 +11,8 @@ Sarma (1973) equals the applied kh, from a recurrence that is the project's
 own derivation of the force equilibrium of one wedge (spec 009, ``plan.md``;
 Sarma 1979 was not consulted). And ``ogr_slip2d.sarma.vertical``: the
 slicer's vertical slices read as wedges with vertical faces. Nothing is
-registered: no analysis runs it until v0.1.463.
+registered: no analysis runs it until v0.1.464 (this said v0.1.463 until
+D447 came in front, in v0.1.462).
 
 INVARIANTS, against references outside this code (AGENTS.md, rule 1)
 

@@ -257,10 +257,15 @@ def _block(upper, lower, ground_y, split_y, wet=None, joint=None, *,
                       strength=MohrCoulomb(cohesion=bottom[0],
                                            friction_angle=bottom[1]))
         p.materials.append(bm)
-        # On the external boundary, not past it like the contact above: two
-        # ends 0.3 apart outside the model are welded together as mouse
-        # imprecision (``regions.weld_tol``, 0.8 % of the diagonal), and the
-        # thin layer would vanish.
+        # On the external boundary, not past it like the contact above. With
+        # both ends past the model the 0.3 m layer vanished from the regions
+        # (D449). v0.1.463: this said why (``regions.weld_tol``) without
+        # having measured it, and it is not that alone: the layer vanishes
+        # too with BOTH contacts' ends on the external boundary, below some
+        # 0.9 m in a 100 × 30 block (measured on 0.1.462 by the bank's
+        # ``_auditoria/P10_D449/reproducir_d449.py``). It survives here
+        # because the contact above ends 5 m past the model; D449 holds the
+        # cause, undiagnosed.
         p.add_boundary(Boundary(polyline=_polyline([(0.0, bottom[3] * k),
                                                     (100 * k, bottom[3] * k)]),
                                 btype=BoundaryType.MATERIAL))

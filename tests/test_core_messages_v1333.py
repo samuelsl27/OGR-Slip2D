@@ -148,6 +148,31 @@ def _samples() -> dict:
         m.SARMA_FACE_PARALLEL: (
             {"face": 3, "wedge": 2},
             f"Face {3} is parallel to the base of wedge {2}"),
+        # v0.1.463 (D357): the codes of the wedges, new too.
+        m.SARMA_EXCESS_PORE_PRESSURE: (
+            {}, "Sarma's method does not compute the excess pore pressure "
+                "of undrained loading (B-bar)"),
+        m.SARMA_FACE_HORIZONTAL: (
+            {"face": 2, "angle": 180.0},
+            f"The angle given to face {2} ({180.0:g}°) is horizontal"),
+        m.SARMA_FACE_NO_EXIT: (
+            {"face": 4, "angle": 135.25},
+            f"Face {4}, at {135.25:.4g}°, does not reach the ground inside "
+            f"the model"),
+        m.SARMA_FACES_CROSS: (
+            {"face": 2, "next": 3},
+            f"Faces {2} and {3} cross inside the sliding mass"),
+        m.SARMA_WEDGE_INVALID: (
+            {"wedge": 5},
+            f"Wedge {5} is not a polygon inside the sliding mass: a face of "
+            f"it leaves the mass through the slip surface"),
+        m.SARMA_WEDGE_OUTSIDE: (
+            {"wedge": 1},
+            f"Part of wedge {1} lies in no region with a material"),
+        m.SARMA_FACE_STRENGTH: (
+            {"face": 2, "material": "Rock"},
+            "Face 2 crosses material 'Rock', whose strength is not "
+            "Mohr-Coulomb: give the face its c and φ"),
         m.SCREEN_TENSILE_STRESS: (
             {"count": 3}, f"tensile stress on {3} slice base(s) "
                           f"(error -120)"),

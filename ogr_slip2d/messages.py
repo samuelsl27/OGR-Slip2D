@@ -57,6 +57,14 @@ NO_FORCE_BRACKET = "lem.no_force_bracket"
 SARMA_NO_DRIVING = "lem.sarma_no_driving"
 SARMA_NO_ROOT = "lem.sarma_no_root"
 SARMA_FACE_PARALLEL = "lem.sarma_face_parallel"
+# -- Sarma's wedges (v0.1.463, ``ogr_slip2d.sarma.wedges``) -----------
+SARMA_EXCESS_PORE_PRESSURE = "lem.sarma_excess_pore_pressure"
+SARMA_FACE_HORIZONTAL = "lem.sarma_face_horizontal"
+SARMA_FACE_NO_EXIT = "lem.sarma_face_no_exit"
+SARMA_FACES_CROSS = "lem.sarma_faces_cross"
+SARMA_WEDGE_INVALID = "lem.sarma_wedge_invalid"
+SARMA_WEDGE_OUTSIDE = "lem.sarma_wedge_outside"
+SARMA_FACE_STRENGTH = "lem.sarma_face_strength"
 # -- the post-analysis screens (``checks.screen_verdict``) -------------
 SCREEN_TENSILE_STRESS = "screen.tensile_stress"
 SCREEN_M_ALPHA = "screen.m_alpha"
@@ -143,6 +151,25 @@ for _spec in (
                 "down to {f_min:g}"),
     MessageSpec(SARMA_FACE_PARALLEL,
                 "Face {face} is parallel to the base of wedge {wedge}"),
+    MessageSpec(SARMA_EXCESS_PORE_PRESSURE,
+                "Sarma's method does not compute the excess pore pressure "
+                "of undrained loading (B-bar)"),
+    MessageSpec(SARMA_FACE_HORIZONTAL,
+                "The angle given to face {face} ({angle:g}°) is horizontal"),
+    MessageSpec(SARMA_FACE_NO_EXIT,
+                "Face {face}, at {angle:.4g}°, does not reach the ground "
+                "inside the model"),
+    MessageSpec(SARMA_FACES_CROSS,
+                "Faces {face} and {next} cross inside the sliding mass"),
+    MessageSpec(SARMA_WEDGE_INVALID,
+                "Wedge {wedge} is not a polygon inside the sliding mass: a "
+                "face of it leaves the mass through the slip surface"),
+    MessageSpec(SARMA_WEDGE_OUTSIDE,
+                "Part of wedge {wedge} lies in no region with a material"),
+    MessageSpec(SARMA_FACE_STRENGTH,
+                "Face {face} crosses material '{material}', whose strength "
+                "is not Mohr-Coulomb: give the face its c and φ",
+                group_by=("material",)),
     MessageSpec(SCREEN_TENSILE_STRESS,
                 "tensile stress on {count} slice base(s) (error -120)"),
     MessageSpec(SCREEN_M_ALPHA, "m_alpha < {limit} on {count} slice(s)",

@@ -84,7 +84,7 @@ def _load_names(project) -> dict:
     return names
 
 
-def apply_action_factors(project, slices) -> None:
+def apply_action_factors(project, slices, refresh=None) -> None:
     """Multiply the soil weight of each slice by its permanent-action factor,
     and each load by the factor of its action.
 
@@ -94,6 +94,11 @@ def apply_action_factors(project, slices) -> None:
     they are. Each slice records the factor its soil took in
     ``weight_factor``, and the set the sense it was decided with in
     ``design_sense`` and how each load was classed in ``load_factors``.
+
+    v0.1.463 (D357) -- ``refresh(project, slices)`` asks the pore pressures
+    again once the factors are in (:func:`refresh_pore_pressures` when
+    None): Sarma's wedges integrate u along their bases and faces, where
+    a slice reads it at the middle of its base.
     """
     actions = getattr(project, "action_factors", None)
     if actions is None or actions.is_identity():
@@ -133,7 +138,8 @@ def apply_action_factors(project, slices) -> None:
             for load_id, (action, drives, xi) in factors.items()} or None
     from . import slicer as _slicer
     if _slicer.DESIGN_PORE_PRESSURE_FOLLOWS_WEIGHT:
-        refresh_pore_pressures(project, slices)
+        (refresh_pore_pressures if refresh is None else refresh)(
+            project, slices)
     slices.design_sense = sense
 
 

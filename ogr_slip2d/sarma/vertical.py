@@ -35,9 +35,11 @@ balanced by the neighbour). The water of a tension crack is already in the
 head thrust: that would count it twice.
 
 Left out, and stated: supports (the registered method refuses them, from
-v0.1.463), and a curved envelope read at the method's own stress (it comes
-with the method too). The faces' own strength, of a policy or given, is
-v0.1.462's.
+v0.1.464), and a curved envelope read at the method's own stress (it comes
+with the method too). The faces' own strength, of a policy or given, is the
+wedges' (:mod:`ogr_slip2d.sarma.wedges`, v0.1.463). Until v0.1.462 this
+said v0.1.463 and v0.1.462: D447 came in front, and the versions of the
+method moved by one.
 
 Author: Samuel Sáez López (UPCT)
 

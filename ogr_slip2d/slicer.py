@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field, replace
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Sequence
 
 from ogr_core.geometry import (
     Boundary, BoundaryType, Polyline, Vertex, distance_to_profile,
@@ -935,33 +935,9 @@ def _slice_boundaries(
     # Circles have no kinks, so this stays inert for every circular search
     # — the validated Ej_1 and Ej_2 benchmarks cannot move.
     cuts: set = set(surface.kinks(x_l, x_r))
-
-    for b in project.boundaries:
-        if b.btype not in (BoundaryType.MATERIAL, BoundaryType.WATER_TABLE):
-            continue
-        bx0, by0, bx1, by1 = b.bounding_box()
-        if bx1 < x_l or bx0 > x_r or by1 < s_lo or by0 > s_hi:
-            continue
-        for x in _surface_crossings(surface, b.polyline, x_l, x_r):
-            # Ignore a crossing that merely grazes an end: it would make a
-            # sliver slice without separating anything.
-            #
-            # v0.1.151 — RELATIVE, and to the model rather than to this
-            # surface, because what makes such a slice meaningless is that
-            # the regions its base would be looked up in are not resolved
-            # that finely (see ``_model_grid_tol``). The absolute ``1e-9``
-            # this replaces was not a graze in metres: on the model of
-            # USACE (2003) example F-5 a circle daylighting on the vertex
-            # where the Material Boundary starts crosses the ground and
-            # the contact 3.6e-06 apart — 1.1e-08 of the failure width, and
-            # a thousand times too far to be forgiven by 1e-9. The slice it
-            # made was 3.6e-06 wide, its base landed in the gap the
-            # region builder's snapping leaves at that corner, and the
-            # whole surface was refused for having no soil under it.
-            # Defect D64; the merge tolerance eleven lines below has been
-            # relative, and said so, since v0.1.66.
-            if x_l + grid_tol < x < x_r - grid_tol:
-                cuts.add(x)
+    cuts.update(_crossing_cuts(
+        project, surface, x_l, x_r, (s_lo, s_hi),
+        (BoundaryType.MATERIAL, BoundaryType.WATER_TABLE), grid_tol))
 
     if not cuts:
         # v0.1.458 (D407) -- the last boundary IS x_r, as in the branch with
@@ -992,19 +968,80 @@ def _slice_boundaries(
         bounds.append(x_r)
         return bounds
 
+    segments = _merged_segments(cuts, x_l, x_r)
+    if len(segments) > num_slices:
+        return None
+    return _share_out(segments, num_slices, x_l, x_r)
+
+
+def _crossing_cuts(project: Project, surface: SurfaceProtocol, x_l: float,
+                   x_r: float, span, btypes, grid_tol: float) -> list:
+    """The abscissas where the surface crosses a boundary of one of
+    ``btypes``, strictly inside ``(x_l, x_r)`` by more than ``grid_tol``;
+    ``span`` is the surface's ``y_span`` over it.
+
+    v0.1.463 -- out of :func:`_slice_boundaries`, unchanged, so that
+    Sarma's wedges (``ogr_slip2d.sarma.wedges``) cut at the material
+    contacts by the rule the slices cut by.
+    """
+    s_lo, s_hi = span
+    out = []
+    for b in project.boundaries:
+        if b.btype not in btypes:
+            continue
+        bx0, by0, bx1, by1 = b.bounding_box()
+        if bx1 < x_l or bx0 > x_r or by1 < s_lo or by0 > s_hi:
+            continue
+        for x in _surface_crossings(surface, b.polyline, x_l, x_r):
+            # Ignore a crossing that merely grazes an end: it would make a
+            # sliver slice without separating anything.
+            #
+            # v0.1.151 — RELATIVE, and to the model rather than to this
+            # surface, because what makes such a slice meaningless is that
+            # the regions its base would be looked up in are not resolved
+            # that finely (see ``_model_grid_tol``). The absolute ``1e-9``
+            # this replaces was not a graze in metres: on the model of
+            # USACE (2003) example F-5 a circle daylighting on the vertex
+            # where the Material Boundary starts crosses the ground and
+            # the contact 3.6e-06 apart — 1.1e-08 of the failure width, and
+            # a thousand times too far to be forgiven by 1e-9. The slice it
+            # made was 3.6e-06 wide, its base landed in the gap the
+            # region builder's snapping leaves at that corner, and the
+            # whole surface was refused for having no soil under it.
+            # Defect D64; the merge tolerance eleven lines below has been
+            # relative, and said so, since v0.1.66.
+            if x_l + grid_tol < x < x_r - grid_tol:
+                out.append(x)
+    return out
+
+
+def _merged_segments(cuts, x_l: float, x_r: float) -> list:
+    """``[(a, b)]``: ``[x_l, x_r]`` split at ``cuts`` (not empty).
+
+    v0.1.463 -- out of :func:`_slice_boundaries`, unchanged, for Sarma's
+    wedges.
+    """
     marks = sorted(cuts)
     # Merge cuts closer together than a thousandth of the failure width:
     # two layers pinching out at nearly the same point are one cut, and
     # the tolerance is RELATIVE so it behaves the same in mm and in m.
-    tol = 1e-3 * width
+    tol = 1e-3 * (x_r - x_l)
     merged = [marks[0]]
     for x in marks[1:]:
         if x - merged[-1] > tol:
             merged.append(x)
-    segments = list(zip([x_l] + merged, merged + [x_r]))
-    if len(segments) > num_slices:
-        return None
+    return list(zip([x_l] + merged, merged + [x_r]))
 
+
+def _share_out(segments, num_slices: int, x_l: float, x_r: float) -> list:
+    """The cuts from ``x_l`` to ``x_r`` that spend exactly ``num_slices``
+    on ``segments``, at least one each; the caller has checked there are
+    no more segments than slices.
+
+    v0.1.463 -- out of :func:`_slice_boundaries`, unchanged, for Sarma's
+    wedges.
+    """
+    width = x_r - x_l
     # Largest-remainder apportionment, so the slice count is exactly the
     # one asked for and the widths stay as even as the cuts allow.
     raw = [num_slices * (b - a) / width for a, b in segments]
@@ -1025,6 +1062,19 @@ def _slice_boundaries(
         bounds.extend(a + step * k for k in range(1, n + 1))
     bounds[-1] = x_r
     return bounds
+
+
+def _given_cuts(cuts, x_l: float, x_r: float, tol: float) -> list:
+    """``cuts`` as the boundaries of :func:`slice_surface` (v0.1.463, D357),
+    with its two ends set to the surface's own, ``x_l`` and ``x_r``, so a
+    column reads the surface at the abscissas every other slicing does."""
+    out = [float(x) for x in cuts]
+    if (len(out) < 2 or abs(out[0] - x_l) > tol or abs(out[-1] - x_r) > tol
+            or any(b <= a for a, b in zip(out[:-1], out[1:]))):
+        raise ValueError("cuts must increase from x_l = %r to x_r = %r, "
+                         "not %r" % (x_l, x_r, out))
+    out[0], out[-1] = x_l, x_r
+    return out
 
 
 def _mean_polyline_y(polyline: Polyline, x_l: float, x_r: float) -> Optional[float]:
@@ -1952,11 +2002,21 @@ def slice_surface(
     *,
     reasons: Optional[list] = None,
     base_on_contact: Optional[str] = None,
+    cuts: Optional[Sequence[float]] = None,
 ) -> Optional[Slices]:
     """Build the list of slices for a given slip surface.
 
     v0.1.462 (D447) -- ``base_on_contact`` overrides ``BASE_ON_CONTACT`` for
     this call (one of ``BASE_ON_CONTACT_RULES``); None reads the switch.
+
+    v0.1.463 (D357) -- ``cuts``, the abscissas of the slice boundaries
+    from the left end of the resolved surface to its right end, replaces
+    the slicer's own (``num_slices`` is then not read) and lifts the
+    minimum of three slices: Sarma's wedges ask for one vertical column
+    standing on the base of each wedge, and a mass of two wedges has two.
+    Its ends must be the surface's, to the model's tolerance, and it must
+    increase; a call that breaks that is a ValueError. None, the slicer's
+    cuts, bit for bit.
 
     Returns None if the surface does not intersect the ground twice, the
     failure mass is degenerate, or — since v0.1.109 — the surface lies
@@ -2062,7 +2122,8 @@ def slice_surface(
     if contact_rule not in BASE_ON_CONTACT_RULES:
         raise ValueError("base_on_contact must be one of %s, not %r"
                          % (BASE_ON_CONTACT_RULES, contact_rule))
-    bounds = _slice_boundaries(project, surface, x_l, x_r, num_slices)
+    bounds = (_slice_boundaries(project, surface, x_l, x_r, num_slices)
+              if cuts is None else _given_cuts(cuts, x_l, x_r, grid_tol))
     if bounds is None:
         # More mandatory cuts than slices to spend: the reference reports
         # this as an error and asks for more slices, and so do we, rather
@@ -2574,7 +2635,9 @@ def slice_surface(
                 return None
         result.slices.append(sl)
 
-    if len(result) < 3:
+    # v0.1.463 (D357) -- given cuts make the columns of Sarma's wedges, and
+    # a mass of two wedges has two.
+    if len(result) < (1 if cuts is not None else 3):
         return None
 
     # v0.1.242 (D226a) — the design standard's permanent-action factor on the
