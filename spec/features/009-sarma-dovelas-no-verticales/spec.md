@@ -46,11 +46,11 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 
 ### Casos publicados (0.1.463, la referencia externa)
 
-- [ ] Problema 4 del manual 03, con la interfaz de (108; 6,4) a (82,85; 56,89):
+- [x] Problema 4 del manual 03, con la interfaz de (108; 6,4) a (82,85; 56,89):
   - seco: 1,198 ± 1 %;
   - saturado, con la freática en la escombrera: 0,434 ± 1 %.
-- [ ] Problema 5, con los ángulos y c/φ de su tabla 5.2, 10 vértices y γw = 1: 1,091 ± 1 %.
-- [ ] Contraste independiente con `_tools/cunas_sarma.py` del banco, a 1e-6 y en sus dos modos de sentido. Es
+- [x] Problema 5, con los ángulos y c/φ de su tabla 5.2, 10 vértices y γw = 1: 1,091 ± 1 %.
+- [x] Contraste independiente con `_tools/cunas_sarma.py` del banco, a 1e-6 y en sus dos modos de sentido. Es
       un contraste de implementación, no la referencia externa. Medido en la planificación:
 
       | Caso | Sentido fijo | Sentido cinemático |
@@ -59,31 +59,35 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
       | 4 saturado | 0,434662 | 0,434662 |
       | 5 | 1,088271 | 1,089053 |
 
-- [ ] **Convenio fijado por los publicados:** F reduce c y tan φ en bases Y caras. Reducir solo las bases, el
+- [x] **Convenio fijado por los publicados:** F reduce c y tan φ en bases Y caras. Reducir solo las bases, el
       convenio de 1973, daría +14,8 %, −58 % y +2,8 %, y queda escrito en el test.
-- [ ] **Regla de raíz:** F es la raíz MAYOR de Kc(F) = kh. El 4 saturado da 0,4347 y no la otra raíz, 0,1467,
+- [x] **Regla de raíz:** F es la raíz MAYOR de Kc(F) = kh. El 4 saturado da 0,4347 y no la otra raíz, 0,1467,
       aunque la primera esté a ~1,4 % de un polo.
 
 ### Integración (0.1.464–0.1.465)
 
-- [ ] No se activa por defecto, y ninguno de los nueve métodos mueve un número:
+- [x] No se activa por defecto, y ninguno de los nueve métodos mueve un número:
   - la suite entera en verde;
   - `verificar_cierres` del banco (raíz y 02) sin bajadas.
-- [ ] `model_hash` de un proyecto sin Sarma no cambia, y un `.ogr` anterior abre.
-- [ ] Un archivo con Sarma abre en una versión anterior, con la nota de método no registrado.
-- [ ] Cada ajuste nuevo mueve el número (regla 7), con un test cada uno:
+
+  Comprobado el 2026-11-17 con 0.1.471: la raíz, 175 de 175 iguales. El 02 dio tres bajadas (`d111`, `d175`,
+  `d195`). Eran comprobaciones del banco escritas para nueve métodos, con el motor bien; adaptadas, salen 242 de 242
+  iguales.
+- [x] `model_hash` de un proyecto sin Sarma no cambia, y un `.ogr` anterior abre.
+- [x] Un archivo con Sarma abre en una versión anterior, con la nota de método no registrado.
+- [x] Cada ajuste nuevo mueve el número (regla 7), con un test cada uno:
   - dovelas, tolerancia e iteraciones;
   - ángulos;
   - resistencia de interfaz y su c/φ;
   - contactos de material;
   - sentido del cortante;
   - cada dato por vértice.
-- [ ] Con desembalse rápido o B-bar, `[bishop, sarma]` da Bishop igual al bit y Sarma no calculado, con UNA
+- [x] Con desembalse rápido o B-bar, `[bishop, sarma]` da Bishop igual al bit y Sarma no calculado, con UNA
       nota.
-- [ ] Una rejilla `[bishop, janbu, sarma]` deja vacío el `SliceShare`, y los verticales salen iguales al bit.
-- [ ] Ky(1) = max(0, sup_{F≥1} Kc(F)), dentro de las tolerancias de `yield_acceleration`. El 4 saturado da
+- [x] Una rejilla `[bishop, janbu, sarma]` deja vacío el `SliceShare`, y los verticales salen iguales al bit.
+- [x] Ky(1) = max(0, sup_{F≥1} Kc(F)), dentro de las tolerancias de `yield_acceleration`. El 4 saturado da
       Ky = 0.
-- [ ] Con c/φ de cara dada, F_diseño = F/γ a 5·10⁻⁹, también con γR;e ≠ 1.
+- [x] Con c/φ de cara dada, F_diseño = F/γ a 5·10⁻⁹, también con γR;e ≠ 1.
 
 ### Superficies no circulares del usuario (0.1.427)
 
@@ -97,11 +101,12 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 
 ### Ventana (0.1.464–0.1.469)
 
-- [ ] La casilla de Sarma y su grupo de ajustes en Métodos, en gris cuando no aplican.
+- [ ] La casilla de Sarma y su grupo de ajustes en Métodos, en gris cuando no aplican. Sin marcar a 2026-11-17: el
+      comportamiento es el pedido (medido), pero no tiene test. Lo pide D463 del banco.
 - [x] La tabla de ángulo, c y φ por vértice, desde el menú Superficies y desde el menú contextual del vértice.
 - [x] La herramienta de ángulos con el ratón: rayo en vivo, clic o tecleo de 0 a 360°, y deshacer.
-- [ ] Interpret dibuja las cuñas: polígonos, caras inclinadas y filas de cara.
-- [ ] Todo texto nuevo pasa por `tr()` con su español, y toda acción está en un menú.
+- [x] Interpret dibuja las cuñas: polígonos, caras inclinadas y filas de cara.
+- [x] Todo texto nuevo pasa por `tr()` con su español, y toda acción está en un menú.
 
 ### Ángulos optimizados (0.1.471)
 
@@ -118,8 +123,8 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 
 ### Cierre (banco)
 
-- [ ] `d357()` da CUBIERTO POR TEST, y `d122()` y `d123()` siguen cerrando, re-anclados a la comparación con
-      Sarma.
+- [x] `d357()` da CUBIERTO POR TEST, y `d122()` y `d123()` siguen cerrando, re-anclados a la comparación con
+      Sarma. Comprobado el 2026-11-17 con 0.1.471.
 
 ## Validación numérica
 

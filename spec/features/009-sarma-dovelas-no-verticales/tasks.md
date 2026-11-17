@@ -55,7 +55,7 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
 
 ## 0.1.463 — Cuñas
 
-- [ ] 12. `ogr_slip2d/sarma/wedges.py` y `angles.py`, con:
+- [x] 12. `ogr_slip2d/sarma/wedges.py` y `angles.py`, con:
   - fronteras y políticas de ángulo;
   - topes que se cruzan;
   - peso por material con Shapely;
@@ -66,8 +66,8 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - columna en la base;
   - resistencia de cara;
   - rechazos con código.
-- [ ] 13. B0 en el banco: `cunas_sarma.py --sentido fijo|cinematico`, con el cinemático por defecto.
-- [ ] 14. Test `tests/test_sarma_wedges_v1463.py`:
+- [x] 13. B0 en el banco: `cunas_sarma.py --sentido fijo|cinematico`, con el cinemático por defecto.
+- [x] 14. Test `tests/test_sarma_wedges_v1463.py`:
   - área y peso en forma cerrada;
   - δ = 0 frente al rebanador vertical donde este es exacto;
   - c/φ de base igual a la de Bishop con SHANSEP y VSR;
@@ -78,8 +78,8 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
 
 ## 0.1.464 — Método registrado
 
-- [ ] 15. `SarmaNonVertical`. Funciona con `cls()` a pelo.
-- [ ] 16. Puertas del motor:
+- [x] 15. `SarmaNonVertical`. Funciona con `cls()` a pelo.
+- [x] 16. Puertas del motor:
   - `build_method` y `_slice_trial` (vertical primero, luego las `Wedges`);
   - número de cuñas propio;
   - `SliceShare`;
@@ -88,25 +88,36 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - `compute_interslice_state`;
   - `SliceStore` y HDF5;
   - Ky genérico.
-- [ ] 17. `settings.sarma` con escritura condicional, esquema del API, avisos y factores de diseño sobre la c/φ
+- [x] 17. `settings.sarma` con escritura condicional, esquema del API, avisos y factores de diseño sobre la c/φ
       global.
-- [ ] 18. CLI: alias `sarma` y `--sarma-slices`, con su test.
+- [x] 18. CLI: alias `sarma` y `--sarma-slices`, con su test.
 - [ ] 19. Ventana:
   - casilla y grupo de ajustes;
   - tooltips y censos con Sarma, y sus tests;
   - guardas en el PNG, en Interpret y en el informe.
+
+  Sin marcar a 2026-11-17: todo está programado, pero el gris del grupo no tiene test (D463). El changelog de
+  0.1.464 declara sin test el dibujo de las caras en el PNG.
 - [ ] 20. La suite archivo a archivo, con las exenciones justificadas (soportes), y el A/B de coste.
-- [ ] 21. Documentación: `architecture.md`, `plugins.md`, `guide.py`, README y AGENTS.md.
-- [ ] 22. Test `tests/test_sarma_method_v1464.py`. Cubre los criterios de «Integración» de `spec.md`.
+  Sin marcar a 2026-11-17: la suite y las exenciones están en el §3 del changelog de 0.1.464; el A/B de coste no
+  consta en él.
+- [x] 21. Documentación: `architecture.md`, `plugins.md`, `guide.py`, README y AGENTS.md.
+  - **0.1.464:** puso «10 métodos» en AGENTS.md, `ogr_mcp/guide.py` y los README.
+  - **Lo que faltaba:** `docs/architecture.md` seguía diciendo que todo método consume el mismo `Slices`, y
+    `docs/plugins.md` no contaba lo que un método nuevo tiene que declarar.
+  - **Los dos, el 2026-11-17, al cerrar D357,** por decisión de la propietaria: la entrada con cuñas, y la lista de
+    lo que se pregunta al método (menú, `NON_VERTICAL`, `ACCEPTS_SUPPORTS`, el cubo de m-alpha, los ajustes propios
+    y los tests que recorren el registro).
+- [x] 22. Test `tests/test_sarma_method_v1464.py`. Cubre los criterios de «Integración» de `spec.md`.
 
 ## 0.1.465 — Datos por vértice
 
-- [ ] 23. Ángulo, c y φ por vértice en `UserPolylineSurface` y en la superficie del motor, por coordenadas.
-- [ ] 24. API (`sarma` en `user_surface_add` y `surface_evaluate`, y `user_surface_edit`), MCP y
+- [x] 23. Ángulo, c y φ por vértice en `UserPolylineSurface` y en la superficie del motor, por coordenadas.
+- [x] 24. API (`sarma` en `user_surface_add` y `surface_evaluate`, y `user_surface_edit`), MCP y
       `herramientas.md`.
-- [ ] 25. Factores de diseño y avisos de combinaciones inactivas.
-- [ ] 26. Tabla de ángulo, c y φ en la ventana, desde el menú y desde el menú contextual; rayos punteados.
-- [ ] 27. Test `tests/test_sarma_vertices_v1465.py`:
+- [x] 25. Factores de diseño y avisos de combinaciones inactivas.
+- [x] 26. Tabla de ángulo, c y φ en la ventana, desde el menú y desde el menú contextual; rayos punteados.
+- [x] 27. Test `tests/test_sarma_vertices_v1465.py`:
   - el 4 y el 5 guardados y por `surface_evaluate`;
   - cada dato mueve el número;
   - las precedencias;
@@ -161,11 +172,17 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
 
 ## Banco (fuera de git)
 
-- [ ] 33. B1:
+- [x] 33. B1:
   - `superficie_publicada` con el bloque `sarma`;
   - `settings.sarma` en los modelos del 4 y del 5;
   - entradas `<esc>__sarma`;
   - re-corrida.
-- [ ] 34. B2 y B3: `comparar_con: sarma` con su razón, y la columna «OGR Sarma» al final de la comparativa.
-- [ ] 35. B4 y B5: `d357()` y el re-anclaje de `d122()` y `d123()`; después el procedimiento de cierre.
-- [ ] 36. B6: el resto del 03 (1, 6, 7, 8 y 9) comparado o declarado.
+- [x] 34. B2 y B3: `comparar_con: sarma` con su razón, y la columna «OGR Sarma» al final de la comparativa.
+- [x] 35. B4 y B5: `d357()` y el re-anclaje de `d122()` y `d123()`; después el procedimiento de cierre.
+  - `d357()` da CUBIERTO POR TEST (2026-11-17, con 0.1.471) y, con el árbol de 0.1.460, SIGUE ABIERTO.
+  - D357 se cierra con D452 abierta (decisión de la propietaria): D452 sigue hasta Sarma (1979).
+- [x] 36. B6: el resto del 03 (1, 6, 7, 8 y 9) comparado o declarado (2026-11-17, con 0.1.471).
+  - **El 1:** D459 delante, con la capa débil en y = 0–0,75; cerrada con `d459()`.
+  - **El 1, el 6, el 7 y el 8:** se comparan con el Sarma del motor.
+  - **El 2, el 3 y el 9:** se declaran. En el 9, ninguna resistencia de cara da su 1,438, y los métodos verticales
+    quedan un 10 % abajo en el mismo círculo.

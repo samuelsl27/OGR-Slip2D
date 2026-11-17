@@ -81,6 +81,57 @@ Register it in `ogr_slip2d/methods/__init__.py`:
 from .spencer import Spencer  # noqa: F401
 ```
 
+### What else a new method has to declare (v0.1.464)
+
+Registering the class is not the end of it. Several parts of the program
+and of the suite walk the registry, and each one asks the method a
+question. Sarma's method, the tenth, is the worked example
+(`ogr_slip2d/methods/sarma.py`). Each item below is something it had to
+answer:
+
+- **The menu and the dialog:**
+  - a member of `LEMMethod` in `ogr_core/project/settings.py`;
+  - its place in `METHODS` of the Methods page
+    (`ogr_gui/dialogs/project_settings_dialog.py`);
+  - its name in `METHOD_NAMES` (`ogr_gui/labels.py`), with its Spanish
+    entry in `ogr_gui/i18n/__init__.py`.
+
+  The checkbox greys itself out while the method is not registered (v0.1.78).
+- **Non-vertical slices:** `NON_VERTICAL = True`, plus a `wedges_for`
+  method that builds what `compute_fos` reads (see «Numerical pipeline»
+  in `architecture.md`). The run reads the flag in several places:
+  - the searches analyse each surface on its wedges;
+  - the slice share between methods leaves the method out;
+  - a rapid drawdown or the excess pore pressure of loading skips it, with
+    one note (`analysis_runner.non_vertical_skip`).
+- **Supports:** `ACCEPTS_SUPPORTS = False` if the method does not take
+  them. It must then refuse a surface with supports itself, with a code
+  (`lem.sarma_supports`). The tests that walk the registry read the flag
+  instead of keeping a list.
+- **The m-alpha screen:** the method goes in exactly one bucket of
+  `ogr_slip2d/checks.py`:
+  - `M_ALPHA_SCREENED`, Bishop's denominator, screened;
+  - the prescribed-inclination family (`PrescribedInclinationMethod`);
+  - `NO_M_ALPHA_DENOMINATOR`, no denominator at all;
+  - `OWN_DENOMINATOR`, a denominator of its own (Sarma's q).
+
+  `tests/test_m_alpha_screening_v1189.py` fails until it is in one.
+- **Its own settings:** if the method does not read the global convergence
+  options, three things go with it:
+  - `build_method` (`ogr_slip2d/analysis_runner.py`) builds it from its
+    own section;
+  - the section is listed in `SETTINGS_SECTIONS`
+    (`ogr_core/project/file_shape.py`) and written only when it is used,
+    so the `.ogr` file and the `model_hash` of a project without the method
+    do not change;
+  - `tests/test_max_iterations_scope_v1173.py` lists it in
+    `OWN_ITERATION_SETTINGS`.
+- **The tests that walk the registry:** about twenty files run every
+  registered method. Some assert how many there are. A refusal that the
+  method makes by its specification is recognised by its code, never by
+  its id alone (`tests/_sarma_registry.py`). Any other refusal fails like
+  any other result.
+
 ### What the admissibility checks read from `details` (v0.1.191)
 
 The post-analysis checks (`ogr_slip2d/checks.py`) receive the result and

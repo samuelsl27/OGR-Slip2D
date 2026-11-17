@@ -84,8 +84,18 @@ Project   → slice_surface(project, surface, N)
           → LEMResult
 ```
 
-The slicer is the single geometric bridge. Every LEM method consumes
-the same `Slices` object and returns a uniform `LEMResult`.
+The slicer is the single geometric bridge. Every method with vertical
+slices consumes the same `Slices` object and returns a uniform `LEMResult`.
+
+A method with non-vertical slices (`NON_VERTICAL = True`; since v0.1.464,
+Sarma's, `ogr_slip2d/methods/sarma.py`) adds one step. The searches and
+`evaluate_surfaces` call `method.wedges_for(project, surface, slices)`.
+That builds the wedges on the slicer's vertical slices
+(`ogr_slip2d/sarma/wedges.py`, `build_wedges`) and hands the method a
+`Wedges`: a subclass of `Slices` that keeps the vertical slices it was
+built on. Plain vertical slices still work: a test or a script that
+passes them gets them read as wedges with vertical faces. Either way the
+method returns the same `LEMResult`.
 
 ## Coordinate system
 
