@@ -553,6 +553,58 @@ def _with_resolved_ends(surface, vertical):
                    tension_cracks=list(surface.tension_cracks or []))
 
 
+def _vertex_top(ground, x: float, y: float, angle_deg: float, grid_tol: float):
+    """``(θ, top)`` of the face given at a vertex of the surface: θ in
+    radians in (0, π), the half of the line that rises (``angles.upward``),
+    and where the ray leaves the soil (``ray_ground_exit``), or None. θ is
+    None for a horizontal or non-finite angle. The rule of a face given by
+    vertex, which :func:`build_wedges` and :func:`vertex_face` both ask."""
+    theta = _angles.upward(float(angle_deg))
+    if theta is None:
+        return None, None
+    return theta, ray_ground_exit(ground, x, y, theta, grid_tol)
+
+
+def face_context(project):
+    """``(ground, tolerance)`` that :func:`vertex_face` cuts a face on: the
+    ground surface of the External Boundary and the model's tolerance, as
+    :func:`build_wedges` reads them; None without an External Boundary. For
+    a caller that asks many faces of one model at once (the canvas draws
+    every stored ray in one redraw; v0.1.469)."""
+    external = project.external_boundary()
+    if external is None:
+        return None
+    return (_slicer._ground_surface_from_external(external),
+            _slicer._model_grid_tol(project))
+
+
+def vertex_face(project, x: float, y: float, angle_deg: float,
+                context=None):
+    """The face an angle given at the vertex ``(x, y)`` of a surface makes,
+    as :func:`build_wedges` cuts it (v0.1.469, D357, for the window to draw
+    it): ``(θ in degrees in (0°, 180°), top)``, the top being where the ray
+    leaves the soil, ``(x, y)``, or None when it does not (it leaves through
+    a side of the model, or the vertex is above the ground; the method then
+    refuses the surface, ``SARMA_FACE_NO_EXIT``). ``(None, None)`` for a
+    horizontal angle, which is no face.
+
+    The same rule as the method's, on the same ground and tolerance: what
+    the window draws is the face the method will cut. ``context``, from
+    :func:`face_context` of the same project, saves reading the ground again
+    for each face."""
+    if context is None:
+        context = face_context(project)
+    if context is None:
+        theta = _angles.upward(float(angle_deg))
+        return (None if theta is None else math.degrees(theta)), None
+    ground, grid_tol = context
+    theta, top = _vertex_top(ground, x, y, angle_deg, grid_tol)
+    if theta is None:
+        return None, None
+    return math.degrees(theta), (None if top is None
+                                 else (float(top[0]), float(top[1])))
+
+
 def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
                  angles: str = _angles.BISECTOR,
                  vertex_angles: Optional[dict] = None,
@@ -670,7 +722,9 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
         drop = None
         for k in range(1, n):
             if k in ang_by:
-                theta = _angles.upward(float(ang_by[k]))
+                # v0.1.469 -- the rule :func:`vertex_face` gives the window
+                theta, top = _vertex_top(ground, V[k][0], V[k][1],
+                                         ang_by[k], grid_tol)
                 if theta is None:
                     return _refuse(reasons, msg.SARMA_FACE_HORIZONTAL,
                                    face=k + 1, angle=float(ang_by[k]))
@@ -679,7 +733,8 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
                 theta = _angles.policy_angle(angles, alpha[k - 1], alpha[k],
                                              lengths[k - 1], lengths[k])
                 sources.append(angles)
-            top = ray_ground_exit(ground, V[k][0], V[k][1], theta, grid_tol)
+                top = ray_ground_exit(ground, V[k][0], V[k][1], theta,
+                                      grid_tol)
             if top is None and sources[-1] != "vertex":
                 if plain(xs[k]):
                     drop = k

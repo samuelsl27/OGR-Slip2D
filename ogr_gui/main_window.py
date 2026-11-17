@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.468"
+    VERSION = "0.1.469"
 
     def __init__(self) -> None:
         super().__init__()
@@ -405,6 +405,15 @@ class MainWindow(QMainWindow):
             self._on_expand_shrink_polyline_drawn)
         # v0.1.427 (D357) — a non-circular user surface, drawn on the canvas
         self.canvas.user_surface_drawn.connect(self._on_user_surface_drawn)
+        # v0.1.469 (D357) -- Sarma's face angles on the canvas, and the
+        # context menu of a user surface's vertex, which only this canvas
+        # offers (Interpret's listens to none of it)
+        self.canvas.user_surface_menu = True
+        self.canvas.sarma_angle_picked.connect(self._on_sarma_angle_picked)
+        self.canvas.sarma_angle_typed.connect(self._on_sarma_angle_typed)
+        self.canvas.sarma_angle_removed.connect(self._on_sarma_angle_removed)
+        self.canvas.user_vertex_action_requested.connect(
+            self._on_user_vertex_action_requested)
         # v0.1.335 (D142a) — Add Surface (centre and radius) on the canvas
         self.canvas.centre_radius_picked.connect(self._on_surface_cr_picked)
         self.canvas.centre_radius_typed.connect(
@@ -752,6 +761,12 @@ class MainWindow(QMainWindow):
         # v0.1.465 (D357)
         self._mk("surf_polyline_sarma", "Sarma Data per Vertex...",
                  self._edit_user_polyline_sarma, None)
+        # v0.1.469 (D357) -- the angle tool; no ellipsis: they enter a
+        # canvas mode (D102)
+        self._mk("surf_polyline_sarma_set", "Set Sarma Face Angles",
+                 self._set_sarma_angles, None)
+        self._mk("surf_polyline_sarma_remove", "Remove Sarma Face Angles",
+                 self._remove_sarma_angles, None)
         self._mk("slope_limits_move", "Move Slope Limits...",
                  self._move_slope_limits, None)
         self._mk("slope_limits_reset", "Reset Slope Limits",
@@ -1003,6 +1018,8 @@ class MainWindow(QMainWindow):
         m_surf.addAction(self._actions["surf_polyline_add"])
         m_surf.addAction(self._actions["surf_polyline_manage"])
         m_surf.addAction(self._actions["surf_polyline_sarma"])
+        m_surf.addAction(self._actions["surf_polyline_sarma_set"])
+        m_surf.addAction(self._actions["surf_polyline_sarma_remove"])
         m_surf.addSeparator()
         m_focus = m_surf.addMenu(tr("Focus Search"))
         for k in ["focus_window", "focus_line", "focus_point",
@@ -2934,11 +2951,10 @@ class MainWindow(QMainWindow):
         non-circular surface, in a table (v0.1.465, D357), as ONE undo step.
 
         With several surfaces, which one is chosen first, named as the
-        manager names them. The vertex's own context menu comes with the
-        angle tool (v0.1.468).
+        manager names them. The vertex's own context menu opens the table
+        of its surface (v0.1.469, ``_edit_sarma_data_of``).
         """
         from PySide6.QtWidgets import QInputDialog
-        from ogr_gui.dialogs.sarma_vertex_dialog import SarmaVertexDialog
         polylines = self.project.user_polylines
         if not polylines:
             self._info(tr("No user-defined non-circular surfaces are "
@@ -2958,7 +2974,13 @@ class MainWindow(QMainWindow):
             if not ok:
                 return
             index = items.index(choice)
-        target = polylines[index]
+        self._edit_sarma_data_of(polylines[index])
+
+    def _edit_sarma_data_of(self, target) -> None:
+        """The table of Sarma's data of the surface ``target``, as ONE undo
+        step (v0.1.465; factored out in v0.1.469 for the vertex's context
+        menu, which knows its surface)."""
+        from ogr_gui.dialogs.sarma_vertex_dialog import SarmaVertexDialog
 
         def step():
             dlg = SarmaVertexDialog(target, self.project.settings.units, self)
@@ -2970,6 +2992,132 @@ class MainWindow(QMainWindow):
             return None
 
         self._model_step("Edit Sarma data per vertex", step)
+
+    # ------------------------------------------------------------------
+    # v0.1.469 (D357) -- the face angles of Sarma's method, by the mouse
+    # ------------------------------------------------------------------
+    def _set_sarma_angles(self) -> None:
+        """Surfaces -> Set Sarma Face Angles: the canvas mode (a vertex,
+        then the direction of its face, or Enter to type it)."""
+        self._set_tool(ToolMode.SET_SARMA_ANGLE)
+
+    def _remove_sarma_angles(self) -> None:
+        """Surfaces -> Remove Sarma Face Angles: the canvas mode."""
+        self._set_tool(ToolMode.REMOVE_SARMA_ANGLE)
+
+    def _user_polyline(self, pid):
+        return next((up for up in self.project.user_polylines
+                     if up.id == pid), None)
+
+    def _write_sarma_angle(self, pid, x, y, angle) -> bool:
+        """The face angle ``angle`` [degrees] at the vertex ``(x, y)`` of
+        the surface ``pid``, or none with None, as ONE undo step («Set» or
+        «Remove Sarma face angle»); its c and φ stay (``with_vertex_angle``). A refusal
+        of the rule is said on the status bar, in the user's language, and
+        leaves no step. True when written."""
+        from ogr_core.geometry.user_polyline import (checked_points,
+                                                     with_vertex_angle)
+        from .canvas.canvas_view import user_surface_refusal_text
+        # the gate of the Surfaces menu's actions: a tool left on after the
+        # run turned circular, or the last surface deleted, wrote on (the
+        # review of v0.1.469); the reason is the action's own
+        act = self._actions.get("surf_polyline_sarma_set")
+        if act is not None and not act.isEnabled():
+            self.ogr_status.showMessage(act.statusTip(), 6000)
+            return False
+        target = self._user_polyline(pid)
+        if target is None:
+            self.ogr_status.showMessage(tr(
+                "That surface is no longer in the model."), 5000)
+            return False
+        try:
+            new = with_vertex_angle(checked_points(target.points),
+                                    target.vertex_data, (x, y), angle)
+        except ValueError as exc:
+            self.ogr_status.showMessage(user_surface_refusal_text(exc), 8000)
+            return False
+
+        def step():
+            target.vertex_data = new
+            self.project.is_dirty = True
+            self.canvas.refresh_scene()
+            return None
+
+        # its name a choice of literals, which the census of the step names
+        # reads and translates (test_edit_messages_v1434)
+        self._model_step("Remove Sarma face angle" if angle is None
+                         else "Set Sarma face angle", step)
+        return True
+
+    def _on_sarma_angle_picked(self, pid, x, y, theta) -> None:
+        """The second click of Set Sarma Face Angles: θ in (0°, 180°), to a
+        tenth of a degree, as the canvas showed it."""
+        if self._write_sarma_angle(pid, x, y, theta):
+            self.ogr_status.showMessage(tr(
+                "Face angle {0:.1f}° set at ({1:.3f}, {2:.3f}) of "
+                "non-circular surface {3}.").format(
+                    theta, x, y, self.canvas.surface_number(pid)), 5000)
+
+    def _on_sarma_angle_typed(self, pid, x, y) -> None:
+        """Enter in Set Sarma Face Angles, or Type Face Angle… of the
+        vertex's menu: an angle from 0 to 360°, stored as the face that
+        rises, θ mod 180 (the owner's decision: 300° is stored as 120°)."""
+        from PySide6.QtWidgets import QInputDialog
+        from ogr_slip2d.sarma.wedges import vertex_face
+        current = self.canvas.vertex_face_angle(pid, x, y)
+        # the stored angle as the face that rises: the table and the API take
+        # any value (-60 is the face of 120), and the box of 0 to 360 showed
+        # -60 as 0, which OK then refused (the review of v0.1.469)
+        value, ok = QInputDialog.getDouble(
+            self, tr("Set Sarma Face Angle"),
+            tr("Face angle at ({0:.3f}, {1:.3f}), degrees counter-clockwise "
+               "from +x (0 to 360):").format(x, y),
+            90.0 if current is None else float(current) % 180.0,
+            0.0, 360.0, 4)
+        if not ok:
+            return
+        # to the box's four decimals: 300.1 % 180 is 120.10000000000002
+        stored = round(float(value) % 180.0, 4)
+        if not self._write_sarma_angle(pid, x, y, stored):
+            return
+        number = self.canvas.surface_number(pid)
+        if vertex_face(self.project, x, y, stored)[1] is None:
+            # what the live ray says before a click, said after a typing
+            self.ogr_status.showMessage(tr(
+                "Face angle {0:.10g}° stored at ({1:.3f}, {2:.3f}): the face "
+                "does not leave the ground there, and the method would "
+                "refuse the surface.").format(stored, x, y), 8000)
+        elif stored != value:
+            self.ogr_status.showMessage(tr(
+                "{0:.10g}° is the same face as {1:.10g}°, which is "
+                "stored.").format(value, stored), 6000)
+        else:
+            self.ogr_status.showMessage(tr(
+                "Face angle {0:.10g}° set at ({1:.3f}, {2:.3f}) of "
+                "non-circular surface {3}.").format(stored, x, y, number),
+                5000)
+
+    def _on_sarma_angle_removed(self, pid, x, y) -> None:
+        """Remove Sarma Face Angles, or Remove Face Angle of the vertex's
+        menu: the angle goes, its c and φ stay."""
+        if self._write_sarma_angle(pid, x, y, None):
+            self.ogr_status.showMessage(tr(
+                "Face angle removed at ({0:.3f}, {1:.3f}) of non-circular "
+                "surface {2}.").format(x, y, self.canvas.surface_number(pid)),
+                5000)
+
+    def _on_user_vertex_action_requested(self, action, pid, x, y) -> None:
+        """An action of the context menu of a user surface's vertex."""
+        if action == "sarma_set":
+            self.canvas.begin_sarma_angle(pid, x, y)
+        elif action == "sarma_type":
+            self._on_sarma_angle_typed(pid, x, y)
+        elif action == "sarma_remove":
+            self._on_sarma_angle_removed(pid, x, y)
+        elif action == "sarma_table":
+            target = self._user_polyline(pid)
+            if target is not None:
+                self._edit_sarma_data_of(target)
 
     @undo_step("Delete user surfaces")
     def _manage_user_polylines(self) -> None:
@@ -5610,15 +5758,16 @@ class MainWindow(QMainWindow):
                        "in addition to the search"))
         # v0.1.465 (D357) -- the data of Sarma's method per vertex: a
         # non-circular run and a polyline to give them to
-        if "surf_polyline_sarma" in actions:
-            has_polyline = bool(getattr(self.project, "user_polylines",
-                                        None))
-            gate(actions["surf_polyline_sarma"],
-                 not is_circular and has_polyline,
-                 tr("Only available with Surface Options -> Surface "
-                    "Type = Non-Circular.") if is_circular else
-                 tr("Draw a non-circular surface first (Surfaces -> Add "
-                    "Non-Circular Surface)."))
+        # v0.1.469 -- and the angle tool's two actions, on the same terms
+        has_polyline = bool(getattr(self.project, "user_polylines", None))
+        for key in ("surf_polyline_sarma", "surf_polyline_sarma_set",
+                    "surf_polyline_sarma_remove"):
+            if key in actions:
+                gate(actions[key], not is_circular and has_polyline,
+                     tr("Only available with Surface Options -> Surface "
+                        "Type = Non-Circular.") if is_circular else
+                     tr("Draw a non-circular surface first (Surfaces -> Add "
+                        "Non-Circular Surface)."))
         # v0.1.232 (D109) - the four Block Search objects, one precondition.
         block_tips = {
             "block_object": tr(

@@ -131,8 +131,9 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
 
 ## 0.1.469 — Herramienta de ángulos y menú contextual del vértice
 
-- [ ] 29. Definir y quitar ángulos con el ratón o tecleando, atajos en el vértice y deshacer, con sus tests en
-      el lienzo mostrado.
+- [x] 29. Definir y quitar ángulos con el ratón o tecleando, atajos en el vértice y deshacer, con sus tests en
+      el lienzo mostrado. Una sola regla de la cara (`wedges.vertex_face`) para el rayo vivo, los guardados y el
+      método. Test `tests/test_sarma_angle_tool_v1469.py`.
 
 ## 0.1.470 — D452, la regla de la raíz junto a un polo
 

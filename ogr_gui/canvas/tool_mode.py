@@ -76,6 +76,12 @@ class ToolMode(Enum):
     # vertex with the boundaries' machinery and delivered on a signal of its
     # own, as the Expand / Shrink polyline is: it is not a boundary
     DRAW_USER_SURFACE = "draw_user_surface"
+    # v0.1.469 (D357) -- the face angle of Sarma's method at a vertex of a
+    # non-circular user surface: the vertex, then the direction of its face
+    # (or Enter to type it); and taking one away. They pick a vertex and do
+    # not collect points: neither inherits the drawing's click, Enter or menu
+    SET_SARMA_ANGLE = "set_sarma_angle"
+    REMOVE_SARMA_ANGLE = "remove_sarma_angle"
 
     # ----- Annotations (v0.1.416, D354): clicked, like a boundary -----
     # Tools -> Draw, Dimensions and Add Axes asked for their points in a
@@ -267,6 +273,8 @@ class ToolMode(Enum):
             ToolMode.ADD_SURFACE_3PT: "CrossCursor",
             ToolMode.ADD_SURFACE_CR: "CrossCursor",
             ToolMode.DRAW_USER_SURFACE: "CrossCursor",
+            ToolMode.SET_SARMA_ANGLE: "CrossCursor",
+            ToolMode.REMOVE_SARMA_ANGLE: "PointingHandCursor",
         }.get(self, "CrossCursor" if self.is_drawing_annotation
               else "ArrowCursor")
 
@@ -321,6 +329,9 @@ class ToolMode(Enum):
             ToolMode.ADD_SURFACE_3PT: "Click three points to define a circular surface",
             ToolMode.ADD_SURFACE_CR: "Click the centre, then a point on the circle",
             ToolMode.DRAW_USER_SURFACE: "Add Non-Circular Surface: click its vertices from one end on the ground to the other, Enter or right-click to finish, Esc to cancel",
+            # v0.1.469 (D357)
+            ToolMode.SET_SARMA_ANGLE: "Set Sarma Face Angles: click an interior vertex of a non-circular surface, then the direction of its face, or Enter to type it; Esc to exit",
+            ToolMode.REMOVE_SARMA_ANGLE: "Remove Sarma Face Angles: click a vertex whose face angle is given; Esc to exit",
             # v0.1.416 (D354) — the annotations, by clicks
             ToolMode.DRAW_ANN_LINE: "Draw Line: click its two ends, Esc to cancel",
             ToolMode.DRAW_ANN_ARROW: "Draw Arrow: click the tail, then the head, Esc to cancel",

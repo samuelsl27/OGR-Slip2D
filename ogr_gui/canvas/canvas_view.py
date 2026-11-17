@@ -291,6 +291,15 @@ class CanvasView(QGraphicsView):
     # v0.1.427 (D357) -- a non-circular slip surface drawn by hand: a
     # Polyline, for the reason above; the window makes it a user surface
     user_surface_drawn = Signal(object)
+    # v0.1.469 (D357) -- Sarma's face angles: (surface id, x, y, θ°) picked
+    # with the mouse, (id, x, y) to be typed, (id, x, y) taken away, and the
+    # actions of a user surface's vertex menu (action, id, x, y)
+    # (object ids: a hand-edited file's id may be no string, and a Signal of
+    # str refused it; the review of v0.1.469)
+    sarma_angle_picked = Signal(object, float, float, float)
+    sarma_angle_typed = Signal(object, float, float)
+    sarma_angle_removed = Signal(object, float, float)
+    user_vertex_action_requested = Signal(str, object, float, float)
     # v0.1.416 (D354) — an annotation drawn with clicks: its kind and its
     # points; the window stores it (an annotation is not a boundary)
     annotation_drawn = Signal(object, object)
@@ -397,6 +406,16 @@ class CanvasView(QGraphicsView):
         # v0.1.198 — the toe picked by the first click of Change Slope
         # Angle; only trusted while ``_draw_points`` still holds its dot.
         self._slope_toe_idx: Optional[int] = None
+        # v0.1.469 (D357) -- the vertex Set Sarma Face Angles picked, as
+        # ``(surface id, x, y)``: never the object, which an undo replaces
+        self._sarma_pick: Optional[tuple] = None
+        self._sarma_ray = None
+        self._sarma_context = None
+        # Whether this canvas offers the vertex menu of a user surface: the
+        # main window's, which connects ``user_vertex_action_requested``.
+        # Interpret's canvas is a CanvasView too and listens to none of it
+        # (the review of v0.1.469: its actions did nothing there).
+        self.user_surface_menu = False
         # v0.1.336 (D142b) — Scale / Rotate: the boundary clicked first and
         # its dashed ghost, until the pivot is clicked
         self._transform_target: Optional[int] = None
@@ -608,6 +627,9 @@ class CanvasView(QGraphicsView):
         if mode is not previous and self._draw_points:
             self._draw_points = []
             self._clear_draw_preview()
+        # v0.1.469 (D357) -- nor the vertex of Set Sarma Face Angles
+        if mode is not previous and self._sarma_pick is not None:
+            self._release_sarma_pick()
         # v0.1.327 (D323) — the snap marker belongs to the mode that snapped:
         # it stayed where a vertex had been dropped after the mode was left
         if mode is not previous and self._last_snap is not None:
@@ -651,6 +673,13 @@ class CanvasView(QGraphicsView):
         # points were never touched, and its preview is drawn again
         if self._draw_points:
             self._update_draw_preview()
+        # v0.1.469 -- the vertex Set Sarma Face Angles picked, while it is
+        # still a vertex of its surface
+        if self._sarma_pick is not None:
+            if self._sarma_vertex_holds(self._sarma_pick):
+                self._update_sarma_preview()
+            else:
+                self._release_sarma_pick()
         # and so does the boundary Scale / Rotate picked, with its ghost,
         # while it is still the boundary that was picked
         if self._transform_target is not None:
@@ -1294,11 +1323,352 @@ class CanvasView(QGraphicsView):
             return QColor(100, 160, 100)      # dark green
         return QColor(110, 110, 120)          # dark gray (very stable)
 
+
+    # ==================================================================
+    # v0.1.469 (D357) -- the face angles of Sarma's method, by the mouse
+    # ==================================================================
+    def _user_polyline_points(self, up):
+        """The checked points of a stored user surface, or None for one the
+        rule refuses (a hand-edited file): it has no vertex to pick."""
+        from ogr_core.geometry.user_polyline import checked_points
+        try:
+            return checked_points(up.points)
+        except ValueError:
+            return None
+
+    def _pick_user_polyline_vertex(self, x: float, y: float,
+                                   tolerance_px: float = 10.0):
+        """``(surface id, vx, vy)`` of the INTERIOR vertex of a stored
+        non-circular user surface nearest (x, y), within a tolerance in
+        PIXELS (AGENTS.md), or None. An end has no face. The id and the
+        coordinates, never the object: an undo puts copies in its place.
+
+        Two surfaces sharing the vertex: the first in the list (the lowest
+        number), which the status bar names; the vertex's menu has a part
+        for each (the owner's decision, the review of v0.1.469).
+
+        Honours the Selection Filter's «Slip surfaces», which nothing read
+        before this version (the review of v0.1.469: a setting that did
+        nothing)."""
+        filt = self.selection_filter
+        if filt is not None and not getattr(filt, "surfaces", True):
+            return None
+        polylines = getattr(self.project, "user_polylines", None) or ()
+        px_per_unit = abs(self.transform().m11()) or 1.0
+        tol = tolerance_px / px_per_unit
+        best, best_d = None, float("inf")
+        for up in polylines:
+            pts = self._user_polyline_points(up)
+            if pts is None:
+                continue
+            for vx, vy in pts[1:-1]:
+                d = math.hypot(vx - x, vy - y)
+                if d < best_d:
+                    best, best_d = (up.id, vx, vy), d
+        return best if best_d <= tol else None
+
+    def _user_surfaces_at(self, x: float, y: float) -> list:
+        """``[(surface id, vx, vy)]`` of every stored user surface with an
+        interior vertex at (x, y), each matched as the rule matches (a
+        billionth of that surface's width), in the list's order."""
+        out = []
+        for up in getattr(self.project, "user_polylines", None) or ():
+            pts = self._user_polyline_points(up)
+            if not pts:
+                continue
+            xs = [p[0] for p in pts]
+            tol = 1e-9 * max(max(xs) - min(xs), 1e-300)
+            for vx, vy in pts[1:-1]:
+                if abs(vx - x) <= tol and abs(vy - y) <= tol:
+                    out.append((up.id, vx, vy))
+                    break
+        return out
+
+    def surface_number(self, pid) -> int:
+        """The number a user surface is named by (1 for the first), or 0."""
+        return next((i + 1 for i, up in enumerate(
+            getattr(self.project, "user_polylines", None) or ())
+            if up.id == pid), 0)
+
+    def _vertex_datum_refusal(self, pid, x: float, y: float):
+        """The rule's refusal of the datum stored at the vertex (x, y) of the
+        surface ``pid`` (a hand-edited file, a script), or None."""
+        from ogr_core.geometry.user_polyline import split_vertex_data
+        up = self._user_polyline_by_id(pid)
+        pts = self._user_polyline_points(up) if up is not None else None
+        if not pts:
+            return None
+        _good, refused = split_vertex_data(pts, getattr(up, "vertex_data",
+                                                        None))
+        xs = [p[0] for p in pts]
+        tol = 1e-9 * max(max(xs) - min(xs), 1e-300)
+        for exc in refused:
+            where = getattr(exc, "where", None)
+            if where and abs(where[0] - x) <= tol and abs(where[1] - y) <= tol:
+                return exc
+        return None
+    def _user_polyline_by_id(self, pid):
+        return next((up for up in getattr(self.project, "user_polylines",
+                                           None) or () if up.id == pid), None)
+
+    def _sarma_vertex_holds(self, pick) -> bool:
+        """Whether the vertex ``(id, x, y)`` is still an interior vertex of
+        its surface: an edit, an undo or an agent between the two clicks can
+        move it or take the surface away (D398's rule)."""
+        if pick is None:
+            return False
+        pid, x, y = pick
+        up = self._user_polyline_by_id(pid)
+        pts = self._user_polyline_points(up) if up is not None else None
+        if not pts:
+            return False
+        xs = [p[0] for p in pts]
+        tol = 1e-9 * max(max(xs) - min(xs), 1e-300)
+        return any(abs(vx - x) <= tol and abs(vy - y) <= tol
+                   for vx, vy in pts[1:-1])
+
+    def vertex_face_angle(self, pid, x: float, y: float):
+        """The face angle given at the vertex ``(x, y)`` of the surface
+        ``pid``, as the rule reads it (``split_vertex_data``), or None."""
+        from ogr_core.geometry.user_polyline import split_vertex_data
+        up = self._user_polyline_by_id(pid)
+        pts = self._user_polyline_points(up) if up is not None else None
+        if not pts:
+            return None
+        good, _bad = split_vertex_data(pts, getattr(up, "vertex_data", None))
+        xs = [p[0] for p in pts]
+        tol = 1e-9 * max(max(xs) - min(xs), 1e-300)
+        for (vx, vy), datum in good.items():
+            if abs(vx - x) <= tol and abs(vy - y) <= tol:
+                return datum.get("angle")
+        return None
+
+    def begin_sarma_angle(self, pid, x: float, y: float) -> None:
+        """Set Sarma Face Angles with the vertex ``(x, y)`` of the surface
+        ``pid`` already picked: the vertex's context menu enters it so."""
+        self.set_tool_mode(ToolMode.SET_SARMA_ANGLE)
+        if self._sarma_vertex_holds((pid, x, y)):
+            self._sarma_pick = (pid, x, y)
+            self._update_sarma_preview()
+            self.status_message.emit(self._picked_message(pid))
+
+    def _picked_message(self, pid) -> str:
+        return tr("Vertex picked on non-circular surface {0}: click the "
+                  "direction of its face, or press Enter to type the angle; "
+                  "Esc to let it go.").format(self.surface_number(pid))
+    def _release_sarma_pick(self) -> None:
+        self._sarma_pick = None
+        self._clear_draw_preview()
+
+    def _sarma_angle_toward(self, sx: float, sy: float):
+        """θ in (0°, 180°), to a tenth of a degree, of the face from the
+        picked vertex through the scene point (sx, sy), or None."""
+        from ogr_slip2d.sarma.angles import upward_degrees
+        if self._sarma_pick is None:
+            return None
+        _pid, x, y = self._sarma_pick
+        return upward_degrees(sx - x, sy - y)
+
+    def _update_sarma_preview(self, cursor=None) -> None:
+        """The picked vertex as a dot and, with ``cursor``, the face it would
+        get, dashed, up to where the method cuts it (``vertex_face``).
+
+        Two PATH items, as every line of this canvas since D395 (a line or
+        rect item's ``setPen`` loses a reference to None on Python 3.11
+        with PySide6 6.12.0), made with their pens when the vertex is
+        picked or the scene redrawn; a move of the pointer only gives the
+        ray its new path (the review of v0.1.469: the dot was made again,
+        with its pen, on every move), on the ground the pick read once
+        (``face_context``). Returns ``(θ, top)`` of the live face, or
+        ``(None, None)``."""
+        from PySide6.QtGui import QPainterPath
+        from PySide6.QtWidgets import QGraphicsPathItem
+        from ogr_slip2d.sarma.wedges import face_context, vertex_face
+        if self._sarma_pick is None:
+            self._clear_draw_preview()
+            return None, None
+        _pid, x, y = self._sarma_pick
+        if cursor is None or not self._sarma_preview_alive():
+            self._clear_draw_preview()
+            scene = self.scene()
+            r = 4.0 / (abs(self.transform().m11()) or 1.0)
+            ring = QPainterPath()
+            ring.addEllipse(QPointF(x, y), r, r)
+            dot = QGraphicsPathItem(ring)
+            dot.setPen(QPen(QColor("#c0392b"), 0, Qt.NoPen))
+            dot.setBrush(QBrush(QColor("#c0392b")))
+            dot.setZValue(10)
+            scene.addItem(dot)
+            ray = QGraphicsPathItem(QPainterPath())
+            pen = QPen(QColor("#1e6fc5"), 1.5, Qt.DashLine)
+            pen.setCosmetic(True)
+            ray.setPen(pen)
+            ray.setZValue(9)
+            scene.addItem(ray)
+            self._draw_preview_items.extend((dot, ray))
+            self._sarma_ray = ray
+            self._sarma_context = face_context(self.project)
+        if cursor is None:
+            return None, None
+        theta = self._sarma_angle_toward(*cursor)
+        if theta is None:
+            self._sarma_ray.setPath(QPainterPath())
+            return None, None
+        _t, top = vertex_face(self.project, x, y, theta,
+                              context=self._sarma_context)
+        if top is None:
+            # the face goes nowhere the method could cut: drawn to the
+            # pointer's distance, so the user sees the direction refused
+            reach = math.hypot(cursor[0] - x, cursor[1] - y)
+            rad = math.radians(theta)
+            end = (x + reach * math.cos(rad), y + reach * math.sin(rad))
+        else:
+            end = top
+        path = QPainterPath()
+        path.moveTo(x, y)
+        path.lineTo(*end)
+        self._sarma_ray.setPath(path)
+        return theta, top
+
+    def _sarma_preview_alive(self) -> bool:
+        ray = getattr(self, "_sarma_ray", None)
+        if ray is None or ray not in self._draw_preview_items:
+            return False
+        try:
+            return ray.scene() is self.scene()
+        except RuntimeError:     # the scene was rebuilt: the item is gone
+            return False
+    def _sarma_live_message(self, theta, top) -> str:
+        if theta is None:
+            return tr("A horizontal line is no face: point above or below "
+                      "the vertex.")
+        if top is None:
+            return tr("Face angle {0:.1f}°: the face does not leave the "
+                      "ground there, and the method would refuse the "
+                      "surface.").format(theta)
+        return tr("Face angle {0:.1f}°: click to set it, Enter to type it, "
+                  "Esc to let the vertex go.").format(theta)
+
+    def _sarma_press(self, event) -> None:
+        """A left click in Set or Remove Sarma Face Angles."""
+        scene_pt = self.mapToScene(event.position().toPoint())
+        sx, sy = scene_pt.x(), scene_pt.y()
+        mode = self._tool_mode
+        if mode == ToolMode.REMOVE_SARMA_ANGLE:
+            hit = self._pick_user_polyline_vertex(sx, sy)
+            if hit is None:
+                self.status_message.emit(tr(
+                    "Click an interior vertex of a non-circular surface."))
+                return
+            if self.vertex_face_angle(*hit) is None:
+                # a datum the rule refuses (a hand-edited file) is not "no
+                # angle": its reason, and where to correct it
+                why = self._vertex_datum_refusal(*hit)
+                if why is not None:
+                    self.status_message.emit(
+                        user_surface_refusal_text(why) + " " + tr(
+                            "Correct it in Surfaces -> Sarma Data per "
+                            "Vertex..."))
+                else:
+                    self.status_message.emit(tr(
+                        "That vertex has no face angle to remove."))
+                return
+            self.sarma_angle_removed.emit(*hit)
+            return
+        # Set: the vertex first
+        if self._sarma_pick is None:
+            hit = self._pick_user_polyline_vertex(sx, sy)
+            if hit is None:
+                self.status_message.emit(tr(
+                    "Click an interior vertex of a non-circular surface."))
+                return
+            self._sarma_pick = hit
+            self._update_sarma_preview()
+            self.status_message.emit(self._picked_message(hit[0]))
+            return
+        # ... then the direction, the vertex being still where it was
+        if not self._sarma_vertex_holds(self._sarma_pick):
+            self._release_sarma_pick()
+            self.status_message.emit(tr(
+                "The surface changed after its vertex was picked; click the "
+                "vertex again."))
+            return
+        theta = self._sarma_angle_toward(sx, sy)
+        if theta is None:
+            self.status_message.emit(self._sarma_live_message(None, None))
+            return
+        pid, x, y = self._sarma_pick
+        # cleared BEFORE emitting, as the other pick modes do: the slot
+        # rebuilds the scene
+        self._release_sarma_pick()
+        self.sarma_angle_picked.emit(pid, x, y, theta)
+    def _show_user_vertex_context_menu(self, global_pos, hit) -> None:
+        """Popup menu over an interior vertex of a non-circular user
+        surface, where no boundary vertex is (v0.1.469)."""
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        self._add_user_vertex_actions(menu, hit)
+        menu.exec(global_pos)
+
+    def _add_user_vertex_actions(self, menu, hit) -> None:
+        """The part of a vertex's menu that belongs to the non-circular user
+        surfaces with an interior vertex there: for each, its header and
+        four actions, on ``user_vertex_action_requested(action, id, x, y)``.
+        One part per surface (the owner's decision, the review of v0.1.469:
+        two candidate surfaces through problem 4's kink reached only the
+        first)."""
+        from PySide6.QtGui import QAction
+        _pid, x, y = hit
+        # what the Surfaces menu's actions ask (``refresh_action_
+        # availability``): the data of Sarma's method belong to a
+        # non-circular run
+        try:
+            from ogr_core.project.settings import SurfaceType
+            circular = (self.project.settings.search.surface_type
+                        == SurfaceType.CIRCULAR.value)
+        except Exception:  # noqa: BLE001
+            circular = True
+        parts = self._user_surfaces_at(x, y) or [hit]
+        for k, (pid, vx, vy) in enumerate(parts):
+            if k:
+                menu.addSeparator()
+            info = QAction(tr("Vertex ({0:.3f}, {1:.3f}) of non-circular "
+                              "surface {2}").format(
+                                  vx, vy, self.surface_number(pid)), self)
+            info.setEnabled(False)
+            menu.addAction(info)
+            menu.addSeparator()
+            if circular:
+                why = QAction(tr("Only available with Surface Options -> "
+                                 "Surface Type = Non-Circular."), self)
+                why.setEnabled(False)
+                menu.addAction(why)
+            has_angle = self.vertex_face_angle(pid, vx, vy) is not None
+            for label, action_id in (
+                ("Set Face Angle", "sarma_set"),
+                ("Type Face Angle…", "sarma_type"),
+                ("Remove Face Angle", "sarma_remove"),
+                ("Sarma Data per Vertex...", "sarma_table"),
+            ):
+                a = QAction(tr(label), self)
+                a.setEnabled(not circular and (has_angle
+                                               or action_id != "sarma_remove"))
+                a.triggered.connect(
+                    lambda _checked=False, aid=action_id, p=pid, px=vx, py=vy:
+                    self.user_vertex_action_requested.emit(aid, p, px, py)
+                )
+                menu.addAction(a)
     # ==================================================================
     # v0.1.9 — Vertex right-click context menu
     # ==================================================================
-    def _show_vertex_context_menu(self, global_pos, hit) -> None:
-        """Popup menu over a vertex: Move / Insert before / Delete."""
+    def _show_vertex_context_menu(self, global_pos, hit,
+                                  user_hit=None) -> None:
+        """Popup menu over a vertex: Move / Insert before / Delete.
+
+        v0.1.469 (D357, the owner's decision) -- with ``user_hit``, a vertex
+        of a non-circular user surface at the same point (problem 4's kink
+        is a vertex of the material contact too), its actions follow,
+        after a separator: one menu with both parts."""
         from PySide6.QtWidgets import QMenu
         from PySide6.QtGui import QAction
         bi, vi = hit
@@ -1331,6 +1701,9 @@ class CanvasView(QGraphicsView):
                 self.vertex_action_requested.emit(aid, bi, vi)
             )
             menu.addAction(a)
+        if user_hit is not None:
+            menu.addSeparator()
+            self._add_user_vertex_actions(menu, user_hit)
         menu.exec(global_pos)
 
     # ==================================================================
@@ -1910,6 +2283,9 @@ class CanvasView(QGraphicsView):
         self._draw_points = []
         self._clear_draw_preview()
         self._slope_toe_idx = None
+        # v0.1.469 -- and the vertex of Set Sarma Face Angles (the review of
+        # v0.1.469: reopening the file kept it, and the next click wrote)
+        self._sarma_pick = None
         self._clear_transform_target()
         self._cancel_boundary_drag()
         if self._zw_rubber is not None:
@@ -2415,6 +2791,22 @@ class CanvasView(QGraphicsView):
 
         mode = self._tool_mode
 
+        # v0.1.469 (D357) -- Set / Remove Sarma Face Angles: a right click
+        # lets the picked vertex go, or leaves the tool when none is
+        if mode in (ToolMode.SET_SARMA_ANGLE, ToolMode.REMOVE_SARMA_ANGLE):
+            if event.button() == Qt.RightButton:
+                if self._sarma_pick is not None:
+                    self._release_sarma_pick()
+                    self.status_message.emit(tr("Vertex let go."))
+                else:
+                    self.set_tool_mode(ToolMode.SELECT)
+                event.accept()
+                return
+            if event.button() == Qt.LeftButton:
+                self._sarma_press(event)
+                event.accept()
+                return
+
         # v0.1.4 — Right-click during a drawing: open context menu with
         # Done / Close / Undo / Snap / Ortho / OSnap / Coord Table / Cancel
         if event.button() == Qt.RightButton and mode.collects_points:
@@ -2426,11 +2818,20 @@ class CanvasView(QGraphicsView):
         if event.button() == Qt.RightButton and mode == ToolMode.SELECT:
             scene_pt = self.mapToScene(event.position().toPoint())
 
-            # Priority order: vertex → load → boundary → region → background
+            # Priority order: vertex (with a user surface's vertex at the
+            # same point) → load → support → user surface's vertex →
+            # boundary → region → background
             vhit = self._pick_vertex(scene_pt.x(), scene_pt.y())
+            # v0.1.469 (D357) -- the vertex of a user surface, on the main
+            # window's canvas: with a boundary vertex at the same point, one
+            # menu with both parts (the owner's decision); after loads and
+            # supports, whose menus it hid (the review of v0.1.469)
+            uhit = (self._pick_user_polyline_vertex(scene_pt.x(),
+                                                    scene_pt.y())
+                    if self.user_surface_menu else None)
             if vhit is not None:
                 self._show_vertex_context_menu(
-                    event.globalPosition().toPoint(), vhit,
+                    event.globalPosition().toPoint(), vhit, user_hit=uhit,
                 )
                 event.accept()
                 return
@@ -2449,6 +2850,12 @@ class CanvasView(QGraphicsView):
                 self._show_support_context_menu(
                     event.globalPosition().toPoint(), sidx,
                 )
+                event.accept()
+                return
+
+            if uhit is not None:
+                self._show_user_vertex_context_menu(
+                    event.globalPosition().toPoint(), uhit)
                 event.accept()
                 return
 
@@ -2865,6 +3272,12 @@ class CanvasView(QGraphicsView):
             # Trigger a foreground repaint so the snap glyph updates
             self.viewport().update()
 
+        # v0.1.469 (D357) -- the face the picked vertex would get, live
+        if (self._tool_mode == ToolMode.SET_SARMA_ANGLE
+                and self._sarma_pick is not None):
+            theta, top = self._update_sarma_preview((pt.x(), pt.y()))
+            self.status_message.emit(self._sarma_live_message(theta, top))
+
         # v0.1.2 — Drag vertex live
         if self._dragging_vertex is not None:
             bi, vi = self._dragging_vertex
@@ -3002,6 +3415,24 @@ class CanvasView(QGraphicsView):
             self.centre_radius_typed.emit(centre)
             event.accept()
             return
+        # v0.1.469 (D357) -- Enter in Set Sarma Face Angles types the angle
+        # of the picked vertex
+        if (event.key() in (Qt.Key_Return, Qt.Key_Enter)
+                and self._tool_mode == ToolMode.SET_SARMA_ANGLE):
+            pick = self._sarma_pick
+            if pick is not None and self._sarma_vertex_holds(pick):
+                self._release_sarma_pick()
+                self.sarma_angle_typed.emit(*pick)
+            elif pick is None:
+                self.status_message.emit(tr(
+                    "Click an interior vertex of a non-circular surface."))
+            else:
+                self._release_sarma_pick()
+                self.status_message.emit(tr(
+                    "The surface changed after its vertex was picked; click "
+                    "the vertex again."))
+            event.accept()
+            return
         # v0.1.4 — Enter closes External/Material polygons;
         # otherwise finishes as an open polyline.
         if (event.key() in (Qt.Key_Return, Qt.Key_Enter)
@@ -3028,6 +3459,13 @@ class CanvasView(QGraphicsView):
             # Cancel any drawing in progress first
             if self._draw_points:
                 self._cancel_drawing()
+                event.accept()
+                return
+            # v0.1.469 (D357) -- the vertex of Set Sarma Face Angles, as a
+            # drawing's points: the tool stays, and a second Esc leaves it
+            if self._sarma_pick is not None:
+                self._release_sarma_pick()
+                self.status_message.emit(tr("Vertex let go."))
                 event.accept()
                 return
             self.set_tool_mode(ToolMode.SELECT)
@@ -3146,12 +3584,22 @@ class CanvasView(QGraphicsView):
     # ==================================================================
     # v0.1.8 — Slip-circle search grid visualisation
     # ==================================================================
-    def _draw_sarma_rays(self, scene, polyline, length) -> None:
+    def _draw_sarma_rays(self, scene, polyline, length,
+                         context=None) -> None:
         """v0.1.465 (D357) -- the face angles given at the vertices of a
         user's polyline, as dotted rays of ``length`` from each vertex up
-        into the mass, all in ONE path item (one pen per surface, D395)."""
+        into the mass, all in ONE path item (one pen per surface, D395).
+
+        v0.1.469 (the owner's decision) -- each ray reaches where the face
+        leaves the ground, by the method's own rule (``vertex_face``): what
+        is drawn is the face the method will cut. ``length`` is kept for a
+        face that does not leave the ground, which the method refuses.
+        ``context`` is the ground ``face_context`` read once for the whole
+        drawing (the review of v0.1.469: 16 ms per ray with 5000 vertices
+        of ground, read again for each)."""
         import math as _m
         from PySide6.QtGui import QPainterPath
+        from ogr_slip2d.sarma.wedges import vertex_face
         from ogr_core.geometry.user_polyline import (checked_points,
                                                      split_vertex_data)
         # only what the rule accepts: an angle "abc" in a hand-edited file
@@ -3168,10 +3616,15 @@ class CanvasView(QGraphicsView):
             if angle is None:
                 continue
             t = _m.radians(float(angle) % 180.0)
+            _theta, top = vertex_face(self.project, x, y, float(angle),
+                                      context=context)
             if path is None:
                 path = QPainterPath()
             path.moveTo(x, y)
-            path.lineTo(x + length * _m.cos(t), y + length * _m.sin(t))
+            if top is not None:
+                path.lineTo(*top)
+            else:
+                path.lineTo(x + length * _m.cos(t), y + length * _m.sin(t))
         if path is None:
             return
         from PySide6.QtWidgets import QGraphicsPathItem
@@ -3208,6 +3661,11 @@ class CanvasView(QGraphicsView):
         surfaces = getattr(self.project, "user_surfaces", None) or ()
         polylines = getattr(self.project, "user_polylines", None) or ()
         colour = QColor("#7b2cbf")
+        # v0.1.469 -- the ground the stored rays reach, read once
+        context = None
+        if any(getattr(up, "vertex_data", None) for up in polylines):
+            from ogr_slip2d.sarma.wedges import face_context
+            context = face_context(self.project)
         # v0.1.427 (D357) -- the polylines, dashed in the same colour, as they
         # were given: their ends are put on the External Boundary when they
         # are analysed, not here, for the reason the circles are drawn whole.
@@ -3245,7 +3703,8 @@ class CanvasView(QGraphicsView):
             # v0.1.465 (D357) -- its given face angles, dotted, a fifth of
             # its width long
             xs = [float(pt[0]) for pt in up.points]
-            self._draw_sarma_rays(scene, up, 0.2 * (max(xs) - min(xs)))
+            self._draw_sarma_rays(scene, up, 0.2 * (max(xs) - min(xs)),
+                                  context)
         if not surfaces:
             return
         for c in surfaces:

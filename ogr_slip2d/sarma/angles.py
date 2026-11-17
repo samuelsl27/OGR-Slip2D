@@ -59,6 +59,25 @@ def upward(theta_deg: float) -> Optional[float]:
     return t
 
 
+def upward_degrees(dx: float, dy: float, decimals: int = 1) -> Optional[float]:
+    """θ in degrees, in (0°, 180°), of the face whose line passes through
+    the origin and ``(dx, dy)``, rounded to ``decimals``: the angle a face
+    is given by pointing at it (v0.1.469, D357, the angle tool of the
+    window), whichever side of the vertex the pointer is on. None for a
+    horizontal line (after the rounding) or for the origin itself.
+
+    The rounding is what is shown and what is stored: a pointer cannot be
+    placed to more than a tenth of a degree, and an angle of fourteen
+    digits read off a pixel would claim a precision nobody gave."""
+    if not (math.isfinite(dx) and math.isfinite(dy)) or (dx == 0.0
+                                                          and dy == 0.0):
+        return None
+    theta = round(math.degrees(math.atan2(dy, dx)) % 180.0, decimals)
+    if theta >= 180.0 or upward(theta) is None:
+        return None
+    return theta
+
+
 def policy_angle(policy: str, alpha_toe: float, alpha_head: float,
                  len_toe: float = 1.0, len_head: float = 1.0) -> float:
     """θ in radians, in (0, π), of the face that ``policy`` puts between a

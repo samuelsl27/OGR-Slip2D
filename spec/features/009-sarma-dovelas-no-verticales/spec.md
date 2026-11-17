@@ -98,8 +98,8 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 ### Ventana (0.1.464–0.1.469)
 
 - [ ] La casilla de Sarma y su grupo de ajustes en Métodos, en gris cuando no aplican.
-- [ ] La tabla de ángulo, c y φ por vértice, desde el menú Superficies y desde el menú contextual del vértice.
-- [ ] La herramienta de ángulos con el ratón: rayo en vivo, clic o tecleo de 0 a 360°, y deshacer.
+- [x] La tabla de ángulo, c y φ por vértice, desde el menú Superficies y desde el menú contextual del vértice.
+- [x] La herramienta de ángulos con el ratón: rayo en vivo, clic o tecleo de 0 a 360°, y deshacer.
 - [ ] Interpret dibuja las cuñas: polígonos, caras inclinadas y filas de cara.
 - [ ] Todo texto nuevo pasa por `tr()` con su español, y toda acción está en un menú.
 

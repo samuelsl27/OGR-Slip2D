@@ -504,8 +504,9 @@ class TestNothingIsPending:
         # v0.1.427 (D357): 116 -> 118, Add Non-Circular Surface and Manage
         # Non-Circular Surfaces..., mapped to user_surface_add and
         # user_surface_delete. v0.1.465 (D357): 118 -> 119, Sarma Data per
-        # Vertex..., mapped to user_surface_edit.
-        assert coverage()["mapped"] == 119
+        # Vertex..., mapped to user_surface_edit. v0.1.469 (D357): 119 -> 121,
+        # Set and Remove Sarma Face Angles, mapped to user_surface_edit too.
+        assert coverage()["mapped"] == 121
 
 
 def _qt():

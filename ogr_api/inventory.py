@@ -138,6 +138,9 @@ MAPPED: dict[str, str] = {
     "surf_polyline_manage": "user_surface_delete",
     # v0.1.465 (D357)
     "surf_polyline_sarma": "user_surface_edit",
+    # v0.1.469 (D357) -- the angle tool writes the same data
+    "surf_polyline_sarma_set": "user_surface_edit",
+    "surf_polyline_sarma_remove": "user_surface_edit",
     "add_text": "annotation_set",
     "measure": "annotation_set",
     "dim_len": "annotation_set",

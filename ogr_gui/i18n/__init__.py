@@ -4418,6 +4418,61 @@ _DICTS: dict[str, dict[str, str]] = {
             'Editar los datos de Sarma por vértice',
         'Edit user surface':
             'Editar una superficie del usuario',
+        # v0.1.469 (D357) — the angle tool and the vertex's menu
+        'Set Sarma Face Angles':
+            'Definir ángulos de cara de Sarma',
+        'Remove Sarma Face Angles':
+            'Quitar ángulos de cara de Sarma',
+        'Set Sarma Face Angles: click an interior vertex of a non-circular surface, then the direction of its face, or Enter to type it; Esc to exit':
+            'Definir ángulos de cara de Sarma: pulsa un vértice interior de una superficie no circular y después la dirección de su cara, o Intro para teclearla; Esc para salir',
+        'Remove Sarma Face Angles: click a vertex whose face angle is given; Esc to exit':
+            'Quitar ángulos de cara de Sarma: pulsa un vértice que tenga ángulo de cara; Esc para salir',
+        'Vertex picked on non-circular surface {0}: click the direction of its face, or press Enter to type the angle; Esc to let it go.':
+            'Vértice elegido en la superficie no circular {0}: pulsa la dirección de su cara, o Intro para teclear el ángulo; Esc para soltarlo.',
+        'Correct it in Surfaces -> Sarma Data per Vertex...':
+            'Corrígelo en Superficies -> Datos de Sarma por vértice...',
+        'Face angle {0:.10g}° stored at ({1:.3f}, {2:.3f}): the face does not leave the ground there, and the method would refuse the surface.':
+            'Ángulo de cara {0:.10g}° guardado en ({1:.3f}, {2:.3f}): la cara no sale del terreno por ahí, y el método rechazaría la superficie.',
+        'Vertex let go.':
+            'Vértice soltado.',
+        'A horizontal line is no face: point above or below the vertex.':
+            'Una recta horizontal no es una cara: apunta por encima o por debajo del vértice.',
+        'Face angle {0:.1f}°: the face does not leave the ground there, and the method would refuse the surface.':
+            'Ángulo de cara {0:.1f}°: la cara no sale del terreno por ahí, y el método rechazaría la superficie.',
+        'Face angle {0:.1f}°: click to set it, Enter to type it, Esc to let the vertex go.':
+            'Ángulo de cara {0:.1f}°: pulsa para fijarlo, Intro para teclearlo, Esc para soltar el vértice.',
+        'Click an interior vertex of a non-circular surface.':
+            'Pulsa un vértice interior de una superficie no circular.',
+        'That vertex has no face angle to remove.':
+            'Ese vértice no tiene ángulo de cara que quitar.',
+        'The surface changed after its vertex was picked; click the vertex again.':
+            'La superficie cambió después de elegir su vértice; pulsa el vértice otra vez.',
+        'Vertex ({0:.3f}, {1:.3f}) of non-circular surface {2}':
+            'Vértice ({0:.3f}, {1:.3f}) de la superficie no circular {2}',
+        'Set Face Angle':
+            'Definir ángulo de cara',
+        'Type Face Angle…':
+            'Teclear ángulo de cara…',
+        'Remove Face Angle':
+            'Quitar ángulo de cara',
+        'That surface is no longer in the model.':
+            'Esa superficie ya no está en el modelo.',
+        'Face angle {0:.1f}° set at ({1:.3f}, {2:.3f}) of non-circular surface {3}.':
+            'Ángulo de cara {0:.1f}° fijado en ({1:.3f}, {2:.3f}) de la superficie no circular {3}.',
+        'Set Sarma Face Angle':
+            'Definir el ángulo de cara de Sarma',
+        'Face angle at ({0:.3f}, {1:.3f}), degrees counter-clockwise from +x (0 to 360):':
+            'Ángulo de cara en ({0:.3f}, {1:.3f}), en grados antihorarios desde +x (de 0 a 360):',
+        '{0:.10g}° is the same face as {1:.10g}°, which is stored.':
+            '{0:.10g}° es la misma cara que {1:.10g}°, que es lo que se guarda.',
+        'Face angle {0:.10g}° set at ({1:.3f}, {2:.3f}) of non-circular surface {3}.':
+            'Ángulo de cara {0:.10g}° fijado en ({1:.3f}, {2:.3f}) de la superficie no circular {3}.',
+        'Face angle removed at ({0:.3f}, {1:.3f}) of non-circular surface {2}.':
+            'Ángulo de cara quitado en ({0:.3f}, {1:.3f}) de la superficie no circular {2}.',
+        'Set Sarma face angle':
+            'Definir un ángulo de cara de Sarma',
+        'Remove Sarma face angle':
+            'Quitar un ángulo de cara de Sarma',
         # v0.1.464 (D357) — Sarma's notes of a run
         "{count} datum (data) given at vertices of the reported surface "
         "did not reach it (a crack cut the vertex off, Optimize moved it, "

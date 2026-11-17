@@ -290,6 +290,55 @@ def split_vertex_data(points, data) -> tuple:
     return out, refused
 
 
+def with_vertex_angle(points, data, vertex, angle) -> dict:
+    """The per-vertex data ``data`` (a dict as ``vertex_data`` holds it) with
+    the face angle at the interior vertex ``vertex`` set to ``angle``
+    [degrees], or taken away with None, and everything else as it was
+    (v0.1.469, D357, the angle tool and the vertex's context menu).
+
+    The c and φ of that vertex stay: the angle and the strength of a face
+    are separate data, and the tool edits only the angle. The edited row is
+    checked by the rule of :func:`checked_vertex_data`, and its refusal is
+    raised (:class:`NotASurface`, ``bad_vertex_data``); the rows of the
+    other vertices are left exactly as they are, a bad one of a hand-edited
+    file too, which the run already reports: an edit of one vertex is not a
+    verdict on the others. A vertex left with no datum is dropped, and two
+    stored keys for the vertex (a hand-edited file) become its one row.
+
+    ``points`` are already :func:`checked_points`; ``vertex`` is matched as
+    the rule matches, within a billionth of the polyline's width, and the
+    row is stored at the vertex's own coordinates.
+    """
+    interior = list(points[1:-1])
+    xs = [x for x, _y in points]
+    tol = 1e-9 * max(max(xs) - min(xs), 1e-300) if xs else 0.0
+    vx, vy = vertex
+    match = next((v for v in interior
+                  if abs(v[0] - vx) <= tol and abs(v[1] - vy) <= tol), None)
+    if match is None:
+        raise NotASurface("bad_vertex_data", "(%g, %g) is not an interior "
+                          "vertex of the surface." % (vx, vy),
+                          reason="not_a_vertex", where=(vx, vy))
+    row = {"angle": None, "c": None, "phi": None}
+    out = {}
+    found = False
+    for key, datum in (data or {}).items():
+        try:
+            same = (abs(float(key[0]) - match[0]) <= tol
+                    and abs(float(key[1]) - match[1]) <= tol)
+        except (TypeError, ValueError, LookupError):
+            same = False
+        if same:
+            if not found and isinstance(datum, dict):
+                row = {k: datum.get(k) for k in VERTEX_KEYS}
+                found = True
+            continue
+        out[key] = datum
+    row["angle"] = angle
+    out.update(checked_vertex_data(points, {match: row}))
+    return out
+
+
 def _end(p) -> tuple:
     try:
         return float(p[0]), float(p[1])

@@ -109,7 +109,9 @@ _NEVER_ENTERED = set({
 # VARIABLE. El techo de abajo es lo único que los mide.
 # v0.1.331 (D329a) — 34 -> 35: PICK_DIMENSION, Dimension Length in Interpret,
 # with its Spanish.
-_HINTS_TOTAL = 47
+_HINTS_TOTAL = 49
+# v0.1.469 (D357) — 47 -> 49: SET_SARMA_ANGLE and REMOVE_SARMA_ANGLE, Set and
+# Remove Sarma Face Angles, each with its Spanish.
 # v0.1.427 (D357) — 46 -> 47: DRAW_USER_SURFACE, Add Non-Circular Surface,
 # with its Spanish.
 # v0.1.416 (D354) — 34 -> 46: the twelve annotation tools, drawn with clicks
