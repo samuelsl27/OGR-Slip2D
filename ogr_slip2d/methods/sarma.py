@@ -228,14 +228,23 @@ class SarmaNonVertical(LEMMethod):
         normals = sol.base_normals or []
         strengths = [b.cohesion * b.length + n_eff * b.tan_phi
                      for b, n_eff in zip(bases, normals)]
+        # v0.1.467 -- ``base_shear_force`` is the DRIVING force
+        # s·W_total·sin α of every method (``LEMResult``, v0.1.107), and
+        # Sarma had put the mobilised shear there, which the panel printed
+        # under «Driving shear W·sinα»: the defect v0.1.107 closed in five
+        # methods, by the owner's decision now closed here. The mobilised
+        # shear, strength/F, goes to ``details["sarma_base_shear"]``.
+        from .bishop import driving_shear_forces
         return LEMResult(
             fos=F, converged=True, iterations=sol.iterations,
             method_id=self.METHOD_ID, surface=surface, slices=slices,
             base_normal_force=[n_eff + b.pore_force
                                for b, n_eff in zip(bases, normals)],
-            base_shear_force=[t / F for t in strengths],
+            base_shear_force=driving_shear_forces(list(slices), kh, kv,
+                                                  sign),
             base_shear_strength=strengths,
             details={
+                "sarma_base_shear": [t / F for t in strengths],
                 "kh": kh, "kv": kv, "slide_sign": sign,
                 # the total normal of the method's own solution, which the
                 # Tensile Stress Check reads as N/l - U/l

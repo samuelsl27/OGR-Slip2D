@@ -615,6 +615,40 @@ _DICTS: dict[str, dict[str, str]] = {
         'E right (kN)': 'E derecha (kN)',
         'X left (kN)': 'X izquierda (kN)',
         'X right (kN)': 'X derecha (kN)',
+        # v0.1.467 (D357) — the wedges of Sarma's method in Interpret
+        'E′ left (kN)': 'E′ izquierda (kN)',
+        'E′ right (kN)': 'E′ derecha (kN)',
+        'Face angle left θ (°)': 'Ángulo de la cara izquierda θ (°)',
+        'Face angle right θ (°)': 'Ángulo de la cara derecha θ (°)',
+        'Wedge %d of %d — x from %.2f to %.2f':
+            'Cuña %d de %d — x de %.2f a %.2f',
+        'Wedge number:': 'Número de cuña:',
+        'Free Body Diagram — wedge {0} ({1})':
+            'Diagrama de sólido libre — cuña {0} ({1})',
+        'Wedge {0}: α={1:.1f}°, FoS={2:.4f}':
+            'Cuña {0}: α={1:.1f}°, FS={2:.4f}',
+        'Wedge {0}: α={1:.1f}°, ODF={2:.4f}':
+            'Cuña {0}: α={1:.1f}°, FSD={2:.4f}',
+        "Sum of the forces: {0:.2g} kN/m ({1:.1g} of Wv). E and X are drawn "
+        "at mid-face: Sarma's method does not give where they act.":
+            'Suma de las fuerzas: {0:.2g} kN/m ({1:.1g} de Wv). E y X se '
+            'dibujan en el punto medio de la cara: el método de Sarma no da '
+            'dónde actúan.',
+        "The forces on the wedges of this result could not be recovered, "
+        "so there is no free body diagram to draw.":
+            'Las fuerzas sobre las cuñas de este resultado no se pudieron '
+            'recuperar, así que no hay diagrama de sólido libre que dibujar.',
+        "The line of thrust is not computed for Sarma's method: it "
+        "balances the forces of each wedge, not their moments, so where "
+        "the forces act on a face is not part of its solution.":
+            'La línea de empujes no se calcula con el método de Sarma: '
+            'equilibra las fuerzas de cada cuña, no sus momentos, así que '
+            'dónde actúan las fuerzas sobre una cara no forma parte de su '
+            'solución.',
+        "This result of Sarma's method has no wedges to draw: it was "
+        "computed on vertical slices handed to it as such.":
+            'Este resultado del método de Sarma no tiene cuñas que dibujar: '
+            'se calculó sobre dovelas verticales dadas como tales.',
         'no — this method does not resolve them':
             'no — este método no las resuelve',
         'Copy the table to the clipboard':
@@ -4272,10 +4306,6 @@ _DICTS: dict[str, dict[str, str]] = {
             "La cara {face} atraviesa el material «{material}», cuya "
             "resistencia no es de Mohr-Coulomb: dale a la cara su c y su φ",
         # v0.1.464 (D357) — the Sarma group of the Methods page
-        "The free body diagram of a wedge of Sarma's method comes in a later "
-        "version: its faces are drawn on the model.":
-            "El diagrama de cuerpo libre de una cuña del método de Sarma llega "
-            "en una versión posterior: sus caras se dibujan sobre el modelo.",
         'Sarma (non-vertical slices): nothing; it has its own iterations, in its group below.':
             'Sarma (dovelas no verticales): nada; tiene sus propias iteraciones, en su grupo de abajo.',
         "Sarma (non-vertical slices): no. It brackets the factor of safety and closes on it by Brent's method, which has no iteration to extrapolate.":

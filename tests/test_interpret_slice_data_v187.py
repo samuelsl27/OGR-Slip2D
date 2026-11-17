@@ -199,10 +199,14 @@ class TestClickingASliceFillsThePanel:
         t = w.slice_dock.table
         interslice = {"E left (kN)", "E right (kN)",
                       "X left (kN)", "X right (kN)"}
+        # v0.1.467 (D357) -- E′ = E − PW on a face, which only Sarma's method
+        # solves: a dash for Bishop is the honest answer there too
+        effective = {"E′ left (kN)", "E′ right (kN)"}
         blanks = [t.item(i, 0).text() for i in range(t.rowCount())
                   if t.item(i, 1).text() == "—"]
-        unexpected = [b for b in blanks if b not in interslice]
+        unexpected = [b for b in blanks if b not in interslice | effective]
         assert unexpected == [], unexpected
+        assert sorted(b for b in blanks if b in effective) == sorted(effective)
         # And the exclusion must not become a hole: with a method that
         # does not resolve them, all four have to be dashes, not some.
         assert sorted(b for b in blanks if b in interslice) == sorted(

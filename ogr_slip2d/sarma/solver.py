@@ -608,6 +608,97 @@ def _forces(fr: _Frame, F: float, kh: float):
             (min(abs(q) for q in dividing) if dividing else None))
 
 
+class WedgeForce(NamedTuple):
+    """One force on a wedge, in MODEL coordinates [kN/m] (v0.1.467):
+    ``name`` is ``Wv`` (the vertical load: soil·(1 + kv), loads and ponded
+    water, which is more than the panel's soil weight), ``kh·Ws`` (the
+    seismic force on the static soil weight), ``Px`` (the horizontal
+    external force), ``N′`` and ``U`` (the effective normal and the water on
+    the base), ``S`` (the mobilised shear on the base), or ``E`` and ``X``
+    (the total normal and the shear on face ``face``, a model index from 0).
+
+    ``value`` is the force with the sign of its convention, which the
+    vector alone hides (the review of v0.1.467: an effective normal in
+    tension, the physical acceptability Sarma 1973 asks to check, read as
+    its modulus): Wv downward, kh·Ws in the sense of sliding, Px along +x,
+    N′ and U along the base's inward normal, S along the base toward its
+    rising end in the solving frame, E compressive, X with the sense σ of
+    the face."""
+
+    name: str
+    face: Optional[int]
+    fx: float
+    fy: float
+    value: float
+
+
+def wedge_free_bodies(bases: Sequence[Base], faces: Sequence[Face],
+                      F: float, *, kh: float = 0.0, slide_sign: int = 1,
+                      shear_sense: str = FIXED,
+                      head_thrust: float = 0.0) -> Optional[list]:
+    """Every force on every wedge at the factor ``F``, in model order and
+    model coordinates: a list of :class:`WedgeForce` per wedge, or None
+    when a q vanishes at ``F`` itself (v0.1.467, D357).
+
+    E and X come from the recurrence the root was found on
+    (:func:`_forces`), with the senses :func:`solve` used; N′ is the
+    solver's; S is the base's LIMIT shear, c′l + N′ tan φ′ (the condition
+    the projection on v builds in), not the rest of the balance. So each
+    list sums to zero only if the wedge is in equilibrium at ``F``: the
+    check a free body is for, and the one a sign put wrong breaks. To the
+    tolerance of the root: the head face takes the given thrust and not
+    the recurrence's last E, so what is left sits on the head wedge
+    (2.6e-4 of its load at the default tolerance of 1e-4 on the
+    saturated problem 4 with the bisector, 1e-13 at 1e-12).
+
+    No points of application: the derivation balances the forces of each
+    wedge, not their moments (module docstring), so where E and X act on a
+    face is not part of the solution. Whoever draws them says so.
+    """
+    fr = _frame(bases, faces, slide_sign, head_thrust)
+    if shear_sense == KINEMATIC:
+        _v, kin = kinematic_senses(fr)
+        fr = _with_senses(fr, kin)
+    forces = _forces(fr, F, kh)
+    if forces is None:
+        return None
+    normals, E, _eff, X = forces[:4]
+    n = len(fr.alpha)
+    g = 1.0 / F
+    k = -1.0 if fr.reflected else 1.0
+    out = [None] * n
+    for i in range(n):
+        a = fr.alpha[i]
+        dl, du = fr.delta[i], fr.delta[i + 1]
+        nv = (-math.sin(a), math.cos(a))
+        tv = (math.cos(a), math.sin(a))
+        Np = normals[i]
+        S = fr.c[i] * g * fr.length[i] + Np * fr.tan_phi[i] * g
+        U = fr.pore[i]
+        # the faces in MODEL indices: the frame runs from the toe, which
+        # is the model's right end when the mass was reflected
+        toe = (n - i) if fr.reflected else i
+        head = (n - i - 1) if fr.reflected else i + 1
+        items = [
+            ("Wv", None, 0.0, -fr.weight[i], fr.weight[i]),
+            ("kh·Ws", None, -kh * fr.soil[i], 0.0, kh * fr.soil[i]),
+            ("Px", None, fr.px[i], 0.0, k * fr.px[i]),
+            ("N′", None, Np * nv[0], Np * nv[1], Np),
+            ("U", None, U * nv[0], U * nv[1], U),
+            ("S", None, S * tv[0], S * tv[1], S),
+            ("E", toe, E[i] * math.cos(dl), -E[i] * math.sin(dl), E[i]),
+            ("X", toe, X[i] * math.sin(dl), X[i] * math.cos(dl), X[i]),
+            ("E", head, -E[i + 1] * math.cos(du), E[i + 1] * math.sin(du),
+             E[i + 1]),
+            ("X", head, -X[i + 1] * math.sin(du), -X[i + 1] * math.cos(du),
+             X[i + 1]),
+        ]
+        model = (n - 1 - i) if fr.reflected else i
+        out[model] = [WedgeForce(name, face, k * fx, fy, value)
+                      for name, face, fx, fy, value in items]
+    return out
+
+
 def _sweep() -> list:
     """The trial factors, from the top down (∞ is tried first, apart)."""
     out = []

@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import Optional
 
 from .checks import equilibrium_fos
 from .external_forces import slice_forces
@@ -408,6 +409,88 @@ def _thrust_from_both_ends(st: InterSliceState, slist, other) -> None:
             y[j] = 0.5 * (y_left[j] + y_right[j])
     y[n] = y_right[n]
     st.y_thrust = y
+
+
+# ----------------------------------------------------------------------
+@dataclass
+class WedgeArrow:
+    """One force on a wedge of Sarma's, where Interpret draws it
+    (v0.1.467): the solver's :class:`~ogr_slip2d.sarma.solver.WedgeForce`
+    and a point in model coordinates."""
+
+    name: str
+    face: Optional[int]
+    fx: float
+    fy: float
+    x: float
+    y: float
+    #: the force with the sign of its convention (``WedgeForce.value``)
+    value: float = 0.0
+
+
+def sarma_wedge_forces(result: LEMResult) -> Optional[list]:
+    """Every force on every wedge of a result of Sarma's method, with the
+    point Interpret draws it at, or None when there is nothing to draw: a
+    result of another method, one without a factor, or Sarma's method on
+    vertical slices handed to it as such (no faces) (v0.1.467, D357).
+
+    The forces are the solver's at the result's factor
+    (``solver.wedge_free_bodies``, through ``wedges.to_solver`` with the
+    kh, kv and sense of shear the method applied), so each wedge's list
+    sums to zero. The POINTS are a convention, not part of the solution,
+    which balances the forces of each wedge and not their moments: the
+    vertical load, the seismic force and the horizontal external force at
+    the centroid of the wedge's polygon, the base forces at the middle of
+    its base, and E and X at the middle of their face.
+
+    A spilled population is read back first (``SpilledSlices.materialize``):
+    its stand-in has no vertical slices to read the sense of sliding off.
+    """
+    from shapely.geometry import Polygon
+
+    from ogr_slip2d.sarma import solver as _solver
+    from ogr_slip2d.sarma.wedges import Wedges, to_solver
+
+    if (result is None or result.fos is None
+            or not math.isfinite(result.fos)):
+        return None
+    details = result.details or {}
+    if "sarma_kc" not in details:
+        return None
+    wedges = result.slices
+    if hasattr(wedges, "materialize") and not isinstance(wedges, Wedges):
+        wedges = wedges.materialize()
+    if not isinstance(wedges, Wedges) or not wedges.faces:
+        return None
+    kh = float(details.get("kh", 0.0) or 0.0)
+    kv = float(details.get("kv", 0.0) or 0.0)
+    s_in = to_solver(wedges, kh, kv)
+    forces = _solver.wedge_free_bodies(
+        s_in.bases, s_in.faces, result.fos, kh=kh,
+        slide_sign=s_in.slide_sign,
+        shear_sense=details.get("sarma_shear_sense", _solver.FIXED),
+        head_thrust=s_in.head_thrust)
+    if forces is None:
+        return None
+    faces = list(wedges.faces)
+    out = []
+    for w, items in zip(wedges, forces):
+        c = Polygon(w.polygon).centroid
+        xb = 0.5 * (w.base_x_left + w.base_x_right)
+        yb = w.base_y_mid
+        arrows = []
+        for f in items:
+            if f.face is not None:
+                fc = faces[f.face]
+                x, y = 0.5 * (fc.x_base + fc.x_top), 0.5 * (fc.y_base + fc.y_top)
+            elif f.name in ("N′", "U", "S"):
+                x, y = xb, yb
+            else:
+                x, y = c.x, c.y
+            arrows.append(WedgeArrow(f.name, f.face, f.fx, f.fy, x, y,
+                                     f.value))
+        out.append(arrows)
+    return out
 
 
 # ----------------------------------------------------------------------

@@ -127,7 +127,11 @@ BAKER2 = {
 
 ALL_METHODS = ["bishop_simplified", "janbu_simplified", "janbu_corrected",
                "ordinary_fellenius", "spencer", "gle_morgenstern_price",
-               "lowe_karafiath", "corps_engineers_1", "corps_engineers_2"]
+               "lowe_karafiath", "corps_engineers_1", "corps_engineers_2",
+               # v0.1.467 (D357): Sarma had put the mobilised shear in
+               # ``base_shear_force``, the defect this file closed in five
+               # methods; here it is checked against s·W·sin α by hand
+               "sarma"]
 
 #: Spencer and GLE get a looser band than the rest because their answer ends
 #: a root search in lambda, so an identity can only close to that search's

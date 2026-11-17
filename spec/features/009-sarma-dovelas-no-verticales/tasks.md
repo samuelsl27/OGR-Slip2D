@@ -115,19 +115,29 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
 ## 0.1.466 — D451, la raíz junto a un polo
 
 - [x] Un tramo recto sigue recto: las cuñas se cortan sobre los extremos que resolvió el rebanado vertical.
-- [x] Una raíz con fuerzas de más de diez veces el peso no es un factor (`lem.sarma_near_pole`).
+- [x] Una raíz junto a un polo se dice (`method.sarma_near_pole`, menor |q| de las caras bajo 0,2), con su factor.
 - [x] Test `tests/test_sarma_pole_v1466.py`.
 
 ## 0.1.467 — Interpret
 
-- [ ] 28. Cuñas como polígonos, selección, diagrama de cuerpo libre, filas de cara y tabla del informe.
+- [x] 28. Cuñas como polígonos, selección, diagrama de cuerpo libre y filas de cara en la ventana; Sarma cumple
+      el contrato de `base_shear_force`. Test `tests/test_sarma_interpret_v1467.py`.
 
-## 0.1.468 — Herramienta de ángulos y menú contextual del vértice
+## 0.1.468 — Informe y exportaciones
+
+- [ ] 28b. La tabla de cuñas y la de caras del informe, los ajustes de Sarma en él, las caras en el CSV, el API y
+      el HDF5; y D453, las unidades de la tabla de dovelas del informe.
+
+## 0.1.469 — Herramienta de ángulos y menú contextual del vértice
 
 - [ ] 29. Definir y quitar ángulos con el ratón o tecleando, atajos en el vértice y deshacer, con sus tests en
       el lienzo mostrado.
 
-## 0.1.469 — Ángulos optimizados
+## 0.1.470 — D452, la regla de la raíz junto a un polo
+
+- [ ] Con su plan y su censo.
+
+## 0.1.471 — Ángulos optimizados
 
 - [ ] 30. Digitalizar las figuras 1.2 y 1.3 del problema 1, con la lectura declarada.
 - [ ] 31. Optimizador determinista; `optimized_global` y `optimized_all`; Block y Path con la crítica

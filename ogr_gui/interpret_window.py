@@ -60,6 +60,56 @@ from ogr_slip2d.interpretation import (  # noqa: E402
 )
 
 
+def _ring_distance(ring, x: float, y: float) -> float:
+    """The distance from (x, y) to the polygon ``ring``, 0 inside it."""
+    from shapely.geometry import Point, Polygon
+    return float(Polygon(ring).distance(Point(x, y)))
+
+
+def _wedge_forces(result):
+    """``postprocess.sarma_wedge_forces`` of ``result``, computed once per
+    result (v0.1.467, D357): the highlight and the diagram ask for it on
+    every click."""
+    if result is None:
+        return None
+    cached = getattr(result, "_ogr_wedge_forces", None)
+    if cached is None:
+        try:
+            from ogr_slip2d.postprocess import sarma_wedge_forces
+            cached = sarma_wedge_forces(result) or False
+        except Exception:  # noqa: BLE001
+            cached = False
+        try:
+            result._ogr_wedge_forces = cached
+        except Exception:  # noqa: BLE001
+            pass
+    return cached or None
+
+
+#: v0.1.467 -- the colour of each force of a wedge in the highlight
+_WEDGE_COLOURS = {"Wv": "#2c3e50", "kh·Ws": "#7f8c8d", "Px": "#7f8c8d",
+                  "N′": "#2980b9", "U": "#27ae60", "S": "#c0392b",
+                  "E": "#8e44ad", "X": "#16a085"}
+
+
+def _wedge_highlight_arrows(s, result):
+    """The arrows ``(x0, y0, dx, dy, colour)`` of the forces on wedge ``s``
+    of a result of Sarma's method, to a scale that fits the wedge, or None
+    when the result has no wedge forces (v0.1.467, D357)."""
+    forces = _wedge_forces(result)
+    i = getattr(s, "index", None)
+    if forces is None or i is None or not (0 <= i < len(forces)):
+        return None
+    live = [f for f in forces[i] if math.hypot(f.fx, f.fy) > 1e-9]
+    ring = list(s.polygon)
+    xs = [p[0] for p in ring]
+    ys = [p[1] for p in ring]
+    span = max(max(xs) - min(xs), max(ys) - min(ys), 1e-9)
+    unit = 0.6 * span / max([math.hypot(f.fx, f.fy) for f in live] + [1e-9])
+    return [(f.x, f.y, f.fx * unit, f.fy * unit,
+             _WEDGE_COLOURS.get(f.name, "#2c3e50")) for f in live]
+
+
 class _SliceDataDock(QDockWidget):
     """Dock panel: property table for the currently selected slice.
 
@@ -200,7 +250,22 @@ class _SliceDataDock(QDockWidget):
         ("E right (kN)", lambda s, r: _SliceDataDock._inter(r, s, "E", 1)),
         ("X left (kN)",  lambda s, r: _SliceDataDock._inter(r, s, "X", 0)),
         ("X right (kN)", lambda s, r: _SliceDataDock._inter(r, s, "X", 1)),
+        # v0.1.467 (D357) -- the faces of a wedge of Sarma's are inclined
+        # and carry water: their angle (90 on a vertical slice, which is
+        # what every other method's faces are) and E′ = E − PW, which only
+        # Sarma's method solves
+        ("E′ left (kN)",  lambda s, r: _SliceDataDock._inter(r, s, "E′", 0)),
+        ("E′ right (kN)", lambda s, r: _SliceDataDock._inter(r, s, "E′", 1)),
+        ("Face angle left θ (°)",
+         lambda s, r: _SliceDataDock._face_angle(r, s, 0)),
+        ("Face angle right θ (°)",
+         lambda s, r: _SliceDataDock._face_angle(r, s, 1)),
     ]
+
+    #: v0.1.467 (D357) -- the details Sarma's method publishes its face
+    #: forces in, model order, one per face (n + 1)
+    _SARMA_FACE_KEYS = {"E": "sarma_face_thrusts", "X": "sarma_face_shears",
+                        "E′": "sarma_face_effective"}
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -211,12 +276,33 @@ class _SliceDataDock(QDockWidget):
         Bishop, Janbu and Ordinary do not, because they never form them.
         """
         details = getattr(result, "details", None) or {}
-        return bool(details.get("boundary_ratios"))
+        # v0.1.467 (D357) -- and Sarma's, which solves E and X on its faces
+        return bool(details.get("boundary_ratios")
+                    or details.get("sarma_face_thrusts"))
+
+    @staticmethod
+    def _is_sarma(result) -> bool:
+        return "sarma_kc" in (getattr(result, "details", None) or {})
+
+    @staticmethod
+    def _face_angle(result, s, side):
+        """The angle θ (degrees from +x) of the left (0) or right (1) face
+        of slice ``s``: a wedge's own, 90 for a vertical slice."""
+        if s is None:
+            return "—"
+        faces = getattr(getattr(result, "slices", None), "faces", None)
+        i = getattr(s, "index", None)
+        if faces and i is not None and 0 <= i + side < len(faces):
+            return round(math.degrees(faces[i + side].theta), 2)
+        return 90.0
 
     @staticmethod
     def _inter_status(result):
         if result is None:
             return "—"
+        if _SliceDataDock._is_sarma(result):
+            # v0.1.467 -- it resolves them even where a result lost them
+            return tr("yes")
         return (tr("yes") if _SliceDataDock.solves_interslice(result)
                 else tr("no — this method does not resolve them"))
 
@@ -228,6 +314,10 @@ class _SliceDataDock(QDockWidget):
         slice redraw, and the march is O(n) over every slice.
         """
         if result is None or not _SliceDataDock.solves_interslice(result):
+            return None
+        # v0.1.467 (D357) -- Sarma's face forces are no march of vertical
+        # faces: read from its details (``_inter``), drawn as a wedge's
+        if _SliceDataDock._is_sarma(result):
             return None
         cached = getattr(result, "_ogr_interslice_state", None)
         if cached is None:
@@ -247,8 +337,16 @@ class _SliceDataDock(QDockWidget):
         """``E``/``X`` at the left (side 0) or right (side 1) boundary.
 
         The march carries n+1 boundary values, so slice ``i`` sits between
-        boundaries ``i`` and ``i+1``.
+        boundaries ``i`` and ``i+1``. Sarma's method publishes its own, one
+        per face in model order (v0.1.467), None where a q vanished.
         """
+        if _SliceDataDock._is_sarma(result):
+            key = _SliceDataDock._SARMA_FACE_KEYS.get(name)
+            values = (result.details or {}).get(key) if key else None
+            i = getattr(s, "index", None)
+            if not values or i is None or not (0 <= i + side < len(values)):
+                return "—"
+            return _SliceDataDock._r(values[i + side], 2)
         st = _SliceDataDock._inter_state(result)
         if st is None:
             return "—"
@@ -3405,6 +3503,14 @@ class InterpretWindow(QMainWindow):
         target = self._query_target()
         if target is None or not target.slices:
             return
+        if _SliceDataDock._is_sarma(target):
+            # v0.1.467 (D357) -- said with its reason
+            self.statusBar().showMessage(tr(
+                "The line of thrust is not computed for Sarma's method: it "
+                "balances the forces of each wedge, not their moments, so "
+                "where the forces act on a face is not part of its "
+                "solution."), 6000)
+            return
 
         from ogr_slip2d.postprocess import compute_interslice_state
         # v0.1.214 (D173) -- the earthquake the method APPLIED, which the
@@ -3590,6 +3696,16 @@ class InterpretWindow(QMainWindow):
         s, _res = self.slice_dock.current()
         if s is None:
             return
+        ring = getattr(s, "polygon", None)
+        if ring:
+            # v0.1.467 (D357) -- a wedge is framed by its polygon
+            xs = [p[0] for p in ring]
+            ys = [p[1] for p in ring]
+            span = max(max(xs) - min(xs), max(ys) - min(ys))
+            self.canvas.zoom_to_point(0.5 * (min(xs) + max(xs)),
+                                      0.5 * (min(ys) + max(ys)),
+                                      half_width=max(span, 1e-6) * 1.2)
+            return
         x = 0.5 * (s.base_x_left + s.base_x_right)
         y = 0.5 * (0.5 * (s.base_y_left + s.base_y_right)
                    + 0.5 * (s.top_y_left + s.top_y_right))
@@ -3665,6 +3781,18 @@ class InterpretWindow(QMainWindow):
         body._is_slice_highlight = True
         scene.addItem(body)
 
+        # v0.1.467 (D357) -- a wedge of Sarma's: the forces the method
+        # solved on it, each where Interpret draws it (the points are a
+        # convention: the method balances forces, not moments)
+        wedge = _wedge_highlight_arrows(s, result) if ring else None
+        if wedge is not None:
+            self._draw_highlight_arrows(scene, wedge)
+            return
+        if ring:
+            # a wedge whose forces could not be recovered: its polygon, and
+            # no arrows of a vertical slice it is not
+            return
+
         # Forces, as (dx, dy) from the point they act on.
         idx = getattr(s, "index", None)
         W = float(getattr(s, "weight", 0.0) or 0.0)
@@ -3721,6 +3849,13 @@ class InterpretWindow(QMainWindow):
                 # E is horizontal, X vertical; both scaled like the rest.
                 arrows.append((x_face, y_face, E[k] * unit, 0.0, "#8e44ad"))
                 arrows.append((x_face, y_face, 0.0, X[k] * unit, "#16a085"))
+        self._draw_highlight_arrows(scene, arrows)
+
+    def _draw_highlight_arrows(self, scene, arrows) -> None:
+        """Arrows ``(x0, y0, dx, dy, colour)`` in scene units, each with
+        its two barbs, as highlight items."""
+        from PySide6.QtGui import QColor, QPen
+        from PySide6.QtWidgets import QGraphicsLineItem
         for x0, y0, dx, dy, colour in arrows:
             if abs(dx) < 1e-12 and abs(dy) < 1e-12:
                 continue
@@ -3850,6 +3985,22 @@ class InterpretWindow(QMainWindow):
         best, best_d = None, float("inf")
         for res in candidates:
             for s in res.slices or []:
+                ring = getattr(s, "polygon", None)
+                if ring:
+                    # v0.1.467 (D357) -- a wedge of Sarma's is its polygon:
+                    # a click above an inclined face is in the wedge beyond
+                    # it, which the column of the base would not say
+                    d = _ring_distance(ring, x, y)
+                    # outside every polygon (a click just above the ground),
+                    # the nearest among those whose extent covers x, not
+                    # their base (the review of v0.1.467: the base's picked a
+                    # wedge 35 m away)
+                    xs = [p[0] for p in ring]
+                    if d > 0.0 and not (min(xs) <= x <= max(xs)):
+                        continue
+                    if d < best_d:
+                        best, best_d = (s, res), d
+                    continue
                 if not (s.base_x_left <= x <= s.base_x_right):
                     continue
                 lo = min(s.base_y_left, s.base_y_right)
@@ -3866,6 +4017,13 @@ class InterpretWindow(QMainWindow):
         self.slice_dock.show_slice(s, res)
         self.slice_dock.raise_()
         self._highlight_slice(s, res)
+        ring = getattr(s, "polygon", None)
+        if ring:
+            xs = [p[0] for p in ring]
+            self.statusBar().showMessage(
+                tr("Wedge %d of %d — x from %.2f to %.2f")
+                % (s.index + 1, len(res.slices), min(xs), max(xs)), 4000)
+            return
         self.statusBar().showMessage(
             tr("Slice %d of %d — x from %.2f to %.2f")
             % (s.index + 1, len(res.slices), s.base_x_left, s.base_x_right),
@@ -4082,10 +4240,27 @@ class InterpretWindow(QMainWindow):
             self._info(tr("No slices available."))
             return
         from PySide6.QtWidgets import QInputDialog
+        sarma = _SliceDataDock._is_sarma(target)
+        if sarma:
+            # v0.1.467 -- whether there is anything to draw, said before the
+            # number is asked, with the reason that is true
+            if not getattr(target.slices, "faces", None):
+                self.statusBar().showMessage(tr(
+                    "This result of Sarma's method has no wedges to draw: it "
+                    "was computed on vertical slices handed to it as such."),
+                    6000)
+                return
+            if _wedge_forces(target) is None:
+                self.statusBar().showMessage(tr(
+                    "The forces on the wedges of this result could not be "
+                    "recovered, so there is no free body diagram to draw."),
+                    6000)
+                return
         # v0.1.420 (D360) -- asked and shown from 1, as every slice number
         # the reader sees; ``idx`` is the engine's, from 0
         number, ok = QInputDialog.getInt(
-            self, tr("Free Body Diagram"), tr("Slice number:"),
+            self, tr("Free Body Diagram"),
+            tr("Wedge number:") if sarma else tr("Slice number:"),
             len(target.slices) // 2 + 1, 1, len(target.slices),
         )
         if not ok:
@@ -4101,14 +4276,19 @@ class InterpretWindow(QMainWindow):
             self._info(tr("matplotlib not installed."))
             return
 
-        # v0.1.464 (D357) -- a wedge of Sarma's has inclined faces and the
-        # forces the method solved on them; this diagram draws a vertical
-        # slice. Said on the status bar (not a modal box) until v0.1.467.
-        if "sarma_kc" in (getattr(target, "details", None) or {}):
-            self.statusBar().showMessage(tr(
-                "The free body diagram of a wedge of Sarma's method comes in "
-                "a later version: its faces are drawn on the model."), 6000)
-            return
+        # v0.1.467 (D357) -- a wedge of Sarma's: its own diagram, with the
+        # forces the method solved on its inclined faces
+        if sarma:
+            forces = _wedge_forces(target)
+            if forces is None or not (0 <= idx < len(forces)):
+                self.statusBar().showMessage(tr(
+                    "The forces on the wedges of this result could not be "
+                    "recovered, so there is no free body diagram to draw."),
+                    6000)
+                return
+            return self._wedge_free_body_diagram(target, idx, forces[idx],
+                                                 Figure, FigureCanvasQTAgg,
+                                                 QDialog, QVBoxLayout)
 
         from ogr_slip2d.postprocess import compute_interslice_state
         # v0.1.214 (D173) -- the earthquake the method APPLIED, which the
@@ -4228,6 +4408,69 @@ class InterpretWindow(QMainWindow):
         v.addWidget(canvas)
         # v0.1.435 (D413) -- non-modal, as every chart (the slice is asked
         # first, by ``getInt``, which is an input and stays modal)
+        from .xy_chart import keep_chart
+        return keep_chart(self, dlg)
+
+    def _wedge_free_body_diagram(self, target, idx, forces, Figure,
+                                 FigureCanvasQTAgg, QDialog, QVBoxLayout):
+        """The free body of wedge ``idx`` of a result of Sarma's method
+        (v0.1.467, D357): its polygon and every force the method solved on
+        it (``postprocess.sarma_wedge_forces``), to one scale, with their
+        sum, which is zero when the wedge is in equilibrium. E and X are
+        drawn at the middle of their face, and the diagram says that the
+        method does not give where they act."""
+        s = list(target.slices)[idx]
+        ring = list(s.polygon)
+        dlg = QDialog(self)
+        dlg.setWindowTitle(tr("Free Body Diagram — wedge {0} ({1})").format(
+            idx + 1, method_name(target.method_id)))
+        dlg.resize(640, 560)
+        v = QVBoxLayout(dlg)
+        fig = Figure(figsize=(6.6, 5.4), tight_layout=True)
+        ax = fig.add_subplot(111)
+        xs = [p[0] for p in ring]
+        ys = [p[1] for p in ring]
+        ax.fill(xs + [xs[0]], ys + [ys[0]], color="#d9d9d9",
+                edgecolor="black", lw=1.2, alpha=0.5, zorder=1)
+        live = [f for f in forces if math.hypot(f.fx, f.fy) > 1e-9]
+        f_max = max([math.hypot(f.fx, f.fy) for f in live] + [1e-9])
+        span = max(max(xs) - min(xs), max(ys) - min(ys), 1e-6)
+        scale = 0.6 * span / f_max
+        colours = {"Wv": "black", "kh·Ws": "#7f7f7f", "Px": "#7f7f7f",
+                   "N′": "#1f77b4", "U": "#2ca02c", "S": "#d62728",
+                   "E": "#9467bd", "X": "#8c564b"}
+        for f in live:
+            dx, dy = f.fx * scale, f.fy * scale
+            colour = colours.get(f.name, "black")
+            ax.annotate("", xy=(f.x + dx, f.y + dy), xytext=(f.x, f.y),
+                        arrowprops=dict(arrowstyle="-|>", color=colour,
+                                        lw=2.0), zorder=5)
+            label = (f.name if f.face is None
+                     else "%s%d" % (f.name, f.face + 1))
+            # with its sign (the review of v0.1.467): an effective normal
+            # in tension or an E pulling is what the reader looks for
+            ax.text(f.x + dx * 1.06, f.y + dy * 1.06,
+                    "%s=%.1f" % (label, f.value), fontsize=8.5,
+                    color=colour, ha="left" if dx >= 0 else "right", zorder=6)
+        load = max(abs(sum(f.fy for f in forces if f.name == "Wv")), 1e-9)
+        closure = math.hypot(sum(f.fx for f in forces),
+                             sum(f.fy for f in forces))
+        ax.set_aspect("equal", adjustable="box")
+        ax.grid(True, alpha=0.3)
+        ax.set_title(
+            (tr("Wedge {0}: α={1:.1f}°, ODF={2:.4f}") if self._factored_view()
+             else tr("Wedge {0}: α={1:.1f}°, FoS={2:.4f}")).format(
+                idx + 1, math.degrees(s.base_angle), target.fos), fontsize=9)
+        ax.text(0.01, 0.01, tr(
+            "Sum of the forces: {0:.2g} kN/m ({1:.1g} of Wv). E and X are "
+            "drawn at mid-face: Sarma's method does not give where they "
+            "act.").format(
+                closure, closure / load),
+            transform=ax.transAxes, fontsize=7.5, va="bottom")
+        ax.set_xlabel("x (m)")
+        ax.set_ylabel("y (m)")
+        canvas = FigureCanvasQTAgg(fig)
+        v.addWidget(canvas)
         from .xy_chart import keep_chart
         return keep_chart(self, dlg)
 
