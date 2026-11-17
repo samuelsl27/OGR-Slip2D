@@ -164,7 +164,10 @@ def lem_summary(res, *, with_slices: bool = False) -> Optional[dict]:
                                          # v0.1.466 (D451)
                                          "sarma_min_abs_q",
                                          "sarma_max_force_ratio",
-                                         "sarma_verticalized")
+                                         "sarma_verticalized",
+                                         # v0.1.470 (D452)
+                                         "sarma_kc_pole_distance",
+                                         "sarma_next_root")
               if k in details and isinstance(details[k], (int, float))
               and not isinstance(details[k], bool)}
     # v0.1.464 (D357) -- the faces of Sarma's wedges: E (total), E′ and X

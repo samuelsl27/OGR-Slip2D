@@ -51,6 +51,10 @@ _ROOT = Path(__file__).resolve().parent.parent
 _V1347 = [{'code': 'method.sarma_near_pole',
   'english': 'the factor of the reported surface, 0.9004, is a root of Kc(F) = kh next to a pole: the least |q| of its faces is 8.4e-07, under 0.2, and its forces reach 6.52e+05 times the total vertical load. Such a root can move with the number of wedges and may not be the branch the published cases follow.',
   'args': {'factor': 0.9004042925510508, 'q': 8.378376107343044e-07, 'limit': 0.2, 'ratio': 652301.0928836846}},
+ # v0.1.470 (D452): next to a zero of D too (problem 4 bent 2 m)
+ {'code': 'method.sarma_near_pair',
+  'english': 'the factor of the reported surface, 0.9232, also lies 0.072 % from a pole of Kc: with the pole beside it, it may be the half of a root and a pole that almost cancel, as a straight stretch barely bent leaves them. The factor is kept, the largest root; the next root down is 0.4291.',
+  'args': {'factor': 0.9231880585925649, 'distance': 0.07200824308449369, 'next': 0.4290537704383933}},
  {'code': 'method.sarma_vertex_data_unused',
   'english': '2 datum (data) given at vertices of the reported surface did not reach it (a crack cut the vertex off, Optimize moved it, or a weak layer clipped the surface): its faces took the policy and the face strength of the settings.',
   'args': {'count': 2}},

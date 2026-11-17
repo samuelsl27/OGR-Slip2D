@@ -11,7 +11,7 @@
 Slope stability, groundwater flow and rock mechanics — in Python, readable,
 tested and free.
 
-[![tests](https://img.shields.io/badge/tests-8003%20passing-brightgreen)](#tests)
+[![tests](https://img.shields.io/badge/tests-8013%20passing-brightgreen)](#tests)
 [![licence](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.11%2B-blue)](#installation)
 [![status](https://img.shields.io/badge/status-active%20development-orange)](#roadmap)
@@ -238,7 +238,7 @@ and took 9.8 minutes then; it is a filtered run like the others. The list is wri
 `--write-slow-list`, never by a run, and each whole run names the slow
 files it leaves in.
 
-About **84,600 lines** of implementation and **90,700 of tests**, **8003 of
+About **84,600 lines** of implementation and **90,700 of tests**, **8013 of
 them passing**, with no known failures. On the same machine the full suite
 took 39.7 minutes in series and 20.1 with `--jobs 4` at v0.1.397. It had
 taken 50 to 72 in series from v0.1.278 to v0.1.300, and 134 at v0.1.372,

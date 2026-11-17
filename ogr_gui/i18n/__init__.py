@@ -4526,6 +4526,18 @@ _DICTS: dict[str, dict[str, str]] = {
             "{ratio:.3g} veces la carga vertical total. Una raíz así puede "
             "moverse con el número de cuñas y puede no ser la rama que siguen "
             "los casos publicados.",
+        # v0.1.470 (D452)
+        "the factor of the reported surface, {factor:.4g}, also lies "
+        "{distance:.2g} % from a pole of Kc: with the pole beside it, it may "
+        "be the half of a root and a pole that almost cancel, as a straight "
+        "stretch barely bent leaves them. The factor is kept, the largest "
+        "root; the next root down is {next:.4g}.":
+            "el factor de la superficie del resultado, {factor:.4g}, queda "
+            "además a un {distance:.2g} % de un polo de Kc: con el polo de al "
+            "lado, puede ser la mitad de una raíz y un polo que casi se "
+            "cancelan, como los deja un tramo recto apenas doblado. El factor "
+            "se queda, la raíz mayor; la siguiente raíz hacia abajo es "
+            "{next:.4g}.",
         "{count} surface(s) have no factor because their wedges could not "
         "be built (their code says why).":
             "{count} superficie(s) no tienen factor porque no se pudieron "

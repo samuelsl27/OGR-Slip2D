@@ -42,6 +42,8 @@ SARMA_VERTICALIZED = "method.sarma_verticalized"
 SARMA_TENSION = "method.sarma_tension"
 #: v0.1.466 (D451): the factor is a root next to a pole of Kc
 SARMA_NEAR_POLE = "method.sarma_near_pole"
+#: v0.1.470 (D452): and next to a zero of D too, with the next root down
+SARMA_NEAR_PAIR = "method.sarma_near_pair"
 SARMA_WEDGES_REFUSED = "method.sarma_wedges_refused"
 SARMA_OWN_SETTINGS = "method.sarma_own_settings"
 SARMA_BAD_SETTING = "method.sarma_bad_setting"
@@ -278,6 +280,12 @@ METHOD_NOTES = {s.code: s for s in (
                 "times the total vertical load. Such a root can move with the "
                 "number of wedges and may not be the branch the published "
                 "cases follow."),
+    MessageSpec(SARMA_NEAR_PAIR,
+                "the factor of the reported surface, {factor:.4g}, also lies "
+                "{distance:.2g} % from a pole of Kc: with the pole beside it, "
+                "it may be the half of a root and a pole that almost cancel, "
+                "as a straight stretch barely bent leaves them. The factor is "
+                "kept, the largest root; the next root down is {next:.4g}."),
     MessageSpec(SARMA_VERTEX_DATA_UNUSED,
                 "{count} datum (data) given at vertices of the reported "
                 "surface did not reach it (a crack cut the vertex off, "

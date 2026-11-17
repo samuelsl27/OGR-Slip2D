@@ -1634,6 +1634,14 @@ def sarma_notes(result, search=None) -> list:
                               q=0.0 if q is None else q,
                               limit=NEAR_POLE_MIN_Q,
                               ratio=math.inf if ratio is None else ratio))
+            # v0.1.470 (D452) -- and next to a zero of D too: the likely half
+            # of a nearly cancelled pair, with the next root down (the factor
+            # stays the largest root, the owner's decision)
+            distance = details.get("sarma_kc_pole_distance")
+            nxt = details.get("sarma_next_root")
+            if distance is not None and nxt is not None:
+                out.append(_mnote(MN.SARMA_NEAR_PAIR, factor=result.fos,
+                                  distance=100.0 * distance, next=nxt))
     # v0.1.465 (D357) -- per-vertex data that did not reach the surface
     unused = getattr(getattr(result, "slices", None), "wedge_fields",
                      None) or {}

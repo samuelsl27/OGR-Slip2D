@@ -137,7 +137,11 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
 
 ## 0.1.470 — D452, la regla de la raíz junto a un polo
 
-- [ ] Con su plan y su censo.
+- [x] Con su plan y su censo (`_auditoria/P9_D452/medir_reglas_d452.py`). La regla elegida (saltar una raíz a menos
+      del 1,2 % de un cero de D) la refutó la revisión adversaria: el factor sigue siendo la raíz mayor, y una nota
+      (`method.sarma_near_pair`) da la raíz siguiente cuando la mayor lleva la huella del par casi cancelado
+      (decisión de la propietaria). D452 sigue abierta hasta Sarma (1979). Test
+      `tests/test_sarma_near_pair_v1470.py`.
 
 ## 0.1.471 — Ángulos optimizados
 

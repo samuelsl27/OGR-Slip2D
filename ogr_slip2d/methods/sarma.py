@@ -85,6 +85,15 @@ _REASONS = {
 #: such. A constant, not a setting.
 NEAR_POLE_MIN_Q = 0.2
 
+def _near_pair_details(pair) -> dict:
+    """``details`` of ``solver.near_pair`` (v0.1.470, D452): the distance of
+    the factor to a zero of D and the next root down, or nothing."""
+    if pair is None:
+        return {}
+    distance, next_root = pair
+    return {"sarma_kc_pole_distance": distance, "sarma_next_root": next_root}
+
+
 #: The strength of the faces, as ``settings.sarma.interslice_strength``.
 INTERSLICE_STRENGTHS = ("materials", "given", "none")
 
@@ -181,6 +190,20 @@ class SarmaNonVertical(LEMMethod):
                          slices=slices, reason=REASON_SARMA_REFUSED,
                          **msg.failure(code, **args))
 
+    def _near_pair(self, sol, bases, faces, kh, sign, head) -> dict:
+        """v0.1.470 (D452) -- for a factor already next to a pole of the
+        recurrence (least |q| under ``NEAR_POLE_MIN_Q``), whether it lies
+        next to a zero of D too, and the next root down (``solver.
+        near_pair``): only there, so no other surface pays for it. The
+        factor is not touched."""
+        q = sol.min_abs_q
+        if q is not None and q >= NEAR_POLE_MIN_Q:
+            return {}
+        return _near_pair_details(_solver.near_pair(
+            bases, faces, sol.fos, kh=kh, slide_sign=sign,
+            shear_sense=self.shear_sense, head_thrust=head,
+            tolerance=self.tolerance, max_iterations=self.max_iterations))
+
     def compute_fos(self, project: Project, surface: SurfaceProtocol,
                     slices: Slices) -> LEMResult:
         strengthless = self._no_shear_strength_result(surface, slices)
@@ -260,6 +283,7 @@ class SarmaNonVertical(LEMMethod):
                     sol.kinematically_admissible,
                 "sarma_verticalized": (slices.verticalized if is_wedges
                                        else 0),
+                **self._near_pair(sol, bases, faces, kh, sign, head),
                 "sarma_face_thrusts": sol.face_thrusts,
                 "sarma_face_effective": sol.face_effective,
                 "sarma_face_shears": sol.face_shears,

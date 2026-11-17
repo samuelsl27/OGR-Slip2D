@@ -83,6 +83,20 @@ a root of the equation, so it is returned, with ``max_force_ratio`` and
 ``min_abs_q`` for whoever reads the result to say so (owner's decision,
 2026-11-15); the method says it with a note (``method.sarma_near_pole``,
 v0.1.466, D451), and which root a near pole should leave is open (D452).
+
+v0.1.470 (D452, the owner's decision): still open, and the factor is still
+the largest root. Bent a hair, a cancelled factor splits into a root of N
+and a zero of D, the denominator of Kc, a hair apart (problem 4 saturated
+with its scarp bent 1 cm gives 0.9005, the published 0.4347 bent the same
+being the next root down). A rule that skipped a root within 1.2 % of a
+zero of D was measured and refuted by the adversarial review: the published
+branch of problem 4 saturated lies 1.4 % from a TRUE zero of D, and kh 0.03
+or γw = 10 bring it inside, the factor falling to 0.128 (the bench's
+``_auditoria/P9_D452/medir_reglas_d452.py`` and the changelog of v0.1.470).
+What is kept is the information: ``near_pair`` says how far the largest
+root lies from a zero of D and finds the next root down, and the method
+asks it only for a root already next to a pole of the recurrence (least
+|q| under 0.2), where the pair is the likely cause.
 And a near coincidence the GEOMETRY made, not the model, is no longer
 made: the wedges are cut on the ends the vertical slicing resolved
 (``wedges._with_resolved_ends``), so a straight end stretch whose end the
@@ -138,6 +152,15 @@ _PARALLEL = 1e-12
 #: Below this (relative to the wedges' speeds) two wedges do not slide on
 #: their common face, and the face takes the fixed sense.
 _NO_SLIP = 1e-12
+#: v0.1.470 (D452): within this, relative, a zero of D beside the factor is
+#: said (``near_pair``); it moves no factor. The window of the refuted rule
+#: of the same version, kept for the note: between 1.05 % (the spurious root
+#: of a toe bent 0.57°) and 1.4 % (the published saturated problem 4 from a
+#: true zero of D), which a note can live with and a rule could not.
+NEAR_KC_POLE = 0.012
+#: The points ``_near_kc_pole`` looks for a change of sign of D at.
+_NEAR_KC_SAMPLES = 33
+
 #: Two angles [rad], or two tangents (relative), closer than this are the
 #: same for ``_pairs``: a tan φ read through the numerical secant of a
 #: Mohr-Coulomb material differs by up to 1.3e-12 between two slices of one
@@ -705,6 +728,94 @@ def wedge_free_bodies(bases: Sequence[Base], faces: Sequence[Face],
         out[model] = [WedgeForce(name, face, k * fx, fy, value)
                       for name, face, fx, fy, value in items]
     return out
+
+
+def _near_kc_pole(fr: _Frame, F: float) -> Optional[float]:
+    """The relative distance from ``F`` to the nearest zero of D, the
+    denominator of Kc, when one lies within ``NEAR_KC_POLE`` of it, or None
+    (v0.1.470, D452). A zero is a change of sign of D between two of
+    ``_NEAR_KC_SAMPLES`` points across the window, refined by Brent."""
+    eps = NEAR_KC_POLE
+    if not (0.0 < eps < 1.0):
+        return None
+    xs = np.geomspace(F * (1.0 - eps), F * (1.0 + eps), _NEAR_KC_SAMPLES)
+    zd = np.asarray(_polynomial(fr, 1.0 / xs, _ARRAY)[1], dtype=float)
+    if not np.any(zd):
+        # D ≡ 0 (no base carries soil weight, which ``_check`` admits): Kc
+        # has no denominator to have a zero of, and every sample would be
+        # one (the review of v0.1.470)
+        return None
+    best = None
+    for i in range(len(xs) - 1):
+        if zd[i] == 0.0:
+            p = float(xs[i])
+        elif (zd[i] > 0.0) != (zd[i + 1] > 0.0):
+            p = brentq(lambda x: _polynomial(fr, 1.0 / x)[1], xs[i],
+                       xs[i + 1], xtol=1e-12 * F)
+        else:
+            continue
+        d = abs(F - p) / F
+        if best is None or d < best:
+            best = d
+    return best
+
+
+def _lower_root(fr: _Frame, kh: float, below: float, tolerance: float,
+                max_iterations: int):
+    """The next root of H under ``below``, down the sweep, by Brent:
+    ``(F, iterations, lower end)``, or None when there is none or Brent does
+    not converge (v0.1.470)."""
+    grid = [x for x in _sweep() if x < below * (1.0 - 1e-15)]
+    h_prev, F_prev = _H(fr, 1.0 / below, kh), below
+    if h_prev == 0.0:
+        if not grid:
+            return None
+        F_prev = grid.pop(0)
+        h_prev = _H(fr, 1.0 / F_prev, kh)
+    for x in grid:
+        h = _H(fr, 1.0 / x, kh)
+        if h == 0.0:
+            return x, 0, x
+        if (h > 0.0) != (h_prev > 0.0):
+            root, r = brentq(lambda y: _H(fr, 1.0 / y, kh), x, F_prev,
+                             xtol=tolerance, maxiter=int(max_iterations),
+                             full_output=True, disp=False)
+            if not r.converged:
+                return None
+            return float(root), int(r.iterations), x
+        h_prev, F_prev = h, x
+    return None
+
+
+def near_pair(bases: Sequence[Base], faces: Sequence[Face], F: float, *,
+              kh: float = 0.0, slide_sign: int = 1, shear_sense: str = FIXED,
+              head_thrust: float = 0.0, tolerance: float = 1e-4,
+              max_iterations: int = 75) -> Optional[tuple]:
+    """Whether the root ``F`` of these wedges (the factor ``solve`` found)
+    lies within ``NEAR_KC_POLE`` of a zero of D, the denominator of Kc:
+    ``(relative distance, next root down or None)``, or None when it does
+    not (v0.1.470, D452).
+
+    With a pole of the recurrence beside it (a least |q| near zero), such a
+    root is the likely half of a root and a pole that almost cancel, as a
+    straight stretch barely bent leaves them, and the next root down the
+    one the unbent surface has. Information, not a rule: the factor stays
+    the largest root (module docstring). The next root is the next change
+    of sign of H down the sweep, refined by Brent with the same tolerance;
+    one the sweep's step hides is not found."""
+    fr = _frame(bases, faces, slide_sign, head_thrust)
+    if _parallel_face(fr) is not None:
+        return None
+    if shear_sense == KINEMATIC:
+        fr = _with_senses(fr, kinematic_senses(fr)[1])
+    d = _near_kc_pole(fr, F)
+    if d is None:
+        return None
+    lower = [x for x in _sweep() if x < F]
+    if not lower:
+        return d, None
+    nxt = _lower_root(fr, kh, lower[0], tolerance, max_iterations)
+    return d, (None if nxt is None else nxt[0])
 
 
 def _sweep() -> list:
