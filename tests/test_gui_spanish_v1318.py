@@ -190,6 +190,11 @@ EXCEPTIONS: dict = {
         "the unit of a radius in the summary",
     ("interpret_window.py", ".csv"):
         "the extension of the file a message names",
+    # v0.1.468 (D357) -- the second file of the slice CSV, beside the chosen
+    # one, by the owner's decision: a fixed name a script can find, as the
+    # keys of its columns are
+    ("interpret_window.py", "_faces.csv"):
+        "the suffix of the faces' file a message names",
     ("main_window.py", ".ogr"):
         "the extension of the file a message names",
     ("main_window.py", ".dxf"):

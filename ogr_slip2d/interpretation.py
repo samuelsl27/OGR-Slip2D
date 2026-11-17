@@ -622,29 +622,9 @@ def sf_along_slope(search_result, use_left: bool = True,
 # ----------------------------------------------------------------------
 # Per-slice numbers of the method
 # ----------------------------------------------------------------------
-def per_slice(result, name: str, index) -> Optional[float]:
-    """One entry of a result's per-slice array (``base_normal_force``,
-    ``base_shear_force``, ``base_shear_strength``), or None.
-
-    Those are computed by the METHOD and live on the result, not on the
-    slice: a reader handed only the slice cannot show them."""
-    if result is None:
-        return None
-    arr = getattr(result, name, None)
-    if not arr or index is None or not (0 <= index < len(arr)):
-        return None
-    v = arr[index]
-    return v if isinstance(v, (int, float)) and math.isfinite(v) else None
-
-
-def slice_stress(result, name: str, slice_) -> Optional[float]:
-    """A per-slice force of the method divided by the base length: the
-    stress the reference reports."""
-    f = per_slice(result, name, getattr(slice_, "index", None))
-    length = getattr(slice_, "base_length", 0.0) or 0.0
-    if f is None or length <= 0:
-        return None
-    return f / length
+# v0.1.468 (D453) -- the rule lives in the core, where the PDF report can ask
+# it too (it printed forces under its kPa): one copy, imported here.
+from ogr_core.result_rows import face_rows, per_slice, slice_stress  # noqa: E402,F401
 
 
 def base_parameter(slice_, name: str):

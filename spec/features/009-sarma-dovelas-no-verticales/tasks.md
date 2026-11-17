@@ -125,8 +125,9 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
 
 ## 0.1.468 — Informe y exportaciones
 
-- [ ] 28b. La tabla de cuñas y la de caras del informe, los ajustes de Sarma en él, las caras en el CSV, el API y
-      el HDF5; y D453, las unidades de la tabla de dovelas del informe.
+- [x] 28b. La tabla de cuñas y la de caras del informe, los ajustes de Sarma en él, las caras en el CSV, el API y
+      el HDF5; y D453, las unidades de la tabla de dovelas del informe. Una sola fuente de las filas,
+      `ogr_core/result_rows.py`. Test `tests/test_sarma_report_v1468.py`.
 
 ## 0.1.469 — Herramienta de ángulos y menú contextual del vértice
 

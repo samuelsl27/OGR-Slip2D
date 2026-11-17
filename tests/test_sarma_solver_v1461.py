@@ -194,12 +194,16 @@ def _solve(bases, faces, **kw):
     return solve(bases, faces, **kw)
 
 
-def _equilibrium(bases, faces, sol, kh=0.0):
+def _equilibrium(bases, faces, sol, kh=0.0, head=0.0):
     """The worst force residual of any wedge, over the total vertical load,
     and the worst face law residual, written from the conventions alone (a
     mass sliding toward −x; one that slides toward +x is reflected here
     first): base N′n + Un + T t with T = (cl + N′ tan φ)/F; face E m + X s
-    with X = σ[(E − PW) tan φ̄ + c̄ d]/F."""
+    with X = σ[(E − PW) tan φ̄ + c̄ d]/F.
+
+    v0.1.468 -- ``head``, the water of a tension crack, is the PW of the head
+    face, which the faces give as 0: E′ = E − PW is 0 there (the review of
+    0.1.468), and the solver says so in ``face_water``."""
     N, E, X, Ee = (sol.base_normals, sol.face_thrusts, sol.face_shears,
                    sol.face_effective)
     sigma = sol.senses
@@ -214,7 +218,8 @@ def _equilibrium(bases, faces, sol, kh=0.0):
         want = sigma[j] * ((E[j] - f.water_force) * f.tan_phi
                            + f.cohesion * f.length) / F
         law = max(law, abs(want - X[j]) / scale)
-        assert abs(Ee[j] - (E[j] - f.water_force)) <= 1e-9 * scale
+        pw = f.water_force + (head if j == len(faces) - 1 else 0.0)
+        assert abs(Ee[j] - (E[j] - pw)) <= 1e-9 * scale
     for i, b in enumerate(bases):
         a = b.alpha
         t, n = (math.cos(a), math.sin(a)), (-math.sin(a), math.cos(a))
@@ -346,7 +351,8 @@ class TestOneWedge:
                         want = self._closed(U, kh, kv, push)
                         assert abs(sol.fos - want) <= 1e-8 * want, (
                             U, kh, kv, push, mirror, sol.fos, want)
-                        worst, law = _equilibrium(b, f, sol, kh=kh)
+                        worst, law = _equilibrium(b, f, sol, kh=kh,
+                                                  head=push)
                         assert worst <= 1e-9 and law <= 1e-12, (worst, law)
                         n += 1
         assert n == 24

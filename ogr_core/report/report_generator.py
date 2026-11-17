@@ -33,6 +33,7 @@ from ogr_core.project.reported import (KY, NEWMARK, displacement_in_units,
                                        factor_kh, reported_caption,
                                        run_caption, standard_note)
 from ogr_core.project.user_surfaces import is_user_surface_of
+from ogr_core.result_rows import face_rows, slice_stress
 
 try:
     from reportlab.lib import colors
@@ -409,6 +410,12 @@ def generate_report(
         (T("Tolerance"), m.tolerance),
         (T("Maximum Iterations"), m.max_iterations),
     ]))
+    if "sarma" in method_ids:
+        # v0.1.468 (D357) -- Sarma's method has settings of its own, which
+        # the global ones above do not reach
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("<b>%s</b>" % escape(name_of("sarma")), body))
+        story.append(kv_table(_sarma_settings_rows(project, T)))
     story.append(Spacer(1, 6))
     story.append(Paragraph("<b>%s</b>" % T("Surface Options"), body))
     story.append(kv_table([
@@ -568,6 +575,7 @@ def generate_report(
             rows.append((T("Total Slice Area"), f"{_fmt(area)} m²"))
         except Exception:  # noqa: BLE001
             pass
+        rows += _sarma_result_rows(crit, T)
         # v0.1.243 (D226b) — how the design standard classed each load on
         # this surface: whether a load drives depends on the surface, so it
         # is said here and not in the run's section.
@@ -661,6 +669,13 @@ def generate_report(
         sliced += 1
         story.append(_slice_table(res.critical, project, T))
         story.append(Spacer(1, 8))
+        # v0.1.468 (D357) -- the faces of Sarma's wedges, with the forces the
+        # method solved on them (``result_rows.face_rows``)
+        faces = _face_table(res.critical, project, T)
+        if faces is not None:
+            table_heading(T("Faces of the Wedges") + " — " + name_of(mid))
+            story.append(faces)
+            story.append(Spacer(1, 8))
 
     # ---- 8. List of Coordinates -----------------------------------
     story.append(PageBreak())
@@ -915,13 +930,12 @@ def _slice_table(crit, project, T=_same):
             else:
                 c = getattr(mat.strength, "cohesion", 0)
                 phi = getattr(mat.strength, "friction_angle", 0)
-        # Base normal/shear come from the LEMResult arrays if present
-        bn = (crit.base_normal_force[i]
-              if crit.base_normal_force
-              and i < len(crit.base_normal_force) else None)
-        ss = (crit.base_shear_strength[i]
-              if crit.base_shear_strength
-              and i < len(crit.base_shear_strength) else None)
+        # v0.1.468 (D453) -- the STRESSES the columns say, N/l and τ_f: the
+        # arrays are forces in kN/m (``LEMResult``, v0.1.107), and the table
+        # printed them under its kPa, in every method; by the rule the panel
+        # of Interpret divides them by (``result_rows.slice_stress``)
+        bn = slice_stress(crit, "base_normal_force", sl)
+        ss = slice_stress(crit, "base_shear_strength", sl)
         row = [
             str(i + 1),
             _fmt(sl.width, 3),
@@ -940,6 +954,97 @@ def _slice_table(crit, project, T=_same):
     cw = [8, 13, 15, 18, 11, 9, 11, 16, 17, 12]
     if weighted:
         cw.insert(3, 12)
+    scale = w / sum(cw)
+    t = Table(rows, colWidths=[c * scale for c in cw], repeatRows=1)
+    st = _grid_style()
+    st.add("FONTSIZE", (0, 0), (-1, -1), 6.5)
+    st.add("ALIGN", (0, 0), (-1, -1), "CENTER")
+    t.setStyle(st)
+    return t
+
+
+#: v0.1.468 (D357) -- the words of Sarma's settings, as the Methods page
+#: shows them (``project_settings_dialog``)
+_SARMA_POLICY = {"bisector": "Bisector", "mean_normal": "Mean normal",
+                 "vertical": "Vertical faces"}
+_SARMA_STRENGTH = {"materials": "From the materials", "given": "Given c and φ",
+                   "none": "No face strength"}
+_SARMA_SENSE = {"fixed": "Fixed: the upper wedge moves down",
+                "kinematic": "Kinematic: the rigid wedges' own"}
+
+
+def _sarma_settings_rows(project, T=_same) -> list:
+    """The rows of Sarma's own settings (``settings.sarma``) for the
+    report's Analysis Options (v0.1.468, D357)."""
+    sa = project.settings.sarma
+    rows = [
+        # the setting as the Methods page names it: the wedges a surface
+        # gets are its own row in Global Minimums (the review of 0.1.468:
+        # both were «Number of Wedges», 25 and 19)
+        (T("Least Number of Wedges"), sa.num_slices),
+        (T("Face Angles"), T(_SARMA_POLICY.get(sa.slice_angles,
+                                               sa.slice_angles))),
+        (T("Face Strength"), T(_SARMA_STRENGTH.get(sa.interslice_strength,
+                                                   sa.interslice_strength))),
+    ]
+    if sa.interslice_strength == "given":
+        rows += [(T("Face Cohesion") + " [kPa]", _fmt(sa.interslice_cohesion)),
+                 (T("Face Friction Angle") + " [°]",
+                  _fmt(sa.interslice_phi))]
+    rows += [
+        (T("Boundaries at Material Contacts"),
+         T("At every contact") if sa.boundaries_at_materials
+         else T("Not at contacts")),
+        (T("Sense of the Face Shear"), T(_SARMA_SENSE.get(sa.shear_sense,
+                                                         sa.shear_sense))),
+        (T("Tolerance"), sa.tolerance),
+        (T("Maximum Iterations"), sa.max_iterations),
+    ]
+    return rows
+
+
+def _sarma_result_rows(crit, T=_same) -> list:
+    """The rows a critical surface of Sarma's method adds to its Global
+    Minimums block (v0.1.468, D357): Kc at F = 1 (Sarma 1973), the least
+    |q| of the faces (how near the root sits to a pole, D451), the largest
+    force over the vertical load, the wedges and the faces made vertical.
+    None for another method."""
+    d = getattr(crit, "details", None) or {}
+    if "sarma_kc" not in d:
+        return []
+    faces = getattr(getattr(crit, "slices", None), "faces", None)
+    rows = [(T("Kc at F = 1"), _fmt(d.get("sarma_kc"), 4)),
+            (T("Least |q| of the Faces"), _fmt(d.get("sarma_min_abs_q"), 3)),
+            (T("Largest Force / Vertical Load"),
+             _fmt(d.get("sarma_max_force_ratio"), 3))]
+    if faces:
+        rows.append((T("Number of Wedges"), len(faces) - 1))
+    rows.append((T("Faces Made Vertical"), int(d.get("sarma_verticalized")
+                                               or 0)))
+    return rows
+
+
+def _face_table(crit, project, T=_same):
+    """The faces of the wedges of a critical surface of Sarma's method, with
+    the forces the method solved on them (``result_rows.face_rows``), or
+    None for any other result (v0.1.468, D357)."""
+    rows_in = face_rows(crit)
+    if not rows_in:
+        return None
+    header = ["#", "x\n[m]", "y\n[m]", "θ\n[°]", T("Length") + "\n[m]",
+              "PW\n[kN/m]", "c̄\n[kPa]", "φ̄\n[°]", "E\n[kN/m]",
+              "E′\n[kN/m]", "X\n[kN/m]"]
+    rows = [header]
+    for r in rows_in:
+        # from 1, as the wedges of the slice table above
+        rows.append([str(r["index"] + 1), _fmt(r["x_base"], 2),
+                     _fmt(r["y_base"], 2),
+                     _fmt(r["angle_deg"], 1), _fmt(r["length"], 2),
+                     _fmt(r["water_force"], 1), _fmt(r["cohesion"], 1),
+                     _fmt(r["friction_angle"], 1), _fmt(r["E"], 1),
+                     _fmt(r["E_effective"], 1), _fmt(r["X"], 1)])
+    w = project_width(project)
+    cw = [7, 11, 11, 10, 11, 12, 11, 10, 14, 14, 14]
     scale = w / sum(cw)
     t = Table(rows, colWidths=[c * scale for c in cw], repeatRows=1)
     st = _grid_style()

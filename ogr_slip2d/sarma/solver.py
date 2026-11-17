@@ -222,6 +222,9 @@ class SarmaSolution:
     face_thrusts: Optional[list] = None
     face_effective: Optional[list] = None
     face_shears: Optional[list] = None
+    #: PW per face [kN/m] (v0.1.468): the faces' own, and on the head face
+    #: the water of a tension crack, which the faces give as 0.
+    face_water: Optional[list] = None
     #: σ per face, and the wedges' speeds of the rigid mechanism (toe
     #: wedge 1), with whether all of them are positive.
     senses: Optional[list] = None
@@ -568,9 +571,9 @@ def kc(bases: Sequence[Base], faces: Sequence[Face], F: float, *,
 
 
 def _forces(fr: _Frame, F: float, kh: float):
-    """N′ per base and (E, E′, X) per face at F, in the frame, and the min
-    q and min |q| of ``SarmaSolution``. None where a q vanishes at F
-    itself."""
+    """N′ per base and (E, E′, X) per face at F, in the frame, the min q
+    and min |q| of ``SarmaSolution``, and PW per face. None where a q
+    vanishes at F itself."""
     g = 1.0 / F
     rows, tf, S = _coefficients(fr, g)
     n = len(fr.alpha)
@@ -598,14 +601,19 @@ def _forces(fr: _Frame, F: float, kh: float):
         # base reaction = −(the rest); N′ = R·n − U, n = (−sin α, cos α)
         normals.append((fx * math.sin(a) - fy * math.cos(a))
                        - fr.pore[i])
-    eff = [E[j] - fr.pw[j] for j in range(n + 1)]
+    # v0.1.468 -- the water of a tension crack is the head thrust, on an end
+    # face whose PW is 0 by construction (the review of 0.1.468): it is that
+    # face's water, so its E′ = E − PW is 0, not the crack's whole thrust
+    water = list(fr.pw)
+    water[n] += fr.head
+    eff = [E[j] - water[j] for j in range(n + 1)]
     # qᵢ divides Eᵢ₊₁: a real thrust for every interior face, and for the
     # head face only under a crack's water
     dividing = [rows[i][3] for i in range(n - 1)]
     if fr.head != 0.0:
         dividing.append(rows[n - 1][3])
     return (normals, E, eff, X, (min(dividing) if dividing else None),
-            (min(abs(q) for q in dividing) if dividing else None))
+            (min(abs(q) for q in dividing) if dividing else None), water)
 
 
 class WedgeForce(NamedTuple):
@@ -838,15 +846,17 @@ def solve(bases: Sequence[Base], faces: Sequence[Face], *, kh: float = 0.0,
                         kinematically_admissible=all(s > 0.0 for s in v))
     forces = _forces(fr, F, kh)
     if forces is not None:
-        normals, E, eff, X, out.min_q, out.min_abs_q = forces
+        normals, E, eff, X, out.min_q, out.min_abs_q, water = forces
         load = abs(sum(fr.weight))
         if load > 0.0:
             out.max_force_ratio = max(
                 max(abs(x) for x in normals), max(abs(x) for x in eff),
                 max(abs(x) for x in X)) / load
         if fr.reflected:
-            normals, E, eff, X = (list(reversed(normals)), list(reversed(E)),
-                                  list(reversed(eff)), list(reversed(X)))
+            normals, E, eff, X, water = (
+                list(reversed(normals)), list(reversed(E)),
+                list(reversed(eff)), list(reversed(X)), list(reversed(water)))
         out.base_normals, out.face_thrusts = normals, E
         out.face_effective, out.face_shears = eff, X
+        out.face_water = water
     return out

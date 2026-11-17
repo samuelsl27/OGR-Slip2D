@@ -38,12 +38,19 @@ from typing import Optional
 
 import numpy as np
 
+from ogr_core.result_rows import face_rows
+
 # v0.1.340 (D337) -- ``SearchResult`` (``ogr_slip2d.search``) is named in
 # the annotations below as a string, which ``from __future__ import
 # annotations`` never evaluates: the core does not import the engine, not
 # even for a type checker.
 
 RESULTS_FORMAT_VERSION = "0.1"
+
+
+def _or_nan(value) -> float:
+    """A number of a row, or NaN for its None (an f8 column's gap)."""
+    return np.nan if value is None else float(value)
 
 
 # ----------------------------------------------------------------------
@@ -202,12 +209,22 @@ def save_results(
                 # them, so every other file is what it was.
                 faces = getattr(res.slices, "faces", None)
                 if faces:
+                    # v0.1.468 -- and, after those six, the angle of each
+                    # face, its strength and the forces the method solved
+                    # on it: the rows and the names of ``result_rows.
+                    # face_rows``, which the API and the CSV give too (PW is
+                    # the method's, with a tension crack's water on the
+                    # head face). A force the method could not give (no
+                    # factor, or a q vanished at it) is NaN: the gap of a
+                    # numeric column, as in ``fos_array``.
+                    names = ("x_base", "y_base", "x_top", "y_top", "length",
+                             "water_force", "angle_deg", "cohesion",
+                             "friction_angle", "E", "E_effective", "X")
                     sg.create_dataset("faces", data=np.array(
-                        [(f.x_base, f.y_base, f.x_top, f.y_top, f.length,
-                          f.water_force) for f in faces], dtype="f8"),
+                        [tuple(_or_nan(r[k]) for k in names)
+                         for r in face_rows(res)], dtype="f8"),
                         compression="gzip")
-                    sg["faces"].attrs["columns"] = (
-                        "x_base,y_base,x_top,y_top,length,water_force")
+                    sg["faces"].attrs["columns"] = ",".join(names)
                 kc = (getattr(res, "details", None) or {}).get("sarma_kc")
                 if kc is not None:
                     sg.attrs["sarma_kc"] = float(kc)

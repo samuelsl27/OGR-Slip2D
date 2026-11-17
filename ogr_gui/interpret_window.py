@@ -16,6 +16,7 @@ Author: Samuel Sáez López (UPCT)
 from __future__ import annotations
 
 import math
+import os
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal
@@ -2629,19 +2630,24 @@ class InterpretWindow(QMainWindow):
             return math.degrees(s.base_angle)
         # The per-slice arrays are FORCES; the plots want stresses, so
         # they are divided by the base length of their own slice.
-        length = max(getattr(s, "base_length", 0.0), 1e-12)
-        if key == "base_normal_force":
-            vals = result.base_normal_force or []
-            return (vals[i] / length) if i < len(vals) else 0.0
-        if key == "shear_strength":
-            vals = result.base_shear_strength or []
-            return (vals[i] / length) if i < len(vals) else 0.0
+        # v0.1.468 -- by the rule the report, the panel and the CSV ask
+        # (``result_rows.slice_stress``; the review of 0.1.468 found this
+        # copy): a slice without a number is a gap in the plot, NaN, where
+        # the copy plotted a 0 that reads as a measured zero (a base of no
+        # length was divided by 1e-12)
+        from ogr_core.result_rows import slice_stress
+        name = {"base_normal_force": "base_normal_force",
+                "shear_strength": "base_shear_strength",
+                "shear_stress": "base_shear_strength"}.get(key)
+        if name is None:
+            return 0.0
+        value = slice_stress(result, name, s)
+        if value is None:
+            return math.nan
         if key == "shear_stress":
-            vals = result.base_shear_strength or []
             # v0.1.220 (D211) -- the equilibrium's F, as the slice panel.
-            f = _equilibrium_fos(result) if result.fos else 1.0
-            return (vals[i] / length / f) if i < len(vals) else 0.0
-        return 0.0
+            value /= _equilibrium_fos(result) if result.fos else 1.0
+        return value
 
     def _delete_query(self) -> None:
         # v0.1.420 (D360) -- another query ends the slice query
@@ -3309,7 +3315,7 @@ class InterpretWindow(QMainWindow):
     def _export_slice_data_csv(self) -> None:
         """The slices of the selected surface, or of the critical one, with
         the method's per-slice numbers (``interpretation.slice_rows``)."""
-        from ogr_slip2d.interpretation import slice_rows
+        from ogr_slip2d.interpretation import face_rows, slice_rows
         target = getattr(self, "_selected_result", None)
         if target is None and self.search_result is not None:
             target = self.search_result.critical
@@ -3321,16 +3327,31 @@ class InterpretWindow(QMainWindow):
         if not path:
             return
         rows = slice_rows(target)
-        keys = list(rows[0]) if rows else []
+        # v0.1.468 (D357) -- the faces of Sarma's wedges go to a second file
+        # beside the chosen one (the owner's decision): one row per face, a
+        # table of its own, with the forces the method solved on it
+        faces = face_rows(target)
+        faces_path = (os.path.splitext(path)[0] + "_faces.csv"
+                      if faces else None)
         try:
             import csv
-            with open(path, "w", newline="", encoding="utf-8") as fh:
-                w = csv.writer(fh)
-                w.writerow(keys)
-                for r in rows:
-                    w.writerow(["" if r[k] is None else r[k] for k in keys])
-            self.statusBar().showMessage(tr("Slice data exported to %s")
-                                         % path, 3000)
+            for out, table in ((path, rows), (faces_path, faces)):
+                if out is None:
+                    continue
+                keys = list(table[0]) if table else []
+                with open(out, "w", newline="", encoding="utf-8") as fh:
+                    w = csv.writer(fh)
+                    w.writerow(keys)
+                    for r in table:
+                        w.writerow(["" if r[k] is None else r[k]
+                                    for k in keys])
+            if faces_path is None:
+                self.statusBar().showMessage(tr("Slice data exported to %s")
+                                             % path, 3000)
+            else:
+                self.statusBar().showMessage(tr(
+                    "Wedge and face data exported to %s and %s")
+                    % (path, faces_path), 3000)
         except Exception as e:  # noqa: BLE001
             # v0.1.434 (D412) -- the system's text inside a translated frame:
             # it was shown alone

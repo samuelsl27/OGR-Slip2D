@@ -263,5 +263,7 @@ class SarmaNonVertical(LEMMethod):
                 "sarma_face_thrusts": sol.face_thrusts,
                 "sarma_face_effective": sol.face_effective,
                 "sarma_face_shears": sol.face_shears,
+                # v0.1.468 -- PW per face, the crack's water on the head one
+                "sarma_face_water": sol.face_water,
                 "sarma_non_vertical": is_wedges,
             })

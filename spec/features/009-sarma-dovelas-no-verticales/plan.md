@@ -125,7 +125,7 @@ Sᵢ    = c̄′ᵢ dᵢ − PWᵢ tan φ̄′ᵢ
 | 0.1.465 | `user_polyline.py`, `ogr_api/ops/*`, `ogr_mcp`, `ogr_gui/dialogs/` | datos por vértice, `user_surface_edit` y tabla |
 | 0.1.466 | `ogr_slip2d/sarma/wedges.py`, `ogr_slip2d/methods/sarma.py` | D451: extremos resueltos, nota con `NEAR_POLE_MIN_Q` |
 | 0.1.467 | `ogr_gui/interpret_window.py`, `ogr_slip2d/postprocess.py`, `sarma/solver.py` | cuñas en Interpret: selección, panel, diagrama |
-| 0.1.468 | `report_generator.py`, `ogr_api/results.py`, `results_io.py`, `interpretation.py` | cuñas en el informe y las exportaciones |
+| 0.1.468 | `ogr_core/result_rows.py` (nuevo), `report_generator.py`, `ogr_api/results.py`, `results_io.py`, `interpretation.py`, `interpret_window.py` | cuñas en el informe y las exportaciones; D453 |
 | 0.1.469 | `ogr_gui/canvas/*`, `main_window.py` | herramienta de ángulos y menú contextual del vértice |
 | 0.1.470 | `ogr_slip2d/sarma/solver.py` | D452: la regla de la raíz junto a un polo |
 | 0.1.471 | `ogr_slip2d/sarma/optimize_angles.py` | nuevo: optimizador de ángulos |

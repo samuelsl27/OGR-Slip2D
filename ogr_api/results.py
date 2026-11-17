@@ -23,6 +23,8 @@ import enum
 import math
 from typing import Optional
 
+from ogr_core.result_rows import face_rows
+
 #: Units of each caption's value, in the SI the engine works in.
 _CAPTION_UNITS = {"fos": "-", "overdesign": "-", "ky": "-", "newmark": "m"}
 
@@ -167,7 +169,14 @@ def lem_summary(res, *, with_slices: bool = False) -> Optional[dict]:
               and not isinstance(details[k], bool)}
     # v0.1.464 (D357) -- the faces of Sarma's wedges: E (total), E′ and X
     # per face, in increasing x [kN/m], as the method solved them.
-    if "sarma_face_thrusts" in details and details["sarma_face_thrusts"]:
+    # v0.1.468 -- with the geometry and the strength of each face, from the
+    # rows the report and the CSV print (``result_rows.face_rows``); the
+    # three keys of 0.1.464 stay. Sarma on vertical slices handed to it as
+    # such has no faces to read and keeps the three alone.
+    faces = face_rows(res)
+    if faces:
+        extras["sarma_faces"] = [_face_summary(f) for f in faces]
+    elif "sarma_face_thrusts" in details and details["sarma_face_thrusts"]:
         extras["sarma_faces"] = [
             {"E": _r(e), "E_effective": _r(ee), "X": _r(x)}
             for e, ee, x in zip(details["sarma_face_thrusts"],
@@ -216,6 +225,13 @@ def summary_in_search(search_result, res, *,
     return out
 
 
+def _face_summary(f: dict) -> dict:
+    """One row of ``face_rows`` for reading: numbers rounded, the two
+    sources as they are."""
+    return {k: (v if isinstance(v, str) or k == "index" else _r(v))
+            for k, v in f.items()}
+
+
 def load_factor_rows(res) -> list[dict]:
     """``[{load, name, action, drives, factor}]`` for the loads a design
     standard factored on the surface of ``res``; empty without one."""
@@ -255,6 +271,12 @@ def slice_table(res) -> list[dict]:
             row["base_shear_force"] = _r(S[i], 4)
         if i < len(R):
             row["base_shear_resistance"] = _r(R[i], 4)
+        # v0.1.468 (D357) -- a wedge of Sarma's method is not the column its
+        # x range draws: its polygon and its area, on the wedges alone
+        ring = getattr(s, "polygon", None)
+        if ring:
+            row["area"] = _r(getattr(s, "area", None), 4)
+            row["polygon"] = _pairs(ring)
         rows.append(row)
     return rows
 

@@ -615,6 +615,23 @@ _DICTS: dict[str, dict[str, str]] = {
         'E right (kN)': 'E derecha (kN)',
         'X left (kN)': 'X izquierda (kN)',
         'X right (kN)': 'X derecha (kN)',
+        # v0.1.468 (D357) — Sarma's method in the PDF report
+        'Number of Wedges': 'Número de cuñas',
+        'Least Number of Wedges': 'Número mínimo de cuñas',
+        'Face Angles': 'Ángulo de las caras',
+        'Face Strength': 'Resistencia de las caras',
+        'Face Cohesion': 'Cohesión de las caras',
+        'Face Friction Angle': 'Ángulo de rozamiento de las caras',
+        'Boundaries at Material Contacts': 'Fronteras en los contactos de material',
+        'At every contact': 'En cada contacto',
+        'Not at contacts': 'No en los contactos',
+        'Sense of the Face Shear': 'Sentido del cortante en las caras',
+        'Kc at F = 1': 'Kc con F = 1',
+        'Least |q| of the Faces': 'Menor |q| de las caras',
+        'Largest Force / Vertical Load': 'Mayor fuerza / carga vertical',
+        'Faces Made Vertical': 'Caras puestas verticales',
+        'Faces of the Wedges': 'Caras de las cuñas',
+        'Length': 'Longitud',
         # v0.1.467 (D357) — the wedges of Sarma's method in Interpret
         'E′ left (kN)': 'E′ izquierda (kN)',
         'E′ right (kN)': 'E′ derecha (kN)',
@@ -1432,6 +1449,9 @@ _DICTS: dict[str, dict[str, str]] = {
             'No hay dovelas: calcula primero.',
         'Export Slice Data': 'Exportar datos de las dovelas',
         'Slice data exported to %s': 'Datos de las dovelas exportados a %s',
+        # v0.1.468 (D357) -- Sarma's wedges and their faces, two files.
+        'Wedge and face data exported to %s and %s':
+            'Datos de las cuñas y de sus caras exportados a %s y %s',
         # v0.1.203 (F4) — the live bridge.
         'Agent bridge (MCP)': 'Puente para agentes (MCP)',
         "Let an AI agent drive this window: start the MCP server with "
