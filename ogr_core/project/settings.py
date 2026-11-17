@@ -1132,7 +1132,12 @@ class SarmaSettings:
       ``vertical``. A face of the policy that would cross a neighbour or not
       reach the ground is dropped with its boundary where it is a uniform
       division, and made vertical at a vertex, a contact or a water-table
-      cut (one of a crossing pair).
+      cut (one of a crossing pair). Since v0.1.471 also
+      ``optimized_global`` (every surface with the bisector, the critical
+      one with the faces that make its factor least) and ``optimized_all``
+      (every surface optimised; ``ogr_slip2d.sarma.optimize_angles``). A
+      version before reads either as a value it cannot take and skips
+      Sarma with a note.
     * ``interslice_strength`` -- the strength of the faces: ``materials``
       (the mean of the Mohr-Coulomb materials each crosses, by length),
       ``given`` (``interslice_cohesion`` [kPa], ``interslice_phi`` [deg],

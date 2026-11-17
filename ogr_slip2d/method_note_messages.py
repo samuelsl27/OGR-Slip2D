@@ -49,6 +49,11 @@ SARMA_OWN_SETTINGS = "method.sarma_own_settings"
 SARMA_BAD_SETTING = "method.sarma_bad_setting"
 # v0.1.465
 SARMA_VERTEX_DATA_UNUSED = "method.sarma_vertex_data_unused"
+# v0.1.471
+SARMA_SWEEP_MISS = "method.sarma_sweep_miss"
+SARMA_ANGLES_NO_START = "method.sarma_angles_no_start"
+SARMA_ANGLES_KEPT = "method.sarma_angles_kept"
+SARMA_ANGLES_FOLD = "method.sarma_angles_fold"
 
 # --- the inter-slice inclination (Spencer, GLE) ---------------------------
 LAMBDA_FALLBACK = "method.lambda_fallback"
@@ -286,6 +291,27 @@ METHOD_NOTES = {s.code: s for s in (
                 "it may be the half of a root and a pole that almost cancel, "
                 "as a straight stretch barely bent leaves them. The factor is "
                 "kept, the largest root; the next root down is {next:.4g}."),
+    MessageSpec(SARMA_SWEEP_MISS,
+                "the optimiser of the faces refused {count} factor(s) of the "
+                "reported surface whose wedges had a larger root the sweep of "
+                "the solver had stepped over (D457): the factor kept is one it "
+                "checked."),
+    MessageSpec(SARMA_ANGLES_NO_START,
+                "the optimiser of the faces had nowhere to start: the factor of each of "
+                "the {count} policy(ies) with one had a larger root the sweep of the "
+                "solver had stepped over (D457). The surface keeps the ordinary factor "
+                "of the method."),
+    MessageSpec(SARMA_ANGLES_KEPT,
+                "the optimised faces would have made the search's objective "
+                "({objective}) worse on the reported surface, {kept:.4g} -> "
+                "{optimised:.4g}: they minimise the factor of safety. The surface keeps "
+                "the faces of the bisector."),
+    MessageSpec(SARMA_ANGLES_FOLD,
+                "the optimised faces of the reported surface lie on an edge past which "
+                "the method has no factor, or a jump (a fold: the largest root meets "
+                "the next one and both vanish): its factor is that edge's, found to "
+                "{step:g} degrees, and {count} face(s) carry tension there. Sarma "
+                "(1973) asks for a physically acceptable solution."),
     MessageSpec(SARMA_VERTEX_DATA_UNUSED,
                 "{count} datum (data) given at vertices of the reported "
                 "surface did not reach it (a crack cut the vertex off, "

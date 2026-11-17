@@ -145,12 +145,18 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
 
 ## 0.1.471 — Ángulos optimizados
 
-- [ ] 30. Digitalizar las figuras 1.2 y 1.3 del problema 1, con la lectura declarada.
-- [ ] 31. Optimizador determinista; `optimized_global` y `optimized_all`; Block y Path con la crítica
-      optimizada.
-- [ ] 32. Test:
+- [x] 30. Digitalizar las figuras 1.2 y 1.3 del problema 1, con la lectura declarada
+      (`_auditoria/P9_D357/digitalizar_p1_v1471.py` del banco; la medida en `medir_angulos_v1471.py`).
+- [x] 31. Optimizador determinista (`sarma/optimize_angles.py`: búsqueda por patrón de 10° a 0,3125° desde la
+      mejor política comprobada, con empuje, continuidad, el borde de un pliegue afinado y la guarda de D457);
+      `optimized_global` (la crítica, en su sitio, en toda búsqueda y en la puerta de una superficie; con un
+      objetivo que no es F, solo si no la empeora) y `optimized_all`; el probabilístico de mínimo global y la
+      sensibilidad congelan las caras.
+- [x] 32. Test `tests/test_sarma_optimize_angles_v1471.py`:
   - el problema 1 frente a 1,382 / 1,324;
   - F optimizado ≤ el de las políticas;
+  - el problema 4 seco frente a un barrido bruto;
+  - las reglas, exactas y sobre cuñas reales;
   - determinismo y coste.
 
 ## Banco (fuera de git)

@@ -94,7 +94,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field, replace
-from typing import NamedTuple, Optional
+from typing import NamedTuple, Optional, Sequence
 
 from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import polygonize, unary_union
@@ -123,6 +123,11 @@ from ogr_slip2d.slicer import Slice, Slices
 #: The ``angle_source`` of a face of the policy made vertical because it did
 #: not reach the ground or crossed a neighbour (v0.1.464).
 VERTICALIZED = "verticalized"
+#: The ``angle_source`` of a face the optimiser of the angles set
+#: (``optimize_angles``, v0.1.471): given by its boundary's abscissa
+#: (``build_wedges(face_angles=...)``), and, as a face given at a vertex,
+#: never dropped nor made vertical.
+OPTIMIZED = "optimized"
 
 #: Where the strength of a face comes from when no vertex gives it one.
 MATERIALS = "materials"
@@ -173,8 +178,9 @@ class WedgeFace:
     #: c̄ [kPa] and tan φ̄, before the reduction by F.
     cohesion: float = 0.0
     tan_phi: float = 0.0
-    #: Where the angle came from: ``end``, ``vertex``, the policy, or
-    #: ``verticalized`` (a policy face made vertical, v0.1.464).
+    #: Where the angle came from: ``end``, ``vertex``, the policy,
+    #: ``verticalized`` (a policy face made vertical, v0.1.464) or
+    #: ``optimized`` (v0.1.471).
     angle_source: str = ""
     #: Where the strength came from: ``end``, ``vertex``, ``given``,
     #: ``materials`` or ``none``.
@@ -197,6 +203,9 @@ class Wedges(Slices):
     vertical: Optional[Slices] = None
     #: The abscissas of the boundaries on the surface.
     boundaries: tuple = ()
+    #: The policy of the faces nobody gave an angle (``angles.POLICIES``), or
+    #: one of ``angles.OPTIMIZED_MODES`` on wedges the optimiser made
+    #: (v0.1.471).
     angle_policy: str = ""
     #: Per-vertex data no boundary took, as ``(kind, (x, y))``.
     unused_vertex_data: list = field(default_factory=list)
@@ -441,6 +450,65 @@ def _by_vertex(data, points, tol):
     return {k: v[2] for k, v in best.items()}, unused
 
 
+def _by_abscissa(data, V, n, tol) -> dict:
+    """``{interior index: θ}`` of the faces given by abscissa (``{x: θ}``,
+    v0.1.471) matched to the interior boundary points ``V[1..n-1]`` within
+    ``tol``; a key nobody takes is not used (the optimiser asks only the
+    abscissas of its own boundaries)."""
+    out = {}
+    for x, value in sorted((data or {}).items()):
+        k = next((i for i in range(1, n) if abs(V[i][0] - float(x)) <= tol),
+                 None)
+        if k is not None and k not in out:
+            out[k] = value
+    return out
+
+
+def _given_boundaries(boundaries, x_l, x_r, tol) -> list:
+    """The boundaries a caller gives ``build_wedges`` (v0.1.471): both ends
+    within ``tol`` of the mass's, taken as them, and the interior ones
+    increasing strictly between; a ValueError otherwise (a caller's
+    mistake: the optimiser gives back the boundaries of wedges it was
+    handed for this surface)."""
+    xs = [float(x) for x in boundaries]
+    if len(xs) < 2 or abs(xs[0] - x_l) > tol or abs(xs[-1] - x_r) > tol:
+        raise ValueError("given boundaries must start at %r and end at %r, "
+                         "not %r" % (x_l, x_r, boundaries))
+    xs[0], xs[-1] = x_l, x_r
+    if any(not b > a for a, b in zip(xs[:-1], xs[1:])):
+        raise ValueError("given boundaries must increase strictly, not %r"
+                         % (boundaries,))
+    return xs
+
+
+def boundaries_fit(project, vertical, boundaries) -> bool:
+    """Whether ``boundaries`` (both ends included) would be taken by
+    :func:`build_wedges` on the mass of ``vertical``: its ends within the
+    model's tolerance of the mass's and the rest increasing strictly
+    between (v0.1.471). The frozen faces of a critical surface ask it of
+    another mass, a sample's, before they are used on it."""
+    s_list = list(vertical or ())
+    if not s_list or not boundaries:
+        return False
+    x_l, x_r = s_list[0].base_x_left, s_list[-1].base_x_right
+    tol = max(1e-9 * (x_r - x_l), _slicer._model_grid_tol(project))
+    try:
+        _given_boundaries(boundaries, x_l, x_r, tol)
+    except ValueError:
+        return False
+    return True
+
+
+def ground_position(context, x: float, y: float) -> float:
+    """Where the point ``(x, y)`` of the ground lies along it (v0.1.471): a
+    position that increases along the ground polyline of ``context``
+    (:func:`face_context`). Two faces do not cross when the positions of
+    their tops keep the order of their bases, which is what the optimiser
+    of the angles asks before it builds."""
+    ground, _tol = context
+    return _path_position([(v.x, v.y) for v in ground.vertices], x, y)
+
+
 def _strength(value) -> tuple:
     """``(c, tan φ)`` of a given face strength ``(c, φ°)``; a ValueError
     unless c >= 0 and 0 <= φ < 90, finite."""
@@ -611,7 +679,9 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
                  face_strength=MATERIALS,
                  vertex_strength: Optional[dict] = None,
                  boundaries_at_materials: bool = True,
-                 reasons: Optional[list] = None) -> Optional[Wedges]:
+                 reasons: Optional[list] = None,
+                 boundaries: Optional[Sequence[float]] = None,
+                 face_angles: Optional[dict] = None) -> Optional[Wedges]:
     """The wedges of ``surface``, resolved and judged by the slicer.
 
     Args:
@@ -633,6 +703,14 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
         reasons: a list that receives why there are no wedges: the
             slicer's strings when the columns are refused, or
             ``(code, args)`` with a code of :mod:`ogr_slip2d.messages`.
+        boundaries: v0.1.471 -- the abscissas of the boundaries, both ends
+            included, in place of :func:`boundaries_on`: the optimiser of
+            the angles keeps those of the wedges it started from. An end
+            within the model's tolerance of the mass's is taken as it.
+        face_angles: v0.1.471 -- ``{x: θ in degrees}`` for the faces rising
+            from the boundaries at those abscissas (``optimized``): never
+            dropped nor made vertical, as one given at a vertex, which
+            takes precedence over it.
 
     Returns:
         A :class:`Wedges`, or None with the reason in ``reasons``.
@@ -653,7 +731,8 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
     elif face_strength not in FACE_STRENGTHS:
         raise ValueError("face strength must be one of %s or (c, phi), "
                          "not %r" % (FACE_STRENGTHS, face_strength))
-    for value in (vertex_angles or {}).values():
+    for value in list((vertex_angles or {}).values()) + list(
+            (face_angles or {}).values()):
         if not math.isfinite(float(value)):
             raise ValueError("a face angle is a finite number of degrees, "
                              "not %r" % (value,))
@@ -665,10 +744,14 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
     s_list = list(vertical)
     x_l, x_r = s_list[0].base_x_left, s_list[-1].base_x_right
     grid_tol = _slicer._model_grid_tol(project)
-    xs = boundaries_on(project, surface, x_l, x_r, num_wedges,
-                       boundaries_at_materials)
-    marks = _mandatory(project, surface, x_l, x_r, boundaries_at_materials)
     mark_tol = 1e-9 * (x_r - x_l)
+    if boundaries is None:
+        xs = boundaries_on(project, surface, x_l, x_r, num_wedges,
+                           boundaries_at_materials)
+    else:
+        xs = _given_boundaries(boundaries, x_l, x_r,
+                               max(mark_tol, grid_tol))
+    marks = _mandatory(project, surface, x_l, x_r, boundaries_at_materials)
 
     def plain(x):
         """A uniform division, not a vertex, contact or water-table cut."""
@@ -716,6 +799,7 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
         interior = {k: V[k] for k in range(1, n)}
         ang_by, unused_a = _by_vertex(vertex_angles, interior, grid_tol)
         str_by, unused_s = _by_vertex(vertex_strength, interior, grid_tol)
+        opt_by = _by_abscissa(face_angles, V, n, mark_tol)
         tops = [(x_l, cols[0].top_y_left)]
         thetas = [0.5 * math.pi]
         sources = ["end"]
@@ -729,13 +813,23 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
                     return _refuse(reasons, msg.SARMA_FACE_HORIZONTAL,
                                    face=k + 1, angle=float(ang_by[k]))
                 sources.append("vertex")
+            elif k in opt_by:
+                # v0.1.471 -- a face of the optimiser, by its abscissa: the
+                # same rule as a vertex's (the half that rises, to the
+                # ground), and, like one, never moved below
+                theta, top = _vertex_top(ground, V[k][0], V[k][1],
+                                         opt_by[k], grid_tol)
+                if theta is None:
+                    return _refuse(reasons, msg.SARMA_FACE_HORIZONTAL,
+                                   face=k + 1, angle=float(opt_by[k]))
+                sources.append(OPTIMIZED)
             else:
                 theta = _angles.policy_angle(angles, alpha[k - 1], alpha[k],
                                              lengths[k - 1], lengths[k])
                 sources.append(angles)
                 top = ray_ground_exit(ground, V[k][0], V[k][1], theta,
                                       grid_tol)
-            if top is None and sources[-1] != "vertex":
+            if top is None and sources[-1] not in ("vertex", OPTIMIZED):
                 if plain(xs[k]):
                     drop = k
                     break
@@ -759,7 +853,8 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
             if k is None:
                 break
             policy = [j for j in (k, k + 1)
-                      if sources[j] not in ("end", "vertex", VERTICALIZED)]
+                      if sources[j] not in ("end", "vertex", VERTICALIZED,
+                                            OPTIMIZED)]
             plains = [j for j in policy if plain(xs[j])]
             if plains:
                 drop = plains[-1]

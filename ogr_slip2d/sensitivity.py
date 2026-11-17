@@ -356,6 +356,10 @@ def run_sensitivity(
             res.notes[mid] = _type_refusal(sd)
             lost.append(mid)
             continue
+        # v0.1.471 (D357) -- Sarma's optimised faces travel with the method,
+        # as in ``run_global_minimum`` (the same helper)
+        from ogr_slip2d.methods.sarma import freeze_faces
+        freeze_faces(method, det)
         # v0.1.202 — only admissible points (``counts_as_sample``).
         # v0.1.235 (D92) — and the search the PROJECT configures, filters,
         # limits, focus, seismic mode and Minimum Area included, from the

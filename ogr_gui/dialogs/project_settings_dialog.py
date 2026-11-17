@@ -501,11 +501,16 @@ class _MethodsPage(QWidget):
         self.cbo_sarma_angles = QComboBox()
         for label, value in ((tr('Bisector'), "bisector"),
                              (tr('Mean normal'), "mean_normal"),
-                             (tr('Vertical faces'), "vertical")):
+                             (tr('Vertical faces'), "vertical"),
+                             # v0.1.471 (D357)
+                             (tr('Optimised, global minimum'),
+                              "optimized_global"),
+                             (tr('Optimised, all surfaces'),
+                              "optimized_all")):
             self.cbo_sarma_angles.addItem(label, value)
         self.cbo_sarma_angles.setCurrentIndex(
             max(0, self.cbo_sarma_angles.findData(sa.slice_angles)))
-        self.cbo_sarma_angles.setToolTip(tr("The angle of the faces no vertex gives one. Bisector: the bisector of the two bases that meet; mean normal: their normals weighted by the lengths of the bases; vertical: the vertical methods' slices. A face that would cross a neighbour or not reach the ground is dropped with its boundary where it is a uniform division, and made vertical at a vertex, a contact or a water-table cut."))
+        self.cbo_sarma_angles.setToolTip(tr("The angle of the faces no vertex gives one. Bisector: the bisector of the two bases that meet; mean normal: their normals weighted by the lengths of the bases; vertical: the vertical methods' slices. A face that would cross a neighbour or not reach the ground is dropped with its boundary where it is a uniform division, and made vertical at a vertex, a contact or a water-table cut.") + "\n" + tr("Optimised: the angles that make the factor least, from the best of the three, by steps of 10° down to 0.3125° (a step counts when it lowers the factor by more than the tolerance on F); the faces given at vertices stay. Global minimum: every surface with the bisector, then the critical one optimised; all surfaces: every surface optimised, much slower (from seconds to a minute a surface with 25 wedges)."))
         form.addRow(tr('Face angles:'), self.cbo_sarma_angles)
         self.cbo_sarma_strength = QComboBox()
         for label, value in ((tr('From the materials'), "materials"),

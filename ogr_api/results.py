@@ -167,9 +167,19 @@ def lem_summary(res, *, with_slices: bool = False) -> Optional[dict]:
                                          "sarma_verticalized",
                                          # v0.1.470 (D452)
                                          "sarma_kc_pole_distance",
-                                         "sarma_next_root")
+                                         "sarma_next_root",
+                                         # v0.1.471 (D357)
+                                         "sarma_start_fos",
+                                         "sarma_angle_trials",
+                                         "sarma_sweep_misses",
+                                         "sarma_angle_jumps")
               if k in details and isinstance(details[k], (int, float))
               and not isinstance(details[k], bool)}
+    # v0.1.471 (D357) -- the optimiser of the faces: its mode and the policy
+    # it started from (strings, so not in the numbers above)
+    for k in ("sarma_angle_mode", "sarma_start_policy"):
+        if isinstance(details.get(k), str):
+            extras[k] = details[k]
     # v0.1.464 (D357) -- the faces of Sarma's wedges: E (total), E′ and X
     # per face, in increasing x [kN/m], as the method solved them.
     # v0.1.468 -- with the geometry and the strength of each face, from the

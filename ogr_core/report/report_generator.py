@@ -966,7 +966,10 @@ def _slice_table(crit, project, T=_same):
 #: v0.1.468 (D357) -- the words of Sarma's settings, as the Methods page
 #: shows them (``project_settings_dialog``)
 _SARMA_POLICY = {"bisector": "Bisector", "mean_normal": "Mean normal",
-                 "vertical": "Vertical faces"}
+                 "vertical": "Vertical faces",
+                 # v0.1.471 (D357)
+                 "optimized_global": "Optimised, global minimum",
+                 "optimized_all": "Optimised, all surfaces"}
 _SARMA_STRENGTH = {"materials": "From the materials", "given": "Given c and φ",
                    "none": "No face strength"}
 _SARMA_SENSE = {"fixed": "Fixed: the upper wedge moves down",
@@ -1021,6 +1024,14 @@ def _sarma_result_rows(crit, T=_same) -> list:
         rows.append((T("Number of Wedges"), len(faces) - 1))
     rows.append((T("Faces Made Vertical"), int(d.get("sarma_verticalized")
                                                or 0)))
+    if d.get("sarma_angle_mode"):
+        # v0.1.471 (D357) -- the optimiser of the faces: where it started
+        # and the factor there, so the gain it made can be read
+        policy = d.get("sarma_start_policy")
+        rows += [(T("Faces Optimised From"),
+                  T(_SARMA_POLICY.get(policy, policy or ""))),
+                 (T("Factor Before Optimising"),
+                  _fmt(d.get("sarma_start_fos"), 4))]
     return rows
 
 

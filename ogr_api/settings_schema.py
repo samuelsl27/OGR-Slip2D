@@ -111,8 +111,9 @@ def _polarities() -> list[str]:
 
 
 def _sarma_policies() -> list[str]:
-    from ogr_slip2d.sarma.angles import POLICIES
-    return list(POLICIES)
+    # v0.1.471 -- with the two optimised modes
+    from ogr_slip2d.sarma.angles import ANGLE_SETTINGS
+    return list(ANGLE_SETTINGS)
 
 
 def _sarma_strengths() -> list[str]:

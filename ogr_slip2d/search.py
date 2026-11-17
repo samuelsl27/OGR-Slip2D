@@ -38,8 +38,8 @@ from .slicer import (REFUSED_BASE_ABOVE_GROUND, REFUSED_END_ABOVE_GROUND,
                      REFUSED_END_BELOW_GROUND, REFUSED_ORPHAN_MATERIAL,
                      REFUSED_OUTSIDE_MODEL, TOUCHED_MODEL_EDGE,
                      slice_surface)
-from .slice_store import (SliceRecords, SpilledSlices, rehydrate_special,
-                          wants_store)
+from .slice_store import (SliceRecords, SpilledSlices, rehydrate,
+                          rehydrate_special, wants_store)
 from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 
 
@@ -1792,13 +1792,22 @@ class BaseSearch(ABC):
                 # every filter above has just judged. The flag is read on
                 # the object that is analysed, which may be a wrapper.
                 if getattr(self.method, "NON_VERTICAL", False):
-                    wedges = self._wedge_trial(project, trial, slices)
-                    # The method's own refusal of the surface (its wedges
-                    # cannot be built), with the code, like the solver's:
-                    # a single-surface door then says why, not a filter.
-                    res = (self._analyse(project, trial, wedges)
-                           if wedges is not None
-                           else self._wedge_refusal(trial, slices))
+                    # v0.1.471 -- with «all surfaces» each mass is analysed
+                    # on its optimised faces; when no policy gives a factor
+                    # the optimiser has nothing to start from, and the
+                    # surface goes the ordinary way (its refusal, counted)
+                    res, opt = self._all_angles_optimised(project, trial,
+                                                          slices)
+                    if res is None:
+                        wedges = self._wedge_trial(project, trial, slices)
+                        # The method's own refusal of the surface (its
+                        # wedges cannot be built), with the code, like the
+                        # solver's: a single-surface door then says why,
+                        # not a filter.
+                        res = (self._analyse(project, trial, wedges)
+                               if wedges is not None
+                               else self._wedge_refusal(trial, slices))
+                        self._no_start(res, opt)
                 else:
                     res = self._analyse(project, trial, slices)
                 if res is None:
@@ -1823,6 +1832,155 @@ class BaseSearch(ABC):
                 self, "_outside_slope_limits", 0) + 1
             self._last_refusal = REFUSED_OUTSIDE_SLOPE_LIMITS
         return best
+
+    # ------------------------------------------------------------------
+    # v0.1.471 (D357) -- Sarma's optimised faces (``sarma.optimize_angles``)
+    def _angle_optimum(self, project: Project, surface, vertical,
+                       progress=None):
+        """The faces of ``surface`` that make the method's factor least, by
+        :func:`ogr_slip2d.sarma.optimize_angles.optimize`, each trial solved
+        and judged as the search judges a surface (valid and admissible),
+        outside the census (the trials are not surfaces of the search)."""
+        from .sarma.optimize_angles import optimize
+        m = self.method
+
+        def build(policy=None, boundaries=None, face_angles=None):
+            return m.wedges_for(project, surface, vertical, policy=policy,
+                                boundaries=boundaries, face_angles=face_angles)
+
+        def evaluate(w):
+            try:
+                r = m.compute_fos(project, surface, w)
+            except ArithmeticError:
+                return None
+            if r is None or not r.is_valid or r.fos is None:
+                return None
+            return r if self._is_admissible(r) else None
+
+        return optimize(project, build=build, evaluate=evaluate,
+                        larger_root=lambda r: m.larger_root_above(project, r),
+                        gain=float(m.tolerance), progress=progress)
+
+    def _angles_mode(self):
+        """The optimised mode of the method's faces, or None: none either
+        when its faces are frozen (a probabilistic sample)."""
+        if getattr(self.method, "frozen_faces", None) is not None:
+            return None
+        return getattr(self.method, "optimize_angles", None)
+
+    @staticmethod
+    def _no_start(res, opt) -> None:
+        """Say on ``res`` that the optimiser had no start: every policy's
+        factor had a larger root (D457), and ``res`` keeps the method's
+        ordinary one (the owner's decision of 2026-11-17)."""
+        if res is not None and opt is not None and opt.result is None:
+            res.details = dict(res.details or {})
+            res.details["sarma_angle_no_start"] = int(opt.no_start)
+
+    def _all_angles_optimised(self, project: Project, trial, slices):
+        """With «all surfaces» (``optimized_all``), ``(result, optimum)``:
+        the result of ``trial`` on its optimised faces, or None when the
+        mode is another, there is no face to move, or no policy gives a
+        valid factor, or no checked one (then the optimum says so)."""
+        from .sarma.angles import OPTIMIZED_ALL
+        if self._angles_mode() != OPTIMIZED_ALL:
+            return None, None
+        opt = self._angle_optimum(project, trial, slices)
+        if opt is None or opt.result is None:
+            return None, opt
+        return self._optimised_result(project, trial, opt, OPTIMIZED_ALL), opt
+
+    def _optimised_result(self, project: Project, surface, opt, mode):
+        """The result of the optimised wedges, analysed as any surface
+        (admissibility, Ky), with what the optimiser did in ``details``."""
+        opt.wedges.angle_policy = mode
+        res = self._analyse(project, surface, opt.wedges)
+        res.details = dict(res.details or {})
+        res.details.update(opt.details(mode))
+        return res
+
+    def _not_worse(self, new, old) -> bool:
+        """Whether ``new`` ranks as ``old`` or before it, as ``critical``
+        ranks a run's surfaces: admissible first, then this search's
+        objective (``score``)."""
+        a_new = getattr(new, "admissible", True)
+        a_old = getattr(old, "admissible", True)
+        if a_new != a_old:
+            return bool(a_new)
+        return self.score(new) <= self.score(old)
+
+    def optimized_angles_of(self, project: Project, res, progress=None):
+        """With «optimised, global minimum» (``optimized_global``), ``res``
+        computed again on its optimised faces: a NEW result (Interpret
+        caches on the object). None, ``res`` kept, when the mode is
+        another, ``res`` is not a valid result on wedges, there is no face
+        to move or no start (said on ``res``), or the new result would rank
+        after it under an objective other than F, Ky say: the faces
+        minimise F and Ky can rise with them (the review of 0.1.471 measured
+        0.09979 to 0.10064, and the critical surface moved to another); said
+        on ``res``, the owner's decision. The single-surface door
+        (``analysis_runner.evaluate_surfaces``) asks it too: a surface
+        evaluated alone is its own global minimum."""
+        from .sarma.angles import OPTIMIZED_GLOBAL
+        from .sarma.wedges import Wedges
+        if (self._angles_mode() != OPTIMIZED_GLOBAL or res is None
+                or not res.is_valid):
+            return None
+        if self.slice_store is not None:
+            rehydrate(res)
+        if not isinstance(res.slices, Wedges) or res.slices.vertical is None:
+            return None
+        opt = self._angle_optimum(project, res.surface, res.slices.vertical,
+                                  progress)
+        if opt is None:
+            return None
+        if opt.result is None:
+            self._no_start(res, opt)
+            return None
+        new = self._optimised_result(project, res.surface, opt,
+                                     OPTIMIZED_GLOBAL)
+        # Only under another objective: with F, the new one ranks after the
+        # old only when the old factor failed the guard of D457 (the review:
+        # problem 5 with γw = 9.81, the bisector's 0.5957 under its larger
+        # root 0.6096) or was an inadmissible fallback, neither a factor to
+        # keep.
+        if self.objective != OBJECTIVE_FOS and not self._not_worse(new, res):
+            res.details = dict(res.details or {})
+            res.details["sarma_angle_kept"] = {
+                "objective": str(getattr(self, "objective", "fos")),
+                "kept": self.score(res), "optimised": self.score(new)}
+            return None
+        return new
+
+    def _optimize_critical_angles(self, project: Project, result) -> None:
+        """The critical surface of ``result`` on its optimised faces, IN ITS
+        PLACE (the owner's decision of 2026-11-17): the same geometry with
+        other faces, so the population, its counters and its census do not
+        change, and nothing shows it twice. Under F it replaces the old one
+        always: its factor is checked, and when it ranks after the old one
+        the old factor was not (D457) or was inadmissible, and the critical
+        surface may then be another. Under another objective, only when it
+        ranks as it or before it (``optimized_angles_of``). Under the
+        Optimize phase, with its progress by steps and the watcher's
+        checkpoints."""
+        crit = result.critical
+        if crit is None or self._angles_mode() is None:
+            return
+        from ogr_core.progress import OPTIMIZE, progress_phase
+        cb = getattr(self, "progress_cb", None)
+        with progress_phase(OPTIMIZE):
+            new = self.optimized_angles_of(
+                project, crit,
+                progress=(lambda d, t: cb(d, t)) if cb else None)
+        if new is None:
+            return
+        for name in ("evaluations", "user_evaluations", "minima", "steered"):
+            items = getattr(result, name, None) or []
+            for i, r in enumerate(items):
+                if r is crit:
+                    items[i] = new
+        if result.optimized is crit:
+            result.optimized = new
 
     def _wedge_trial(self, project: Project, trial, slices):
         """The wedges of a non-vertical method on ``trial`` (v0.1.464,
@@ -2317,6 +2475,12 @@ class BaseSearch(ABC):
             searched = {attr: getattr(self, attr, 0)
                         for attr, _code in _SLICER_COUNTS}
             self._evaluate_user_surfaces(project, result)
+            # v0.1.471 (D357) -- Sarma's faces optimised on the critical
+            # surface, the search's or the user's: after both, so it is the
+            # critical one of the run, and here for the reason Optimize is
+            # (every caller of ``run``: the probabilistic search, the back
+            # analysis, the scripts). It replaces that result in its place.
+            self._optimize_critical_angles(project, result)
             # v0.1.261 (D263) — and a run that ends with nothing says why.
             # After the user's surfaces, because a valid one of those is a
             # valid surface of the run.

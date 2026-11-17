@@ -630,6 +630,11 @@ _DICTS: dict[str, dict[str, str]] = {
         'Least |q| of the Faces': 'Menor |q| de las caras',
         'Largest Force / Vertical Load': 'Mayor fuerza / carga vertical',
         'Faces Made Vertical': 'Caras puestas verticales',
+        # v0.1.471 (D357) — the optimised faces
+        'Faces Optimised From': 'Caras optimizadas desde',
+        'Factor Before Optimising': 'Factor antes de optimizar',
+        'Optimised, global minimum': 'Optimizados, mínimo global',
+        'Optimised, all surfaces': 'Optimizados, todas las superficies',
         'Faces of the Wedges': 'Caras de las cuñas',
         'Length': 'Longitud',
         # v0.1.467 (D357) — the wedges of Sarma's method in Interpret
@@ -4354,6 +4359,9 @@ _DICTS: dict[str, dict[str, str]] = {
             'Normal media',
         'Vertical faces':
             'Caras verticales',
+        # v0.1.471 (D357)
+        "Optimised: the angles that make the factor least, from the best of the three, by steps of 10° down to 0.3125° (a step counts when it lowers the factor by more than the tolerance on F); the faces given at vertices stay. Global minimum: every surface with the bisector, then the critical one optimised; all surfaces: every surface optimised, much slower (from seconds to a minute a surface with 25 wedges).":
+            'Optimizados: los ángulos que hacen mínimo el factor, desde la mejor de las tres, con pasos de 10° a 0.3125° (un paso cuenta cuando baja el factor más que la tolerancia en F); las caras dadas en vértices se quedan. Mínimo global: todas las superficies con la bisectriz y después la crítica optimizada; todas las superficies: cada superficie optimizada, mucho más lento (de segundos a un minuto por superficie con 25 cuñas).',
         'Face strength:':
             'Resistencia de las caras:',
         "The shear strength of the faces between wedges, which F divides as it divides the bases'. Materials: the mean of the Mohr-Coulomb materials each face crosses, by length; given: the cohesion and friction angle below, divided by the design standard's material factors; none: the faces carry no shear.":
@@ -4538,6 +4546,41 @@ _DICTS: dict[str, dict[str, str]] = {
             "cancelan, como los deja un tramo recto apenas doblado. El factor "
             "se queda, la raíz mayor; la siguiente raíz hacia abajo es "
             "{next:.4g}.",
+        # v0.1.471 (D357, D457)
+        "the optimiser of the faces refused {count} factor(s) of the reported "
+        "surface whose wedges had a larger root the sweep of the solver had "
+        "stepped over (D457): the factor kept is one it checked.":
+            "el optimizador de las caras rechazó {count} factor(es) de la "
+            "superficie del resultado cuyas cuñas tenían una raíz mayor que el "
+            "barrido del solver había saltado (D457): el factor que queda es "
+            "uno comprobado.",
+        "the optimiser of the faces had nowhere to start: the factor of each of "
+        "the {count} policy(ies) with one had a larger root the sweep of the "
+        "solver had stepped over (D457). The surface keeps the ordinary factor "
+        "of the method.":
+            "el optimizador de las caras no tuvo de dónde arrancar: el factor de "
+            "cada una de las {count} política(s) que lo daban tenía una raíz mayor "
+            "que el barrido del solver había saltado (D457). La superficie conserva "
+            "el factor ordinario del método.",
+        "the optimised faces would have made the search's objective "
+        "({objective}) worse on the reported surface, {kept:.4g} -> "
+        "{optimised:.4g}: they minimise the factor of safety. The surface keeps "
+        "the faces of the bisector.":
+            "las caras optimizadas habrían empeorado el objetivo de la búsqueda "
+            "({objective}) en la superficie del resultado, {kept:.4g} -> "
+            "{optimised:.4g}: minimizan el factor de seguridad. La superficie "
+            "conserva las caras de la bisectriz.",
+        "the optimised faces of the reported surface lie on an edge past which "
+        "the method has no factor, or a jump (a fold: the largest root meets "
+        "the next one and both vanish): its factor is that edge's, found to "
+        "{step:g} degrees, and {count} face(s) carry tension there. Sarma "
+        "(1973) asks for a physically acceptable solution.":
+            "las caras optimizadas de la superficie del resultado quedan en un "
+            "borde más allá del cual el método no tiene factor, o salta (un "
+            "pliegue: la raíz mayor se encuentra con la siguiente y las dos "
+            "desaparecen): su factor es el de ese borde, hallado a {step:g} grados, "
+            "y {count} cara(s) quedan en tracción ahí. Sarma (1973) pide una "
+            "solución físicamente aceptable.",
         "{count} surface(s) have no factor because their wedges could not "
         "be built (their code says why).":
             "{count} superficie(s) no tienen factor porque no se pudieron "

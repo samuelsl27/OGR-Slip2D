@@ -128,7 +128,7 @@ Sᵢ    = c̄′ᵢ dᵢ − PWᵢ tan φ̄′ᵢ
 | 0.1.468 | `ogr_core/result_rows.py` (nuevo), `report_generator.py`, `ogr_api/results.py`, `results_io.py`, `interpretation.py`, `interpret_window.py` | cuñas en el informe y las exportaciones; D453 |
 | 0.1.469 | `ogr_gui/canvas/*`, `main_window.py` | herramienta de ángulos y menú contextual del vértice |
 | 0.1.470 | `ogr_slip2d/sarma/solver.py` | D452: la regla de la raíz junto a un polo |
-| 0.1.471 | `ogr_slip2d/sarma/optimize_angles.py` | nuevo: optimizador de ángulos |
+| 0.1.471 | `ogr_slip2d/sarma/optimize_angles.py` (nuevo), `wedges.py`, `solver.py`, `methods/sarma.py`, `search.py`, `probabilistic.py` | optimizador de ángulos; caras por abscisa; guarda de D457 |
 
 ## Decisiones de diseño
 

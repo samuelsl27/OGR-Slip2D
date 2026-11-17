@@ -24,7 +24,8 @@ None of the three comes from a source: they are geometric choices for
 where no angle is given, the vertical one being the vertical methods'
 (Sarma 1979, which describes inclined faces, was not consulted). What the
 published cases fix is given by vertex, and that is what decides their
-numbers (spec 009).
+numbers (spec 009). Since v0.1.471 the faces can also be optimised
+(``OPTIMIZED_MODES``, :mod:`ogr_slip2d.sarma.optimize_angles`).
 
 The solver (:mod:`ogr_slip2d.sarma.solver`) takes δ, the angle from the
 vertical, positive when the top of the face leans toward +x: δ = 90° − θ.
@@ -40,6 +41,19 @@ VERTICAL = "vertical"
 BISECTOR = "bisector"
 MEAN_NORMAL = "mean_normal"
 POLICIES = (VERTICAL, BISECTOR, MEAN_NORMAL)
+
+#: v0.1.471 (D357) -- the two values of ``settings.sarma.slice_angles``
+#: that optimise the faces instead of taking one policy
+#: (:mod:`ogr_slip2d.sarma.optimize_angles`): every surface computed with
+#: the bisector and the critical one optimised afterwards, or every surface
+#: optimised. The documentation of the reference program describes the
+#: two; neither is a policy :func:`policy_angle` knows, so ``build_wedges``
+#: still takes only ``POLICIES``.
+OPTIMIZED_GLOBAL = "optimized_global"
+OPTIMIZED_ALL = "optimized_all"
+OPTIMIZED_MODES = (OPTIMIZED_GLOBAL, OPTIMIZED_ALL)
+#: Every value ``settings.sarma.slice_angles`` takes.
+ANGLE_SETTINGS = POLICIES + OPTIMIZED_MODES
 
 #: A line closer than this to horizontal [rad] is no face: the core's,
 #: which the rule of the per-vertex data asks too (v0.1.465).

@@ -105,10 +105,16 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 
 ### Ángulos optimizados (0.1.471)
 
-- [ ] F optimizado ≤ el de cada política (vertical, bisectriz, normal media) en la misma superficie, y se
+- [x] F optimizado ≤ el de cada política (vertical, bisectriz, normal media) en la misma superficie, y se
       repite igual dos veces.
-- [ ] Problema 1: sus figuras 1.2 y 1.3, digitalizadas con la lectura declarada, con ángulos optimizados, dan
+- [x] Problema 1: sus figuras 1.2 y 1.3, digitalizadas con la lectura declarada, con ángulos optimizados, dan
       1,382 / 1,324 del programa de referencia dentro de una tolerancia que cubra la digitalización.
+      La tolerancia, por decisión de la propietaria (2026-11-17):
+      - fig. 1.3: el 1 %, porque la dispersión de ±1 px (0,0045) no cubre el 0,7 % que deja la resistencia
+        de las caras (1,324 queda entre la media por longitud, 1,3147, y el suelo superior solo, 1,3388);
+        las caras dibujadas son óptimas aquí al 0,1 %;
+      - fig. 1.2: las dos ramas del material de la base del pie, que cruza el contacto;
+      - la capa débil, donde la ponen los colores de las figuras (y = 0–0,75; el modelo del banco, D459).
 
 ### Cierre (banco)
 

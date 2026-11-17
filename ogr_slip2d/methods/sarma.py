@@ -43,12 +43,15 @@ References:
 """
 from __future__ import annotations
 
+import math
+from typing import Optional
+
 from ogr_core.project import Project
 
 from .. import messages as msg
 from ..sarma import solver as _solver
 from ..sarma import wedges as _wedges
-from ..sarma.angles import BISECTOR, POLICIES
+from ..sarma.angles import ANGLE_SETTINGS, BISECTOR, OPTIMIZED_MODES
 from ..sarma.vertical import from_vertical_slices
 from ..slicer import Slices
 from ..surface import SurfaceProtocol
@@ -94,6 +97,31 @@ def _near_pair_details(pair) -> dict:
     return {"sarma_kc_pole_distance": distance, "sarma_next_root": next_root}
 
 
+def frozen_faces_of(result):
+    """``(boundaries, {x: θ°})`` of every interior face of a result on
+    optimised wedges (``Wedges.angle_policy`` one of ``OPTIMIZED_MODES``),
+    for ``SarmaNonVertical.frozen_faces``; None for any other result
+    (v0.1.471). The faces given at vertices go too: a surface rebuilt from
+    its dictionary may come without them."""
+    w = getattr(result, "slices", None)
+    if (not isinstance(w, _wedges.Wedges)
+            or w.angle_policy not in OPTIMIZED_MODES or not w.boundaries):
+        return None
+    return (tuple(w.boundaries),
+            {f.x_base: math.degrees(f.theta) for f in w.faces[1:-1]})
+
+
+def freeze_faces(method, result) -> None:
+    """``method.frozen_faces`` from the optimised wedges of ``result``
+    (:func:`frozen_faces_of`), when the method takes them (v0.1.471): the
+    one door of the two runs that evaluate a deterministic critical surface
+    again, the probabilistic Global Minimum and the sensitivity (the review
+    of 0.1.471: the sensitivity gave the bisector's factor at the mean)."""
+    frozen = frozen_faces_of(result)
+    if frozen is not None and hasattr(method, "frozen_faces"):
+        method.frozen_faces = frozen
+
+
 #: The strength of the faces, as ``settings.sarma.interslice_strength``.
 INTERSLICE_STRENGTHS = ("materials", "given", "none")
 
@@ -135,24 +163,42 @@ class SarmaNonVertical(LEMMethod):
                          initial_fos=initial_fos, min_lambda=min_lambda,
                          max_lambda=max_lambda,
                          iterate_steffensen=iterate_steffensen)
-        if angle_policy not in POLICIES:
+        if angle_policy not in ANGLE_SETTINGS:
             raise ValueError("angle policy must be one of %s, not %r"
-                             % (POLICIES, angle_policy))
+                             % (ANGLE_SETTINGS, angle_policy))
         if shear_sense not in _solver.SHEAR_SENSES:
             raise ValueError("shear sense must be one of %s, not %r"
                              % (_solver.SHEAR_SENSES, shear_sense))
         self.num_wedges = int(num_wedges)
-        self.angle_policy = angle_policy
+        # v0.1.471 -- an optimised mode is the bisector on every surface
+        # the search computes, and the optimiser where the mode says
+        # (``optimize_angles``; the search reads ``optimize_angles``)
+        self.optimize_angles = (angle_policy if angle_policy in OPTIMIZED_MODES
+                                else None)
+        self.angle_policy = (BISECTOR if self.optimize_angles
+                             else angle_policy)
+        #: v0.1.471 -- ``(boundaries, {x: θ°})`` of the optimised faces of a
+        #: critical surface, which this method's wedges then take instead
+        #: of a policy: the samples of a Global Minimum probabilistic run
+        #: compute the deterministic mechanism, faces and all (the owner's
+        #: decision of 2026-11-17), and the check of D88 asks the same.
+        self.frozen_faces = None
         self.face_strength = face_strength
         self.boundaries_at_materials = bool(boundaries_at_materials)
         self.shear_sense = shear_sense
 
     # ------------------------------------------------------------------
     def wedges_for(self, project: Project, surface: SurfaceProtocol,
-                   vertical: Slices, reasons=None):
+                   vertical: Slices, reasons=None, *, policy=None,
+                   boundaries=None, face_angles=None):
         """The wedges this method computes ``surface`` on, built on the
         slicer's ``vertical`` slices with the method's settings; None, with
         the reason in ``reasons``, when the constructor refuses.
+
+        v0.1.471 -- ``policy``, ``boundaries`` and ``face_angles`` are the
+        optimiser's (``build_wedges``): a policy other than the method's,
+        and the faces it sets by abscissa. Without any of them, the frozen
+        faces of ``frozen_faces``, when their ends are this mass's.
 
         v0.1.465 (D357) -- with the per-vertex data the surface carries
         (fields of ``SlipSurface``, set by ``surface.attach_vertex_data``
@@ -175,14 +221,40 @@ class SarmaNonVertical(LEMMethod):
             ds = project.settings.design_standard
             strengths = {k: factored_face_strength(c, phi, ds)
                          for k, (c, phi) in strengths.items()}
-        return _wedges.build_wedges(
+        frozen = None
+        if (policy is None and boundaries is None and face_angles is None
+                and self.frozen_faces is not None
+                and _wedges.boundaries_fit(project, vertical,
+                                           self.frozen_faces[0])):
+            frozen = self.frozen_faces
+            boundaries, face_angles = frozen
+        out = _wedges.build_wedges(
             project, surface, vertical, self.num_wedges,
-            angles=self.angle_policy,
+            angles=policy or self.angle_policy,
             vertex_angles=getattr(holder, "vertex_angles", None),
             face_strength=self.face_strength,
             vertex_strength=strengths,
             boundaries_at_materials=self.boundaries_at_materials,
-            reasons=reasons)
+            reasons=reasons, boundaries=boundaries, face_angles=face_angles)
+        if frozen is not None and out is not None:
+            out.angle_policy = self.optimize_angles or OPTIMIZED_MODES[0]
+        return out
+
+    def larger_root_above(self, project: Project, result) -> Optional[float]:
+        """v0.1.471 (D457) -- a factor above ``result.fos`` where the H of
+        its wedges changes sign (``solver.larger_root_above``), or None: the
+        guard the optimiser of the angles asks of each factor it keeps. The
+        wedges are read as :meth:`compute_fos` reads them."""
+        slices = getattr(result, "slices", None)
+        if not isinstance(slices, _wedges.Wedges) or result.fos is None:
+            return None
+        kh = project.seismic.kh if project.seismic.enabled else 0.0
+        kv = project.seismic.kv if project.seismic.enabled else 0.0
+        s_in = _wedges.to_solver(slices, kh, kv)
+        return _solver.larger_root_above(
+            s_in.bases, s_in.faces, result.fos, kh=kh,
+            slide_sign=s_in.slide_sign, shear_sense=self.shear_sense,
+            head_thrust=s_in.head_thrust)
 
     def _refused(self, surface, slices, code, **args):
         return LEMResult(fos=None, converged=False, iterations=0,

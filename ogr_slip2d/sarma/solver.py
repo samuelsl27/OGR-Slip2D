@@ -145,6 +145,13 @@ _F_MAX = 100.0
 _F_MIN = 0.01
 _COARSE_RATIO = 10.0
 _SWEEP_RATIO = 1.05
+#: v0.1.471 (D357, D457) -- the step of :func:`larger_root_above`, the guard
+#: the optimiser of the face angles puts on each factor it accepts: the
+#: census of D452 (42 753 surfaces) swept every H with it. A minimiser walks
+#: toward where the 1.05 sweep hides a pair of roots (D457: it reports a
+#: smaller root there), so its accepted factors are checked one by one; the
+#: sweep of ``solve`` itself does not change.
+FINE_SWEEP_RATIO = 1.002
 
 #: A face whose direction differs from an adjacent base by less than this
 #: (|cos(α + δ)|, the sine of the angle between them) is parallel to it.
@@ -818,8 +825,11 @@ def near_pair(bases: Sequence[Base], faces: Sequence[Face], F: float, *,
     return d, (None if nxt is None else nxt[0])
 
 
-def _sweep() -> list:
-    """The trial factors, from the top down (∞ is tried first, apart)."""
+def _sweep(ratio: Optional[float] = None) -> list:
+    """The trial factors, from the top down (∞ is tried first, apart), with
+    the step ``ratio`` below ``_F_MAX`` (``_SWEEP_RATIO`` when None, read at
+    the call, so a test that patches the module's step reaches it)."""
+    ratio = _SWEEP_RATIO if ratio is None else ratio
     out = []
     F = _F_TOP
     while F > _F_MAX * (1.0 + 1e-12):
@@ -828,9 +838,42 @@ def _sweep() -> list:
     F = _F_MAX
     while F > _F_MIN:
         out.append(F)
-        F /= _SWEEP_RATIO
+        F /= ratio
     out.append(_F_MIN)
     return out
+
+
+def larger_root_above(bases: Sequence[Base], faces: Sequence[Face],
+                      F: float, *, kh: float = 0.0, slide_sign: int = 1,
+                      shear_sense: str = FIXED,
+                      head_thrust: float = 0.0) -> Optional[float]:
+    """A factor above ``F`` where H changes sign, swept down from F = ∞ with
+    the step ``FINE_SWEEP_RATIO``, or None (v0.1.471, D357, D457): ``F``,
+    the factor :func:`solve` gave these wedges, is then not their largest
+    root, because the 1.05 sweep stepped over a pair of roots above it.
+
+    The guard of the optimiser of the face angles (``optimize_angles``):
+    a minimiser is drawn to exactly those wedges, where the factor reported
+    is too small. The answer is the lower end of the first step down the
+    fine sweep whose sign differs from the one above it, at least
+    ``1 + 1e-6`` times ``F``: a root that close is ``F`` itself, refined.
+    A pair of roots closer than the fine step is not seen either."""
+    fr = _frame(bases, faces, slide_sign, head_thrust)
+    if _parallel_face(fr) is not None:
+        return None
+    if shear_sense == KINEMATIC:
+        fr = _with_senses(fr, kinematic_senses(fr)[1])
+    floor = float(F) * (1.0 + 1e-6)
+    grid = np.asarray([x for x in _sweep(FINE_SWEEP_RATIO) if x > floor])
+    if not len(grid):
+        return None
+    h_prev = _H(fr, 0.0, kh)
+    hs = np.asarray(_H(fr, 1.0 / grid, kh, _ARRAY), dtype=float)
+    for x, h in zip(grid, hs):
+        if h == 0.0 or (h > 0.0) != (h_prev > 0.0):
+            return float(x)
+        h_prev = h
+    return None
 
 
 def _bracket(fr: _Frame, kh: float, h_inf: float, ops: _Ops):

@@ -1630,6 +1630,14 @@ def run_global_minimum(
             result.notes[mid] = _type_refusal(sd)
             lost.append(mid)
             continue
+        # v0.1.471 (D357) -- the faces Sarma's optimiser gave the
+        # deterministic critical surface travel with the method: every
+        # sample computes the same mechanism, faces and all (the owner's
+        # decision of 2026-11-17), and the check of D88 below asks it too.
+        # On the method and not the surface, because the surface goes
+        # through its dictionary here.
+        from ogr_slip2d.methods.sarma import freeze_faces
+        freeze_faces(method, det)
         # v0.1.235 (D92) — the search the PROJECT configures, not one
         # assembled here. Until this version this line was a bare
         # ``GridSearch`` with the method and the admissibility screens and
