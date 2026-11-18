@@ -1,5 +1,11 @@
 # Organizar tu carpeta de trabajo
 
+> **Nota (2026-11-18):** este documento describe la reorganización de agosto
+> de 2026 y se conserva como historia. Desde noviembre de 2026 el repositorio
+> vive en `OGR_Suite\Slip2D\OGR-Slip2D`, junto a OGR-Core, OGR FEM2D y la web;
+> la estructura vigente y quién escribe dónde están en el `README.md` de
+> `OGR_Suite` (repositorio privado `OGR-Suite`).
+
 Partiendo de lo que tienes hoy en `C:\Samuel\OpenGeoRock_slip2d\`.
 
 ---

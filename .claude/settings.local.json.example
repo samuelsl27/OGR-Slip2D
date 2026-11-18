@@ -1,14 +1,24 @@
 {
   "$comment": [
     "Copia este archivo a .claude/settings.local.json y ajústalo.",
-    "additionalDirectories da al agente acceso de LECTURA a carpetas",
-    "fuera del repositorio: es como se le da la documentación de",
-    "referencia sin meterla en el control de versiones.",
-    "Usa rutas ABSOLUTAS y ajústalas a tu máquina."
+    "additionalDirectories da al agente carpetas de fuera del repositorio:",
+    "es como se le da la documentación de referencia sin meterla en el",
+    "control de versiones. Montar una carpeta en el workspace de VS Code",
+    "NO se la da al agente.",
+    "Da lectura Y escritura: por eso cada repositorio que este no debe",
+    "cambiar lleva una regla deny de Edit (que cubre también Write).",
+    "OGR-Core solo se cambia desde su propia ventana. El histórico no se",
+    "le da al agente, a propósito.",
+    "Usa rutas ABSOLUTAS y ajústalas a tu máquina. En las reglas deny,",
+    "//c/... es C:\\... en Windows."
   ],
   "permissions": {
     "additionalDirectories": [
-      "../ogr-referencias/"
+      "C:/Samuel/OGR_Suite/Slip2D/referencias",
+      "C:/Samuel/OGR_Suite/Core/OGR-Core"
+    ],
+    "deny": [
+      "Edit(//c/Samuel/OGR_Suite/Core/OGR-Core/**)"
     ]
   }
 }
