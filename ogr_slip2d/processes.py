@@ -26,6 +26,25 @@ several searches keeps ONE pool for all of them (:class:`pool_scope`).
 v0.1.399 (D384) -- and how a pool's workers stop when the run is cancelled
 (:func:`stoppable_pool`).
 
+v0.1.472 (spec 010) -- and how they start inside a virtual environment.
+There ``pythonw.exe`` next to ``python.exe`` is not the interpreter but a
+LAUNCHER, which starts the base interpreter's own ``pythonw.exe`` with
+``__PYVENV_LAUNCHER__`` naming itself, so that the base one knows it is in
+the venv. ``multiprocessing`` copes with that launcher only when it is
+``sys.executable`` (bpo-35797: it then starts the base interpreter itself
+and sets the variable); with the venv's ``pythonw.exe`` it does not, and the
+pool died (``BrokenProcessPool``): the search fell back to one process and
+said so. Measured with a throwaway venv: the venv's ``pythonw.exe`` kills the
+pool; the base ``pythonw.exe`` alone runs it, but its children are OUTSIDE
+the venv (the base ``sys.prefix``) and can compute with another tree; the
+base one with ``__PYVENV_LAUNCHER__`` naming the venv's runs it, inside the
+venv. That is what :func:`pool_context` does, and only while each worker is
+created (:func:`_start_in_venv`), not for the whole process: a base
+``python.exe`` started later by its full path with that variable in the
+environment also takes itself for the venv (measured), and a global
+executable would send any other pool of the process (some tests open their
+own) to the base interpreter without a word. Outside a venv nothing changed.
+
 Author: Samuel Sáez López (UPCT)
 """
 from __future__ import annotations
@@ -33,6 +52,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
+from multiprocessing import context as _mp_context
 from typing import Optional
 
 
@@ -77,19 +97,39 @@ def stoppable_pool(workers: int):
     import multiprocessing
     from concurrent.futures import ProcessPoolExecutor
     windowless_children()
-    stop = multiprocessing.Event()
+    # v0.1.472 -- in a venv without a console, the pool's own context.
+    # Everywhere else the call is exactly what it was, without the keyword:
+    # passing mp_context=None broke two test doubles of the pool written
+    # with its old signature (the first full suite of this version).
+    context = pool_context()
+    stop = (context or multiprocessing).Event()
+    extra = {} if context is None else {"mp_context": context}
     pool = ProcessPoolExecutor(max_workers=workers, initializer=_install_stop,
-                               initargs=(stop,))
+                               initargs=(stop,), **extra)
     return pool, stop
+
+
+def _in_venv(in_venv: Optional[bool]) -> bool:
+    """Whether this process runs in a virtual environment (the argument is
+    for the tests)."""
+    return (sys.prefix != sys.base_prefix) if in_venv is None else in_venv
 
 
 def child_executable(platform: Optional[str] = None,
                      executable: Optional[str] = None,
                      console: Optional[int] = None,
-                     frozen: Optional[bool] = None) -> Optional[str]:
+                     frozen: Optional[bool] = None,
+                     base_executable: Optional[str] = None,
+                     in_venv: Optional[bool] = None) -> Optional[str]:
     """The interpreter the calculation processes should start with, or None
     to leave multiprocessing its own. The arguments are for the tests; by
-    default they are read from this process."""
+    default they are read from this process.
+
+    v0.1.472 -- in a venv, the BASE interpreter's ``pythonw.exe`` (next to
+    ``sys._base_executable``): the venv's is a launcher that multiprocessing
+    cannot use. It is only right together with ``__PYVENV_LAUNCHER__``,
+    which :func:`pool_context` sets while it starts each worker; alone, the
+    child would run outside the venv (see the module docstring)."""
     platform = sys.platform if platform is None else platform
     if platform != "win32":
         return None
@@ -102,21 +142,101 @@ def child_executable(platform: Optional[str] = None,
         console = ctypes.windll.kernel32.GetConsoleWindow()
     if console:
         return None
-    executable = sys.executable if executable is None else executable
+    if _in_venv(in_venv):
+        executable = (getattr(sys, "_base_executable", sys.executable)
+                      if base_executable is None else base_executable)
+    else:
+        executable = sys.executable if executable is None else executable
     candidate = os.path.join(os.path.dirname(executable), "pythonw.exe")
     return candidate if os.path.isfile(candidate) else None
+
+
+def venv_launcher(executable: Optional[str] = None) -> str:
+    """The venv's own ``pythonw.exe``, next to ``sys.executable``: the value
+    of ``__PYVENV_LAUNCHER__`` for a child started with the base one, so
+    that it takes the venv's ``sys.prefix`` and site-packages (v0.1.472)."""
+    executable = sys.executable if executable is None else executable
+    return os.path.join(os.path.dirname(executable), "pythonw.exe")
 
 
 def windowless_children(**kwargs) -> Optional[str]:
     """Point multiprocessing at :func:`child_executable` when it names one,
     and return it; None when nothing changed. Cheap, and the same every
     time, so it is called before every pool rather than once at a start
-    that some callers never go through."""
+    that some callers never go through.
+
+    v0.1.472 -- in a venv it names the interpreter but changes nothing
+    global: that interpreter needs ``__PYVENV_LAUNCHER__`` too, which only
+    the pool's own context gives (:func:`pool_context`). Set for the whole
+    process, every other pool would start outside the venv."""
     exe = child_executable(**kwargs)
-    if exe is not None:
+    if exe is not None and not _in_venv(kwargs.get("in_venv")):
         import multiprocessing
         multiprocessing.set_executable(exe)
     return exe
+
+
+_LAUNCHER = "__PYVENV_LAUNCHER__"
+#: Held while a worker is started with the venv's executable and variable,
+#: so that two pools starting workers at once do not restore each other's.
+_SPAWN_LOCK = threading.Lock()
+
+
+def _start_in_venv(process_obj, popen=None):
+    """Start one worker of a venv pool (v0.1.472): the base ``pythonw.exe``
+    with ``__PYVENV_LAUNCHER__`` naming the venv's, both set only while the
+    process is created and put back after, whatever happens.
+
+    ``multiprocessing``'s Windows ``Popen`` reads the executable from
+    ``multiprocessing.spawn`` and, when it is not ``sys.executable``, gives
+    the child this process's environment as it is at that moment; there is
+    no other way in. ``popen`` is for the tests."""
+    from multiprocessing import spawn
+    if popen is None:
+        from multiprocessing.popen_spawn_win32 import Popen as popen
+    exe = child_executable()
+    launcher = venv_launcher()
+    with _SPAWN_LOCK:
+        saved_exe = spawn.get_executable()
+        saved_launcher = os.environ.get(_LAUNCHER)
+        try:
+            if exe is not None:
+                spawn.set_executable(exe)
+            if launcher is not None:
+                os.environ[_LAUNCHER] = launcher
+            return popen(process_obj)
+        finally:
+            spawn.set_executable(saved_exe)
+            if saved_launcher is None:
+                os.environ.pop(_LAUNCHER, None)
+            else:
+                os.environ[_LAUNCHER] = saved_launcher
+
+
+class _VenvProcess(_mp_context.SpawnProcess):
+    """A worker of a venv pool, started by :func:`_start_in_venv`. At
+    module level, not local: the process object itself is pickled to the
+    worker, which finds its class by name."""
+
+    @staticmethod
+    def _Popen(process_obj):  # noqa: N802 (multiprocessing's name)
+        return _start_in_venv(process_obj)
+
+
+class _VenvContext(_mp_context.SpawnContext):
+    Process = _VenvProcess
+
+
+def pool_context(**kwargs):
+    """The multiprocessing context a calculation pool is made with: None
+    (multiprocessing's default) unless this is a venv without a console on
+    Windows, where its workers start through :func:`_start_in_venv`
+    (v0.1.472). The arguments are :func:`child_executable`'s."""
+    if not _in_venv(kwargs.get("in_venv")):
+        return None
+    if child_executable(**kwargs) is None:
+        return None
+    return _VenvContext()
 
 
 _local = threading.local()

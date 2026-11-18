@@ -62,8 +62,12 @@ def _inline_pools(broken=0, failing=0):
         # v0.1.399 (D384) — a pool is made with the initializer that hands
         # each worker its stop event; kept, not run: the batches run here,
         # in this process, where no event is installed
-        def __init__(self, max_workers=None, initializer=None, initargs=()):
+        # v0.1.472 -- and, in a venv without a console, with the pool's own
+        # multiprocessing context (``processes.pool_context``); kept too
+        def __init__(self, max_workers=None, initializer=None, initargs=(),
+                     mp_context=None):
             self.max_workers = max_workers
+            self.mp_context = mp_context
             self.initializer, self.initargs = initializer, initargs
             self.shutdowns = []
             self.broken = len(made) < broken

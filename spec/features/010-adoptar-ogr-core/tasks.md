@@ -15,14 +15,16 @@ OK de la propietaria antes de cada fase; una a la vez.
 
 ## Fase 1 · v0.1.472, los pools en un entorno virtual
 
-- [ ] 1.1 Plan de la fase y OK (incluido el coste del test que necesita un venv).
-- [ ] 1.2 `ogr_slip2d/processes.py`: el `pythonw.exe` base con `__PYVENV_LAUNCHER__` dentro de un
-      venv; igual que antes fuera.
-- [ ] 1.3 Test: pool real en un venv, el hijo con el mismo `sys.prefix` y los mismos archivos de
-      `ogr_slip2d` y `ogr_core`; mueren los dos dientes (`pythonw.exe` del venv; base sin
-      lanzador).
-- [ ] 1.4 Los once tests de pools de `censo.md` §5, en un venv: pasan.
-- [ ] 1.5 Versión en nueve sitios y changelog; suite entera `--jobs 4` en verde.
+- [x] 1.1 Plan de la fase y OK (2026-11-18): contexto de `multiprocessing` acotado al pool (B), no la
+      variable en todo el proceso.
+- [x] 1.2 `ogr_slip2d/processes.py`: el `pythonw.exe` base con `__PYVENV_LAUNCHER__`, solo mientras se crea
+      cada trabajador (`pool_context`, `_start_in_venv`); igual que antes fuera.
+- [x] 1.3 `test_venv_pools_v1472` (14 casos): pool real en un venv con los árboles del padre y sin consola; los
+      dos dientes; ocho mutantes, todos muertos.
+- [x] 1.4 Los once tests de pools, en un venv: 96 de 96 (control 0.1.471: fallan los once). Y la suite entera
+      en el venv desechable: 8058 de 8060, sin fallos.
+- [x] 1.5 Versión en nueve sitios y changelog; suite entera `--jobs 4` en verde (8058 de 8060, la segunda; la
+      primera dio 12 fallos por un error propio, `CHANGELOG_v0.1.472.md` §0).
 
 ## Fase 2 · v0.1.473, la adopción
 

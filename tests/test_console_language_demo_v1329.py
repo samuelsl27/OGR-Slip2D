@@ -59,8 +59,11 @@ class TestTheChildInterpreter:
     def test_without_a_console_on_windows_it_is_pythonw(self):
         from ogr_slip2d.processes import child_executable
         exe = self._folder(with_pythonw=True)
+        # v0.1.472 -- outside a venv: inside one it is the base
+        # interpreter's (test_venv_pools_v1472), and this case must say the
+        # same whichever interpreter runs the suite.
         got = child_executable(platform="win32", executable=exe, console=0,
-                               frozen=False)
+                               frozen=False, in_venv=False)
         assert got == os.path.join(os.path.dirname(exe), "pythonw.exe")
 
     def test_otherwise_nothing_changes(self):
@@ -76,7 +79,8 @@ class TestTheChildInterpreter:
         # and no pythonw next to the interpreter
         bare = self._folder(with_pythonw=False)
         assert child_executable(platform="win32", executable=bare,
-                                console=0, frozen=False) is None
+                                console=0, frozen=False,
+                                in_venv=False) is None
 
     def test_it_is_what_multiprocessing_starts(self):
         """v0.1.333 (D338a) -- compared through ``os.fsdecode``: outside
@@ -90,7 +94,8 @@ class TestTheChildInterpreter:
         before = spawn.get_executable()
         try:
             got = windowless_children(platform="win32", executable=exe,
-                                      console=0, frozen=False)
+                                      console=0, frozen=False,
+                                      in_venv=False)
             assert got is not None
             assert os.fsdecode(spawn.get_executable()) == got
         finally:
@@ -99,20 +104,30 @@ class TestTheChildInterpreter:
 
     def test_a_split_search_under_it_is_bit_identical(self):
         """The real pythonw.exe, the real pool: the same evaluations, in
-        the same order, to the last bit, and no fallback to one process."""
+        the same order, to the last bit, and no fallback to one process.
+
+        v0.1.472 -- through the program's own path, as if there were no
+        console: before, this case pointed multiprocessing at
+        ``child_executable()`` by hand, and in a venv that is the base
+        interpreter without its launcher, the one way of doing it that runs
+        the workers outside the venv (test_venv_pools_v1472)."""
         import multiprocessing.spawn as spawn
-        from ogr_slip2d.processes import child_executable
+        import ogr_slip2d.processes as processes
         import test_parallel_search_v197 as par
-        exe = child_executable(platform=sys.platform, console=0,
-                               frozen=False)
-        if exe is None:
+        raw = processes.child_executable
+
+        def windowless(**k):
+            return raw(**{**k, "platform": sys.platform, "console": 0,
+                          "frozen": False})
+        if windowless() is None:
             pytest.skip("no pythonw.exe on this system")
         before = spawn.get_executable()
+        processes.child_executable = windowless
         try:
-            spawn.set_executable(exe)
             p = par._project()
             split = par._search(p, 2).run(p)
         finally:
+            processes.child_executable = raw
             spawn.set_executable(before)
         assert not any("ran in one" in n for n in split.notes), split.notes
         p = par._project()

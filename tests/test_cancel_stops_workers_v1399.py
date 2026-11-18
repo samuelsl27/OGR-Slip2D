@@ -99,8 +99,12 @@ class _Recorder:
 
     made: list = []
 
-    def __init__(self, max_workers=None, initializer=None, initargs=()):
+    # v0.1.472 -- in a venv without a console the pool is also made with its
+    # own multiprocessing context (``processes.pool_context``)
+    def __init__(self, max_workers=None, initializer=None, initargs=(),
+                 mp_context=None):
         self.stop = initargs[0] if initargs else None
+        self.mp_context = mp_context
         self.seen = []
         self.futures = []
         _Recorder.made.append(self)
