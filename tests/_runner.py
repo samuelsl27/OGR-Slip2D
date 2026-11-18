@@ -185,7 +185,9 @@ if not getattr(sys.modules.get("pytest"), "ogr_shim", False):
 # --- Selection --------------------------------------------------------
 # Spec 009 (F1): ``ogr_fem2d`` left the repository; its mesh and seepage
 # are in ``ogr_core.fem``, and the name is the finite-element program's.
-PACKAGES = ("ogr_core", "ogr_slip2d", "ogr_gui", "ogr_cli",
+# Ensayo de la fase 1 de OGR-Core 0.2.0: ``ogr_core`` viene de otro arbol
+# (OGR-Core), asi que no es un paquete de este repositorio.
+PACKAGES = ("ogr_slip2d", "ogr_gui", "ogr_cli",
             "ogr_api", "ogr_mcp")
 
 
