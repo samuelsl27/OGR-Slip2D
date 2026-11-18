@@ -23,6 +23,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.0",
     "numpy>=1.26",
     "scipy>=1.14",
     "shapely>=2.0",
