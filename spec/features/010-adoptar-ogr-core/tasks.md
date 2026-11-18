@@ -54,19 +54,28 @@ OK de la propietaria antes de cada fase; una a la vez.
 
 ## Fase 4 · El banco (fuera de git)
 
-- [ ] 4.1 Diff a la propietaria de los archivos de `censo.md` §6, y OK.
-- [ ] 4.2 Aplicado; el lote `version` arranca.
+- [x] 4.1 Diff a la propietaria y OK (2026-11-18): las rutas de `OGR_Suite` en `comun.py`, `banco.py`,
+      `LEEME.md` y el manifiesto; las importaciones a `ogr_core.fem` en `casos.py` y en los cinco
+      `construir_modelo.py`; el `pytest` simulado por `install_pytest_shim`; la procedencia dice el
+      núcleo; los nueve interruptores de `elegibilidad_critica_d155.py` en «ruta nueva,ruta vieja».
+      Cada archivo con su fin de línea. Originales guardados en el scratchpad de la sesión.
+- [x] 4.2 Aplicado. El manifiesto: 19 de 23 iguales a la referencia, 4 aceptados con su motivo (los tres
+      de esta fase y el de D388), ninguno sin aceptar. Con el `.venv`: `comun`, `casos` (con el
+      `pytest` simulado) y `elegibilidad_critica_d155` cargan; la procedencia dice Slip2D 0.1.473 y
+      `ogr_core` 0.2.0 de OGR-Core, y `ogr_fem2d` no importable; los nueve interruptores existen en
+      `ogr_core.fem`. El lote `version` es la fase 5.
 
 ## Fase 5 · Verificación
 
-- [ ] 5.1 Suite entera `--jobs 4` en el `.venv` y `comparar_suites.py` contra
-      `antes/suite_d48e2b3_jobs4.txt`: cada diferencia explicada.
-- [ ] 5.2 Suite entera en serie, sin argumentos.
-- [ ] 5.3 Huella del banco, lote `version`: 23 de 23 idénticos (`comparar_huellas.py`), leyendo la
-      procedencia.
-- [ ] 5.4 Diff vacío de `tests/test_slide_validation_*`, `tests/test_acads_*` y `validacion/`.
-- [ ] 5.5 `python -m ogr_gui` (fuera de pantalla), `python -m ogr_cli --help`,
-      `python -m ogr_mcp --help`.
+- [x] 5.1 Suite entera `--jobs 4` en el `.venv` y `comparar_suites.py`: 7529 de 7531, 0 fallos; 7474 iguales,
+      ninguno cambia, 572 que faltan y 57 que sobran, explicados (`CHANGELOG_v0.1.473.md` §3).
+- [x] 5.2 Suite entera en serie, sin argumentos: 7529 de 7531, 0 fallos, sin fugas; registrada en `07524e8`.
+- [x] 5.3 Huella del banco, lote `version`: 23 de 23 idénticos bit a bit frente a `antes/huella_d48e2b3`; la
+      procedencia de las 23 dice Slip2D 0.1.473 de este árbol, `ogr_core` 0.2.0 de OGR-Core y las mismas
+      librerías que la de partida.
+- [x] 5.4 Diff vacío de `tests/test_slide_validation_*`, `tests/test_acads_*` y `validacion/`.
+- [x] 5.5 `python -m ogr_gui` (fuera de pantalla, 15 s sin errores), `python -m ogr_cli --help`,
+      `python -m ogr_mcp --help` y sus ejecutables, con el `.venv`.
 - [ ] 5.6 CI en verde (tras el push que autorice la propietaria).
-- [ ] 5.7 Pendiente para la propietaria: Slip2D en el Python del sistema, el servidor MCP y los
-      accesos directos.
+- [ ] 5.7 Pendiente para la propietaria: Slip2D en el Python del sistema, el servidor MCP y los accesos
+      directos.

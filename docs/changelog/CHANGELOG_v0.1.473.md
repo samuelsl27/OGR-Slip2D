@@ -206,10 +206,54 @@ Los dos fallos de la primera corrida:
 
 `git diff d48e2b3 -- tests/test_slide_validation_* tests/test_acads_* validacion/`: vacío.
 
+### La huella del banco de cómputo (fase 5 de la spec)
+
+El banco se puso al día en la fase 4 (fuera de git, con el diff aprobado):
+- **las rutas de `OGR_Suite`** en `comun.py`, `_tools/banco.py`, `LEEME.md` y el manifiesto;
+- **las importaciones a `ogr_core.fem`** en `casos.py` y en los cinco `construir_modelo.py` que importaban
+  `ogr_fem2d` (004 y 015 del 05; 010, 038 y 102 del 02);
+- **el `pytest` simulado:** `casos.py` lo obtenía cargando `tests/_runner.py`, y el runner compartido ya no lo
+  instala al importarse; ahora `casos.py` llama a `install_pytest_shim()`;
+- **la procedencia** dice qué núcleo se midió (`ogr_core_version`, `ogr_core_fem_file`, `ogr_fem2d_importable`);
+- **los nueve interruptores de `elegibilidad_critica_d155.py`** quedan en «ruta nueva,ruta vieja», el convenio de
+  0.1.344.
+
+Cada archivo conserva su fin de línea. El manifiesto conserva los 23 hashes de referencia: 19 iguales y 4 cambios
+aceptados con su motivo (los tres de esta versión y el de D388).
+
+**El lote `version`**, con el intérprete del `.venv` y ningún otro proceso del banco a la vez:
+- **Los trabajos:** los 23 salen con código 0 y ningún fallo; ninguna entrada cambia durante el lote.
+- **La comparación:** frente a `antes/huella_d48e2b3` (`comparar_huellas.py`, con el `comparar.py` del banco), **23
+  de 23 casos idénticos bit a bit** y ninguna clave sin pareja.
+- **La procedencia, en las 23:**
+  - Slip2D 0.1.473 de este árbol y `ogr_core` 0.2.0 de OGR-Core (`…\OGR-Core\ogr_core`), con la filtración en
+    `ogr_core\fem\seepage.py` y `ogr_fem2d` no importable;
+  - el intérprete del `.venv`, con Python 3.14.7, numpy 2.5.1, scipy 1.18.0 y shapely 2.1.2, los mismos que la de
+    partida (que midió 0.1.471 con la copia del núcleo dentro de Slip2D);
+  - los hijos de los pools con el `pythonw.exe` del Python base: la v0.1.472 en uso.
+- **Los ocho casos que abren pool**, que en el ensayo dentro de un venv llevaban la nota del pool caído, salen
+  idénticos.
+
+### La suite en serie
+
+Sin argumentos, en el `.venv`: **7531 casos, 7529 pasan, 0 fallan, 2 saltados, ninguna fuga**. Queda registrada como
+serie en verde en `07524e8`. Comparada test a test con la corrida `--jobs 4`, todos dan lo mismo. Cinco nombres
+salen «distintos» solo porque en el registro en serie un aviso de `stderr` se cuela a media línea: pega texto al
+nombre de un test o se come el encabezado de una clase. Los cinco son ✓ en las líneas crudas.
+
+### El arranque
+
+Con el `.venv`:
+- `python -m ogr_cli --help` y `python -m ogr_mcp --help` salen con código 0, y también sus ejecutables
+  `ogr-slip2d-cli` y `ogr-slip2d-mcp`;
+- `python -m ogr_gui`, fuera de pantalla y con carpetas de ajustes y de puente propias, seguía abierta y sin
+  errores a los 15 s.
+
 ## 4. Lo que queda
 
-- La serie entera sin argumentos, la huella del banco (23 de 23), el arranque de los tres programas y la CI: fase 5
-  de la spec 010. El banco, fase 4.
-- Slip2D en el Python del sistema, el servidor MCP y los accesos directos: a decidir por la propietaria. Hasta
+- **La CI**, en el primer push que autorice la propietaria. Instalará `ogr-core` desde la etiqueta, algo que aquí no
+  se ha probado: aquí el núcleo va en editable.
+- **Slip2D en el Python del sistema, el servidor MCP y los accesos directos:** a decidir por la propietaria. Hasta
   entonces no arrancan desde el Python del sistema.
-- Pedir a OGR-Core, para su v0.2.1, el test de «un test `async` falla».
+- **OGR-Core, para su v0.2.1:** pedir el test de «un test `async` falla».
+- **`test_no_vendor_names_v1160`:** nunca ha recorrido `ogr_api` ni `ogr_mcp`. Es una anomalía anterior, anotada.
