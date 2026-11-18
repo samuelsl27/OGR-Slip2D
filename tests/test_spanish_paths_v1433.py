@@ -390,8 +390,8 @@ class TestTheWindowSaysItInSpanish:
 class TestTheDialogsSayItInSpanish:
     def test_the_boundary_conditions_summary(self):
         from ogr_core.project.demo import build_demo_project
-        from ogr_fem2d.mesh import generate_mesh_for_project
-        from ogr_fem2d.solvers import BCType, SeepageBoundaryConditions
+        from ogr_core.fem.generator import generate_mesh_for_project
+        from ogr_core.fem.seepage import BCType, SeepageBoundaryConditions
         from ogr_gui.dialogs.boundary_conditions_dialog import (
             BoundaryConditionsDialog)
         QApplication.instance() or QApplication([])
@@ -591,7 +591,7 @@ class TestTheDialogsSayItInSpanish:
 
     def test_the_transient_stages(self):
         from ogr_core.project.settings import GroundwaterSettings
-        from ogr_fem2d.solvers import BCType, SeepageBoundaryConditions
+        from ogr_core.fem.seepage import BCType, SeepageBoundaryConditions
         from ogr_gui.dialogs.transient_stages_dialog import (
             TransientStagesDialog, stage_label)
         from ogr_gui.interpret_groundwater_window import stage_entry
@@ -634,7 +634,7 @@ class TestTheDialogsSayItInSpanish:
         current ones, so «has some» is not «has its own». The review of
         0.1.433 found every stage marked."""
         import test_seepage_run_notes_v1352 as srn
-        from ogr_fem2d.solvers import BCType, SeepageBoundaryConditions
+        from ogr_core.fem.seepage import BCType, SeepageBoundaryConditions
         from ogr_gui.interpret_groundwater_window import stage_entry
         from ogr_slip2d.transient_stability import solve_project_groundwater
         p = srn._seepage_project(transient=True)

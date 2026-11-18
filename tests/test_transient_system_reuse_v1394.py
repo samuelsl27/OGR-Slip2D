@@ -57,7 +57,7 @@ def _old_lumped_mass(self):
 
 
 def _old_linear_solve(self, rows, cols, vals, rhs, n):
-    import ogr_fem2d.solvers.seepage as SP
+    import ogr_core.fem.seepage as SP
     _csr, _spsolve, _np = SP._csr, SP._spsolve, SP._np
     if _csr is not None and _spsolve is not None and _np is not None:
         try:
@@ -81,7 +81,7 @@ def _old_linear_solve(self, rows, cols, vals, rhs, n):
 
 def _old_solve_linear_step(self, bcs, kr, extra_dirichlet, diag, extra_q,
                            fluxes=True):
-    from ogr_fem2d.solvers.seepage import SeepageResult
+    from ogr_core.fem.seepage import SeepageResult
     n = self.mesh.node_count
     rows, cols, vals, q = self.assemble(bcs, kr)
     for i in range(n):
@@ -136,7 +136,7 @@ def _old_solve_linear_step(self, bcs, kr, extra_dirichlet, diag, extra_q,
 @contextlib.contextmanager
 def _as_v0_1_393():
     """The step, the solve and the mass of v0.1.393; given back on exit."""
-    import ogr_fem2d.solvers.seepage as SP
+    import ogr_core.fem.seepage as SP
     T, S = SP.TransientSeepageSolver, SP.SeepageSolver
     saved = (T.__dict__["_solve_linear_step"], T.__dict__["_lumped_mass"],
              S.__dict__["_linear_solve"])
@@ -152,7 +152,7 @@ def _as_v0_1_393():
 @contextlib.contextmanager
 def _counting_csr(raises=False):
     """``_csr`` counted (and, with ``raises``, failing); given back."""
-    import ogr_fem2d.solvers.seepage as SP
+    import ogr_core.fem.seepage as SP
     real = SP._csr
     calls = [0]
 
@@ -172,7 +172,7 @@ def _counting_csr(raises=False):
 # ----------------------------------------------------------------------
 def _mesh():
     """A 3 x 4 strip of triangles over two materials, one anisotropic."""
-    from ogr_fem2d.mesh.mesh import Element, Mesh, Node
+    from ogr_core.fem.mesh import Element, Mesh, Node
     nodes = [Node(3 * j + k, 1.1 * k, 0.8 * j)
              for j in range(4) for k in range(3)]
     elements = []
@@ -188,8 +188,11 @@ def _mesh():
 
 def _solver(cls=None):
     from ogr_core.hydraulic import HydraulicProperties
-    from ogr_fem2d.solvers.seepage import (BCType, SeepageBoundaryConditions,
-                                           TransientSeepageSolver)
+    from ogr_core.fem.seepage import (
+        BCType,
+        SeepageBoundaryConditions,
+        TransientSeepageSolver,
+    )
     props = {"a": HydraulicProperties(ks=2e-5, specific_storage=1e-3),
              "b": HydraulicProperties(ks=7e-6, k2_k1=0.3, k1_angle_deg=27.0,
                                       specific_storage=2e-3)}
@@ -291,10 +294,12 @@ class TestEachSolveIsV0_1_393s:
         mesh of test_seepage_element_cache_v1393). The kept system must
         not stand for them."""
         from ogr_core.hydraulic import HydraulicProperties
-        from ogr_fem2d.mesh.mesh import Element, Mesh, Node
-        from ogr_fem2d.solvers.seepage import (BCType,
-                                               SeepageBoundaryConditions,
-                                               TransientSeepageSolver)
+        from ogr_core.fem.mesh import Element, Mesh, Node
+        from ogr_core.fem.seepage import (
+            BCType,
+            SeepageBoundaryConditions,
+            TransientSeepageSolver,
+        )
         pts = [(0.0, 0.0), (1.3, 0.0), (0.0, 0.9), (1.3, 0.9)]
         mesh = Mesh(nodes=[Node(i, x, y) for i, (x, y) in enumerate(pts)],
                     elements=[Element(0, (0, 2, 1), "a"),
@@ -348,7 +353,7 @@ class TestEachSolveIsV0_1_393s:
         is replaced in the module with one whose dense solve fails."""
         import types
         import numpy as np
-        import ogr_fem2d.solvers.seepage as SP
+        import ogr_core.fem.seepage as SP
 
         def no_dense(*_a, **_k):
             raise np.linalg.LinAlgError("no dense solve today")
@@ -381,11 +386,13 @@ class TestEachSolveIsV0_1_393s:
         with an unsaturated zone (the model of test_published_fluxes_v1392),
         whose kr moves: every stage as v0.1.393 publishes it."""
         from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel
-        from ogr_fem2d.mesh.mesh import Element, Mesh, Node
-        from ogr_fem2d.solvers.seepage import (BCType,
-                                               SeepageBoundaryConditions,
-                                               TransientSeepageSolver,
-                                               TransientStage)
+        from ogr_core.fem.mesh import Element, Mesh, Node
+        from ogr_core.fem.seepage import (
+            BCType,
+            SeepageBoundaryConditions,
+            TransientSeepageSolver,
+            TransientStage,
+        )
 
         def column(unsaturated):
             dz, rows = 0.1, 20
@@ -448,7 +455,7 @@ class TestARedefinedLinearSolve:
         assert len({id(rows) for rows in seen}) == 3, "lists of its own"
 
     def test_on_the_instance(self):
-        from ogr_fem2d.solvers.seepage import SeepageSolver
+        from ogr_core.fem.seepage import SeepageSolver
         s, bcs = _solver()
         seen = []
 
@@ -461,7 +468,7 @@ class TestARedefinedLinearSolve:
         assert getattr(s, "_step_system", None) is None
 
     def test_on_a_subclass(self):
-        from ogr_fem2d.solvers.seepage import TransientSeepageSolver
+        from ogr_core.fem.seepage import TransientSeepageSolver
         seen = []
 
         class Mine(TransientSeepageSolver):
@@ -479,7 +486,7 @@ class TestSpsolveLeavesTheMatrix:
 
     def test_the_kept_matrix_solves_as_a_fresh_one(self):
         import numpy as np
-        import ogr_fem2d.solvers.seepage as SP
+        import ogr_core.fem.seepage as SP
         s, bcs = _solver()
         rows, cols, vals, _q0 = s.assemble(bcs)
         n = s.mesh.node_count
@@ -530,7 +537,7 @@ class TestTheLumpedMass:
 
     def test_stale_with_the_geometry(self):
         from ogr_core.fem.mesh import invalidate_mesh_indexes
-        from ogr_fem2d.mesh.mesh import Node
+        from ogr_core.fem.mesh import Node
         s, _bcs = _solver()
         s._lumped_mass()
 

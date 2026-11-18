@@ -638,8 +638,8 @@ class TestNothingOnScreenReadsEnglish:
         from ogr_core.project.settings import GroundwaterSettings
         from ogr_core.support import EndAnchored, SupportInstance
         from ogr_core.geometry import Vertex
-        from ogr_fem2d.mesh import generate_mesh_for_project
-        from ogr_fem2d.solvers import BCType, SeepageBoundaryConditions
+        from ogr_core.fem.generator import generate_mesh_for_project
+        from ogr_core.fem.seepage import BCType, SeepageBoundaryConditions
         from ogr_gui.dialogs.boundary_conditions_dialog import (
             BoundaryConditionsDialog)
         from ogr_gui.dialogs.boundary_dialogs import GeometryCleanupDialog

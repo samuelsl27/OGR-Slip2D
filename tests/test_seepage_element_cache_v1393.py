@@ -46,7 +46,7 @@ import math
 
 def _old_assemble(self, bcs, kr=None):
     """``SeepageSolver.assemble`` of v0.1.392, copied."""
-    from ogr_fem2d.solvers.seepage import BCType
+    from ogr_core.fem.seepage import BCType
     n = self.mesh.node_count
     rows, cols, vals = [], [], []
     q = [0.0] * n
@@ -83,7 +83,7 @@ def _old_assemble(self, bcs, kr=None):
 def _mesh(flat=False):
     """A 3 x 2 strip of triangles over two materials; ``flat`` adds an
     element of no area (its three nodes on a line)."""
-    from ogr_fem2d.mesh.mesh import Element, Mesh, Node
+    from ogr_core.fem.mesh import Element, Mesh, Node
     nodes = [Node(3 * j + k, 1.3 * k, 0.9 * j)
              for j in range(3) for k in range(3)]
     elements = []
@@ -101,8 +101,11 @@ def _mesh(flat=False):
 
 def _solver(flat=False):
     from ogr_core.hydraulic import HydraulicProperties
-    from ogr_fem2d.solvers.seepage import (BCType, SeepageBoundaryConditions,
-                                           SeepageSolver)
+    from ogr_core.fem.seepage import (
+        BCType,
+        SeepageBoundaryConditions,
+        SeepageSolver,
+    )
     mesh = _mesh(flat)
     props = {"a": HydraulicProperties(ks=2e-5),
              "b": HydraulicProperties(ks=7e-6, k2_k1=0.3, k1_angle_deg=27.0)}
@@ -187,7 +190,7 @@ class TestTheCacheCannotGoStale:
         """A node replaced in the same list: what a python_exec script can
         do, and why its run moves the index epoch (v0.1.383)."""
         from ogr_core.fem.mesh import invalidate_mesh_indexes
-        from ogr_fem2d.mesh.mesh import Node
+        from ogr_core.fem.mesh import Node
         s, bcs = _solver()
         s.assemble(bcs)
         old = s.mesh.nodes[4]
@@ -201,7 +204,7 @@ class TestTheCacheCannotGoStale:
         edits a mesh and uses it again): the solver builds again. Without
         it the kept geometry stands — the control that this case can
         fail."""
-        from ogr_fem2d.mesh.mesh import Node
+        from ogr_core.fem.mesh import Node
         s, bcs = _solver()
         s.assemble(bcs)
         old = s.mesh.nodes[4]
@@ -230,9 +233,11 @@ class TestTheCacheCannotGoStale:
         do not (in these two elements, wound the other way). The matrix
         kept at 0.0 must not stand for it."""
         from ogr_core.hydraulic import HydraulicProperties
-        from ogr_fem2d.mesh.mesh import Element, Mesh, Node
-        from ogr_fem2d.solvers.seepage import (SeepageBoundaryConditions,
-                                               SeepageSolver)
+        from ogr_core.fem.mesh import Element, Mesh, Node
+        from ogr_core.fem.seepage import (
+            SeepageBoundaryConditions,
+            SeepageSolver,
+        )
         pts = [(0.0, 0.0), (1.3, 0.0), (0.0, 0.9), (1.3, 0.9)]
         mesh = Mesh(nodes=[Node(i, x, y) for i, (x, y) in enumerate(pts)],
                     elements=[Element(0, (0, 2, 1), "a"),
@@ -306,7 +311,7 @@ class TestTheWorkIsCounted:
         every element; a first call with a fractional kr leaves K0 to the
         first call that needs it; a conductivity edited between calls is
         formed once more and then kept."""
-        import ogr_fem2d.solvers.seepage as SP
+        import ogr_core.fem.seepage as SP
         s, bcs = _solver()
         n = len(s.mesh.elements)
         formed = [0]
@@ -344,7 +349,7 @@ class TestWhatABadInputRaises:
         return None
 
     def test_an_element_on_a_missing_node(self):
-        from ogr_fem2d.mesh.mesh import Element
+        from ogr_core.fem.mesh import Element
         s, bcs = _solver()
         s.mesh.elements.append(Element(len(s.mesh.elements), (0, 1, 40), "a"))
         new = self._raised(lambda: s.assemble(bcs))

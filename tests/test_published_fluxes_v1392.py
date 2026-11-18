@@ -48,8 +48,8 @@ def _column(top=None):
     a steady solve has passes to make (without it the steady field is the
     hydrostatic one, whatever ``kr``)."""
     from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel
-    from ogr_fem2d.mesh.mesh import Element, Mesh, Node
-    from ogr_fem2d.solvers.seepage import BCType, SeepageBoundaryConditions
+    from ogr_core.fem.mesh import Element, Mesh, Node
+    from ogr_core.fem.seepage import BCType, SeepageBoundaryConditions
     dz, rows = 0.1, 20
     nodes = [Node(2 * j + k, k * dz, j * dz)
              for j in range(rows + 1) for k in (0, 1)]
@@ -72,7 +72,7 @@ def _column(top=None):
 
 
 def _transient(top=None, **kw):
-    from ogr_fem2d.solvers.seepage import TransientSeepageSolver
+    from ogr_core.fem.seepage import TransientSeepageSolver
     mesh, props, bcs = _column(top)
     s = TransientSeepageSolver(mesh, props, gamma_w=9.81, relaxation=0.5,
                                tolerance=1e-6,
@@ -82,7 +82,7 @@ def _transient(top=None, **kw):
 
 
 def _stages(bcs):
-    from ogr_fem2d.solvers.seepage import TransientStage
+    from ogr_core.fem.seepage import TransientStage
     return [TransientStage(time=0.0, label="t0", bcs=bcs),
             TransientStage(time=900.0, label="a", bcs=bcs),
             TransientStage(time=3600.0, label="b", bcs=bcs)]
@@ -91,7 +91,7 @@ def _stages(bcs):
 @contextlib.contextmanager
 def _as_v0_1_391():
     """Every solve computes its fluxes, as in v0.1.391; given back on exit."""
-    import ogr_fem2d.solvers.seepage as SP
+    import ogr_core.fem.seepage as SP
     saved = (SP.SeepageSolver.__dict__["solve"],
              SP.TransientSeepageSolver.__dict__["_solve_linear_step"],
              SP.TransientSeepageSolver.__dict__["_step"])
@@ -147,7 +147,7 @@ class TestWhatIsPublishedIsV0_1_391s:
         """One Picard pass: the loop stops unconverged, and the final state
         is solved at the end (after the rescue), the branch a settled loop
         does not reach."""
-        from ogr_fem2d.solvers.seepage import TransientSeepageSolver
+        from ogr_core.fem.seepage import TransientSeepageSolver
 
         def run():
             mesh, props, bcs = _column(top=1.0)
@@ -229,7 +229,7 @@ class TestOncePerPublishedResult:
     """Invariant 3."""
 
     def _counting(self, top=None):
-        from ogr_fem2d.solvers.seepage import TransientSeepageSolver
+        from ogr_core.fem.seepage import TransientSeepageSolver
 
         class Counting(TransientSeepageSolver):
             calls = 0
@@ -264,7 +264,7 @@ class TestOncePerPublishedResult:
         assert type(s).calls == 2, "one per stage that advanced"
 
     def test_solve_by_default_and_without(self):
-        from ogr_fem2d.solvers.seepage import SeepageSolver
+        from ogr_core.fem.seepage import SeepageSolver
         mesh, props, bcs = _column()
         s = SeepageSolver(mesh, props, gamma_w=9.81)
         full = s.solve(bcs)
