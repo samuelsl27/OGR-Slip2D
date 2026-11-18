@@ -88,7 +88,7 @@ class TestTheParameterIsGone:
         ``BaseSearch.__init__`` assigned ``self.<name>`` and nothing in the
         whole tree ever read it back."""
         hits = []
-        for pkg in ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_gui",
+        for pkg in ("ogr_core", "ogr_slip2d", "ogr_gui",
                     "ogr_cli"):
             for path in sorted((_ROOT / pkg).rglob("*.py")):
                 tree = ast.parse(path.read_text(encoding="utf-8"))

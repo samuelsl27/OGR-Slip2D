@@ -29,10 +29,10 @@ is where a finite-element model states where its reservoir is
 what the interface did until this version — analyses a drawdown with the
 pressures of the emptied reservoir and the weight of the full one.
 
-``ogr_fem2d`` is imported inside the functions, the same way
-``ogr_core.project`` imports it: the dependency is real but it is not
-needed to import this module, and the limit-equilibrium engine must not
-require a finite-element package to load.
+The seepage solver (``ogr_core.fem.seepage``; ``ogr_fem2d`` until spec
+009) is imported inside the functions: the dependency is real but it is
+not needed to import this module, and the limit-equilibrium engine must
+not require the finite-element solver to load.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -89,7 +89,7 @@ class StageStability:
     index: int
     time: float = 0.0
     label: str = ""
-    #: ``ogr_fem2d.solvers.SeepageResult`` for this stage.
+    #: ``ogr_core.fem.SeepageResult`` for this stage.
     result: object = None
     #: ``method_id -> factor of safety``, empty when the stage was not
     #: flagged *Calculate SF*.
@@ -124,7 +124,7 @@ class TransientStabilityOutcome:
 # ======================================================================
 def _hydraulic_props(project) -> dict:
     from ogr_core.hydraulic import HydraulicProperties
-    from ogr_fem2d.solvers import hydraulic_props_of
+    from ogr_core.fem import hydraulic_props_of
 
     props = hydraulic_props_of(project)
     for m in getattr(project, "materials", []):
@@ -136,7 +136,7 @@ def _mesh_of(project, **mesh_kwargs):
     mesh = getattr(project, "fem_mesh", None)
     if mesh is not None and getattr(mesh, "element_count", 0) > 0:
         return mesh
-    from ogr_fem2d.mesh import generate_mesh_for_project
+    from ogr_core.fem.generator import generate_mesh_for_project
 
     mesh = generate_mesh_for_project(project, **mesh_kwargs)
     project.fem_mesh = mesh
@@ -150,7 +150,7 @@ def _current_bcs(project, mesh):
     node ids do not fit the current mesh is not a set for this mesh, so
     it is replaced rather than half applied.
     """
-    from ogr_fem2d.solvers import default_boundary_conditions
+    from ogr_core.fem.seepage import default_boundary_conditions
 
     bcs = getattr(project, "seepage_bcs", None)
     ok = bcs is not None and {b.node_id for b in bcs.nodes} <= set(
@@ -169,7 +169,7 @@ def stage_boundary_conditions(project, stage: dict, current):
     with it and nothing would evolve in time. A drawdown needs the stage
     level to differ from the initial one.
     """
-    from ogr_fem2d.solvers import SeepageBoundaryConditions
+    from ogr_core.fem import SeepageBoundaryConditions
 
     raw = stage.get("bcs") if isinstance(stage, dict) else None
     if not raw:
@@ -246,7 +246,7 @@ def solve_project_groundwater(project, *, progress_cb: Optional[Callable]
     """
     from ogr_core.project.rules import (mesh_mismatch,
                                         transient_without_stages)
-    from ogr_fem2d.solvers import UnsaturatedSeepageSolver
+    from ogr_core.fem.seepage import UnsaturatedSeepageSolver
 
     gw = project.settings.groundwater
     mesh = _mesh_of(project, **mesh_kwargs)
@@ -290,7 +290,7 @@ def _has_field(results) -> bool:
 
 
 def _solve_transient(project, mesh, props, gamma_w, *, progress_cb=None):
-    from ogr_fem2d.solvers import TransientSeepageSolver, TransientStage
+    from ogr_core.fem.seepage import TransientSeepageSolver, TransientStage
 
     gw = project.settings.groundwater
     steady = (dict(steady_relaxation=STEADY_RELAXATION,
@@ -307,7 +307,7 @@ def _solve_transient(project, mesh, props, gamma_w, *, progress_cb=None):
     current = _current_bcs(project, mesh)
     initial = current
     if gw.transient_initial_bcs:
-        from ogr_fem2d.solvers import SeepageBoundaryConditions
+        from ogr_core.fem import SeepageBoundaryConditions
         initial = SeepageBoundaryConditions.from_dict(
             gw.transient_initial_bcs)
 
@@ -428,7 +428,7 @@ def run_transient_stability(project, method_ids=None, *,
     # emptied one, or the other way round.
     in_force = current
     if gw.transient_initial_bcs:
-        from ogr_fem2d.solvers import SeepageBoundaryConditions
+        from ogr_core.fem import SeepageBoundaryConditions
         in_force = SeepageBoundaryConditions.from_dict(
             gw.transient_initial_bcs)
     initial_water = in_force          # v0.1.309 (D312): for the state at t = 0
@@ -573,7 +573,7 @@ def groundwater_query_solver(project):
     solver = getattr(project, "_gw_solver", None)
     if solver is not None and getattr(solver, "mesh", None) is mesh:
         return solver
-    from ogr_fem2d.solvers import UnsaturatedSeepageSolver
+    from ogr_core.fem.seepage import UnsaturatedSeepageSolver
 
     gw = project.settings.groundwater
     return UnsaturatedSeepageSolver(

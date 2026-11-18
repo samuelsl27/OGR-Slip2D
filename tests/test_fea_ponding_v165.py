@@ -63,11 +63,11 @@ def _flat_project(method="fea_steady"):
 
 
 class _Node:
-    """Minimal stand-in for ogr_fem2d.mesh.Node.
+    """Minimal stand-in for ogr_core.fem.Node.
 
     A real mesh would work as well and cost a triangulation; the coupling
-    is duck-typed on ``.x``/``.y`` precisely so ogr_core never has to
-    import ogr_fem2d.
+    is duck-typed on ``.x``/``.y`` (it was written when the mesh still
+    lived in ``ogr_fem2d``, which the core must not import).
     """
 
     def __init__(self, x, y):

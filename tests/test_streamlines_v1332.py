@@ -4,7 +4,7 @@
 v0.1.332 (D329b) — the streamlines of a seepage field, validated against
 external identities (rule 1).
 
-The tracer (``ogr_fem2d.solvers.streamlines``) follows the Darcy velocity,
+The tracer (``ogr_core.fem.streamlines``) follows the Darcy velocity,
 constant inside each linear triangle, from edge to edge: exact by segment,
 with the field's own approximation as the only error. What these tests
 check, none of it against what the code prints today:
@@ -48,7 +48,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 def _grid(nx, ny, x0, x1, y0, y1):
     """A structured mesh of linear triangles, the diagonals alternating so
     that no direction is favoured."""
-    from ogr_fem2d.mesh.mesh import Element, Mesh, Node
+    from ogr_core.fem.mesh import Element, Mesh, Node
     nodes = []
     for j in range(ny + 1):
         for i in range(nx + 1):
@@ -80,7 +80,7 @@ _STARTS = ((2.5, 1.0), (2.0, 1.5), (1.2, 1.2), (2.9, 0.7))
 
 
 def _worst_xy_error(n):
-    from ogr_fem2d.solvers.streamlines import trace_streamline
+    from ogr_core.fem.streamlines import trace_streamline
     mesh = _grid(n, n, 0.5, 3.0, 0.5, 3.0)
     velocity = _stagnation(mesh)
     worst = 0.0
@@ -103,7 +103,7 @@ class TestTheClosedFormFlow:
     def test_a_line_runs_from_boundary_to_boundary(self):
         """From (2.5, 1): x*y = 2.5, upstream to x = 3 at y = 5/6 and
         downstream to y = 3 at x = 5/6."""
-        from ogr_fem2d.solvers.streamlines import trace_streamline
+        from ogr_core.fem.streamlines import trace_streamline
         mesh = _grid(40, 40, 0.5, 3.0, 0.5, 3.0)
         line = trace_streamline(mesh, _stagnation(mesh), (2.5, 1.0))
         (x_up, y_up), (x_down, y_down) = line[0], line[-1]
@@ -113,7 +113,7 @@ class TestTheClosedFormFlow:
 
 class TestExactBySegment:
     def test_each_segment_runs_along_its_elements_velocity(self):
-        from ogr_fem2d.solvers.streamlines import _inside, trace_streamline
+        from ogr_core.fem.streamlines import _inside, trace_streamline
         mesh = _grid(20, 20, 0.5, 3.0, 0.5, 3.0)
         velocity = _stagnation(mesh)
         line = trace_streamline(mesh, velocity, (2.2, 0.9))
@@ -133,7 +133,7 @@ class TestExactBySegment:
 
 class TestAUniformField:
     def test_straight_lines_from_boundary_to_boundary(self):
-        from ogr_fem2d.solvers.streamlines import streamlines
+        from ogr_core.fem.streamlines import streamlines
         mesh = _grid(20, 10, 0.0, 10.0, 0.0, 5.0)
         v = (1.0, 0.5)
         lines = streamlines(mesh, [v] * len(mesh.elements), count=6)
@@ -151,7 +151,7 @@ class TestAUniformField:
     def test_a_line_through_a_vertex_goes_on(self):
         """(6, 0.5) is a node of this mesh, and the line from (5, 0) passes
         through it on its way to (10, 2.5)."""
-        from ogr_fem2d.solvers.streamlines import trace_streamline
+        from ogr_core.fem.streamlines import trace_streamline
         mesh = _grid(20, 10, 0.0, 10.0, 0.0, 5.0)
         line = trace_streamline(mesh, [(1.0, 0.5)] * len(mesh.elements),
                                 (5.0, 0.0))
@@ -159,7 +159,7 @@ class TestAUniformField:
         assert abs(line[-1][1] - 2.5) < 1e-9
 
     def test_control_no_flow_no_lines(self):
-        from ogr_fem2d.solvers.streamlines import seed_points, streamlines
+        from ogr_core.fem.streamlines import seed_points, streamlines
         mesh = _grid(4, 4, 0.0, 1.0, 0.0, 1.0)
         still = [(0.0, 0.0)] * len(mesh.elements)
         assert seed_points(mesh, still) == []
@@ -199,8 +199,10 @@ class TestARealField:
     def _is_a_sink(mesh, velocity, pt, sign):
         """Whether ``pt`` is a node whose edges all carry the mean flow of
         their elements into it, or along none: nowhere for a line to go."""
-        from ogr_fem2d.solvers.streamlines import (_node_elements,
-                                                   _node_outflow)
+        from ogr_core.fem.streamlines import (
+            _node_elements,
+            _node_outflow,
+        )
         node = next((n.id for n in mesh.nodes
                      if math.hypot(n.x - pt[0], n.y - pt[1]) < 1e-9), None)
         if node is None:
@@ -210,7 +212,7 @@ class TestARealField:
                              set(), _node_elements(mesh), by_id) is None
 
     def test_every_end_is_on_the_boundary_or_at_a_sink(self):
-        from ogr_fem2d.solvers.streamlines import streamlines
+        from ogr_core.fem.streamlines import streamlines
         mesh, velocity = self._field()
         lines = streamlines(mesh, velocity, count=12)
         assert len(lines) >= 8, len(lines)
@@ -225,7 +227,7 @@ class TestARealField:
 
     def test_the_ends_do_not_move_with_rounding(self):
         import random
-        from ogr_fem2d.solvers.streamlines import streamlines
+        from ogr_core.fem.streamlines import streamlines
         mesh, velocity = self._field()
 
         def reached(v):

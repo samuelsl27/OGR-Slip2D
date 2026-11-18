@@ -81,7 +81,7 @@ def _dam():
 
 
 def _heads(hp):
-    from ogr_fem2d.solvers import UnsaturatedSeepageSolver
+    from ogr_core.fem.seepage import UnsaturatedSeepageSolver
     mesh, bcs = _dam()
     r = UnsaturatedSeepageSolver(mesh, {"m": hp}, relaxation=0.4,
                                  max_iterations=400,

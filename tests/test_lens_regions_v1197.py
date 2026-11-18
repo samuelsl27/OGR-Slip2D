@@ -349,7 +349,7 @@ class TestFiniteElements:
         return regs
 
     def test_the_lens_is_meshed_once(self):
-        from ogr_fem2d.mesh import generate_mesh
+        from ogr_core.fem.generator import generate_mesh
         mesh = generate_mesh(self._regions(), target_size=1.0)
 
         def area(e):
@@ -366,9 +366,14 @@ class TestFiniteElements:
 
     def test_confined_flow_through_the_lens_is_darcy(self):
         from ogr_core.hydraulic import HydraulicProperties
-        from ogr_fem2d.mesh import generate_mesh
-        from ogr_fem2d.solvers import (BCType, SeepageBoundaryConditions,
-                                       SeepageSolver)
+        from ogr_core.fem.generator import generate_mesh
+        from ogr_core.fem import (
+            BCType,
+            SeepageBoundaryConditions,
+        )
+        from ogr_core.fem.seepage import (
+            SeepageSolver,
+        )
         mesh = generate_mesh(self._regions(), target_size=1.0)
         k = HydraulicProperties(ks=self.K)
         s = SeepageSolver(mesh, {"m": k, "lens": k})
@@ -392,7 +397,7 @@ class TestFiniteElements:
 
     def test_the_project_mesh_takes_the_resolved_materials(self):
         from ogr_api import Workspace, call
-        from ogr_fem2d.mesh.generator import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         ws = Workspace()
         try:
             pid = TestPainting()._model(ws)

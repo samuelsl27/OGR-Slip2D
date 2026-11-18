@@ -224,7 +224,7 @@ class TestStatistics:
 # ======================================================================
 def _seepage_project():
     import test_seepage_run_notes_v1352 as srn
-    from ogr_fem2d.solvers import BCType, SeepageBoundaryConditions
+    from ogr_core.fem import BCType, SeepageBoundaryConditions
     p = srn._seepage_project(transient=False)
     bcs = SeepageBoundaryConditions()
     for nid in sorted(p.fem_mesh.boundary_node_ids()):

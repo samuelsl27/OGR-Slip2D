@@ -35,9 +35,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ogr_fem2d.mesh.mesh import Mesh  # noqa: E402
-from ogr_fem2d.solvers import seepage  # noqa: E402
-from ogr_fem2d.solvers.seepage import UnsaturatedSeepageSolver  # noqa: E402
+from ogr_core.fem.mesh import Mesh  # noqa: E402
+from ogr_core.fem import seepage  # noqa: E402
+from ogr_core.fem.seepage import UnsaturatedSeepageSolver  # noqa: E402
 
 
 def _helpers():

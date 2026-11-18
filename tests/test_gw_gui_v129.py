@@ -49,7 +49,7 @@ def _fea_project(with_mesh=False, elements=140):
     p.settings.groundwater.method = GroundwaterMethod.FEA_STEADY.value
     if with_mesh:
         from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel
-        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         for m in p.materials:
             m.hydraulic = HydraulicProperties(
                 ks=1e-5, model=PermeabilityModel.GARDNER,
@@ -65,7 +65,7 @@ def _assign_head_bcs(w, project, h_left=40.0, h_right=27.0):
     Neumann, so the problem is singular and the handler (correctly) pops
     a modal warning — which would block a headless test run.
     """
-    from ogr_fem2d.solvers import BCType
+    from ogr_core.fem import BCType
     from ogr_gui.dialogs.boundary_conditions_dialog import boundary_sides
     bcs = w._seepage_bcs()
     sides = boundary_sides(project.fem_mesh)
@@ -250,7 +250,7 @@ class TestBoundaryConditionsDialog:
         assert total == len(p.fem_mesh.boundary_node_ids())
 
     def test_value_enabled_only_when_needed(self):
-        from ogr_fem2d.solvers import BCType
+        from ogr_core.fem import BCType
         _p, _b, d = self._dlg()
         for t, expected in (
             (BCType.TOTAL_HEAD, True),
@@ -264,7 +264,7 @@ class TestBoundaryConditionsDialog:
             assert d.sp_value.isEnabled() is expected, t
 
     def test_seepage_face_only_for_flow_conditions(self):
-        from ogr_fem2d.solvers import BCType
+        from ogr_core.fem import BCType
         _p, _b, d = self._dlg()
         for t, expected in (
             (BCType.TOTAL_HEAD, False),
@@ -276,7 +276,7 @@ class TestBoundaryConditionsDialog:
             assert d.chk_seepage.isEnabled() is expected, t
 
     def test_infiltration_restricted_to_segments(self):
-        from ogr_fem2d.solvers import BCType
+        from ogr_core.fem import BCType
         _p, _b, d = self._dlg()
         d.cbo_type.setCurrentIndex(
             d.cbo_type.findData(BCType.INFILTRATION))
@@ -286,7 +286,7 @@ class TestBoundaryConditionsDialog:
         assert d.cbo_pick.isEnabled() is True
 
     def test_assign_sets_conditions(self):
-        from ogr_fem2d.solvers import BCType
+        from ogr_core.fem import BCType
         _p, bcs, d = self._dlg()
         d.cbo_type.setCurrentIndex(d.cbo_type.findData(BCType.TOTAL_HEAD))
         d.sp_value.setValue(40.0)
@@ -299,7 +299,7 @@ class TestBoundaryConditionsDialog:
         assert all(abs(b.value - 40.0) < 1e-9 for b in heads)
 
     def test_restore_defaults(self):
-        from ogr_fem2d.solvers import BCType
+        from ogr_core.fem import BCType
         _p, bcs, d = self._dlg()
         d._defaults()
         types = {b.bc_type for b in bcs.nodes}
@@ -316,7 +316,7 @@ class TestFullWorkflow:
         import matplotlib
         matplotlib.use("Agg")
         _app()
-        from ogr_fem2d.solvers import BCType
+        from ogr_core.fem import BCType
         p = _fea_project(with_mesh=True, elements=160)
         w = _window(p)
         bcs = w._seepage_bcs()
@@ -343,8 +343,8 @@ class TestFullWorkflow:
 
     def test_compute_without_hydraulic_properties_uses_defaults(self):
         _app()
-        from ogr_fem2d.mesh import generate_mesh_for_project
-        from ogr_fem2d.solvers import BCType
+        from ogr_core.fem.generator import generate_mesh_for_project
+        from ogr_core.fem import BCType
         p = _fea_project()
         p.fem_mesh = generate_mesh_for_project(p, target_elements=120)
         w = _window(p)
@@ -362,7 +362,7 @@ class TestFullWorkflow:
     def test_boundary_conditions_survive_save_load(self):
         _app()
         from ogr_core.project import Project
-        from ogr_fem2d.solvers import BCType
+        from ogr_core.fem import BCType
         p = _fea_project(with_mesh=True, elements=120)
         w = _window(p)
         bcs = w._seepage_bcs()

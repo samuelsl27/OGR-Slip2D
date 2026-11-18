@@ -109,7 +109,7 @@ def _switches():
     """``{NAME: [modules]}`` for every top-level ``NAME = True/False`` of the
     engine and the core."""
     found = defaultdict(list)
-    for pkg in ("ogr_core", "ogr_slip2d", "ogr_fem2d"):
+    for pkg in ("ogr_core", "ogr_slip2d"):
         for path in sorted((_ROOT / pkg).rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in tree.body:

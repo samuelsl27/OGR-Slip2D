@@ -37,10 +37,12 @@ from ogr_core.hydraulic import (  # noqa: E402
     HydraulicProperties,
     PermeabilityModel,
 )
-from ogr_fem2d.mesh import generate_mesh  # noqa: E402
-from ogr_fem2d.solvers import (  # noqa: E402
+from ogr_core.fem.generator import generate_mesh  # noqa: E402
+from ogr_core.fem import (  # noqa: E402
     BCType,
     SeepageBoundaryConditions,
+)
+from ogr_core.fem.seepage import (  # noqa: E402
     TransientSeepageSolver,
     TransientStage,
     UnsaturatedSeepageSolver,
@@ -371,7 +373,7 @@ class TestTransientGui:
     def _setup(self):
         from test_slide_validation_ej1 import _ej1_project
         from ogr_core.project.settings import GroundwaterMethod
-        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         from ogr_gui.main_window import MainWindow
         QApplication.instance() or QApplication([])
         p = _ej1_project()
@@ -420,7 +422,7 @@ class TestTransientGui:
         assert [s["time"] for s in stages] == [100.0, 500.0]
 
     def test_compute_routes_to_transient(self):
-        from ogr_fem2d.solvers import BCType
+        from ogr_core.fem import BCType
         from ogr_gui.dialogs.boundary_conditions_dialog import (
             boundary_sides,
         )
@@ -443,7 +445,7 @@ class TestTransientGui:
         assert p.transient_results[1].notes["calculate_sf"] is True
 
     def test_steady_path_untouched_when_transient_off(self):
-        from ogr_fem2d.solvers import BCType
+        from ogr_core.fem import BCType
         from ogr_gui.dialogs.boundary_conditions_dialog import (
             boundary_sides,
         )
@@ -491,8 +493,9 @@ class TestStageFactorsOfSafety:
         from test_slide_validation_ej1 import _ej1_project
         from ogr_core.materials import PorePressureType
         from ogr_core.project.settings import GroundwaterMethod
-        from ogr_fem2d.mesh import generate_mesh_for_project
-        from ogr_fem2d.solvers import BCType, default_boundary_conditions
+        from ogr_core.fem.generator import generate_mesh_for_project
+        from ogr_core.fem import BCType
+        from ogr_core.fem.seepage import default_boundary_conditions
         from ogr_gui.dialogs.boundary_conditions_dialog import boundary_sides
         from ogr_gui.main_window import MainWindow
         QApplication.instance() or QApplication([])
@@ -610,7 +613,7 @@ class TestInterpretStageNavigation:
 
     def test_no_selector_for_steady_runs(self):
         from test_slide_validation_ej1 import _ej1_project
-        from ogr_fem2d.solvers import SeepageResult
+        from ogr_core.fem import SeepageResult
         from ogr_gui.interpret_groundwater_window import (
             InterpretGroundwaterWindow,
         )

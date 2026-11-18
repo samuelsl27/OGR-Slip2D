@@ -45,10 +45,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from ogr_fem2d.mesh import generate_mesh_for_project, generator  # noqa: E402
-from ogr_fem2d.mesh.generator import _repair_flat_triangles  # noqa: E402
-from ogr_fem2d.mesh.mesh import Element, Mesh, Node  # noqa: E402
-from ogr_fem2d.solvers.seepage import (  # noqa: E402
+from ogr_core.fem.generator import generate_mesh_for_project  # noqa: E402
+from ogr_core.fem import generator  # noqa: E402
+from ogr_core.fem.generator import _repair_flat_triangles  # noqa: E402
+from ogr_core.fem.mesh import Element, Mesh, Node  # noqa: E402
+from ogr_core.fem.seepage import (  # noqa: E402
     BCType,
     SeepageBoundaryConditions,
     SeepageSolver,

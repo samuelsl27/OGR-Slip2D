@@ -35,7 +35,7 @@ from pathlib import Path
 
 #: Packages that are the analysis, as opposed to the interface. A setting
 #: read only by ``ogr_gui`` is read only by the dialog that edits it.
-_ENGINE_PACKAGES = ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_cli")
+_ENGINE_PACKAGES = ("ogr_core", "ogr_slip2d", "ogr_cli")
 
 #: Search settings that no engine module reads yet, each with the open
 #: defect that owns it. Shrinks; never grows.

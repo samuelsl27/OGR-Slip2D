@@ -7,9 +7,15 @@ The finite-element data the project stores (v0.1.342, D337).
 the seepage results from a ``.ogr``, and until this version it imported them
 from ``ogr_fem2d``: the core reached up into an engine. They are data and
 the closed-form identities that rebuild their derived fields, so they live
-here; the solvers stay in ``ogr_fem2d``, which re-exports these names at
-their old paths so every import of them keeps working and ``isinstance``
-sees one class.
+here.
+
+Spec 009 (F1) -- the solvers followed: the mesh generator
+(``generator``), the seepage solvers (``seepage``), the boundary targets
+(``bc_targets``), the streamlines and the ``seepage.*`` codes
+(``messages``) are submodules of this package, because both programs of
+the suite use them. This ``__init__`` still exports only the data, and
+the solvers are imported by their submodule, so loading a model does not
+load the solver.
 
 There is no registry the engine would fill at import: loading a model
 before importing the engine would then leave ``fem_mesh = None``, and the

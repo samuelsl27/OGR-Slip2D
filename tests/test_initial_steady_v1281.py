@@ -44,8 +44,8 @@ def _dam(transient):
     from ogr_core.materials.builtin_models import MohrCoulomb
     from ogr_core.project import Project
     from ogr_core.project.settings import GroundwaterMethod
-    from ogr_fem2d.mesh import generate_mesh_for_project
-    from ogr_fem2d.solvers.seepage import BCType, SeepageBoundaryConditions
+    from ogr_core.fem.generator import generate_mesh_for_project
+    from ogr_core.fem.seepage import BCType, SeepageBoundaryConditions
     p = Project("D277")
     ext = Polyline(vertices=[Vertex(0, 0), Vertex(L, 0), Vertex(L, H),
                              Vertex(0, H)], closed=True)
@@ -115,8 +115,10 @@ class TestTheFieldAtTimeZeroIsTheSteadyAnalysis:
 
 class TestAScriptKeepsItsOwnSettings:
     def test_no_steady_settings_is_the_solvers_own(self):
-        from ogr_fem2d.solvers.seepage import (TransientSeepageSolver,
-                                               TransientStage)
+        from ogr_core.fem.seepage import (
+            TransientSeepageSolver,
+            TransientStage,
+        )
         p = _dam(False)
         props = {m.id: m.hydraulic for m in p.materials}
         s = TransientSeepageSolver(p.fem_mesh, props, relaxation=0.5,

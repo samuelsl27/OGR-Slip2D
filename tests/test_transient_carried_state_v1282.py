@@ -34,7 +34,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel  # noqa: E402
-from ogr_fem2d.solvers import seepage  # noqa: E402
+from ogr_core.fem import seepage  # noqa: E402
 
 CURVE = [(0.0, 1e-5), (10.0, 1e-6), (100.0, 1e-8)]
 TOL = 1e-6
@@ -44,8 +44,8 @@ def _column():
     """A 2 m column one element wide, the water table at 0.5 m and the head
     at its base raised to 1.5 m at t = 0 (as in test_retention_dialog_v1268),
     with a user curve: the unsaturated zone takes water as the front rises."""
-    from ogr_fem2d.mesh.mesh import Element, Mesh, Node
-    from ogr_fem2d.solvers.seepage import BCType, SeepageBoundaryConditions
+    from ogr_core.fem.mesh import Element, Mesh, Node
+    from ogr_core.fem.seepage import BCType, SeepageBoundaryConditions
     dz, rows = 0.1, 20
     nodes = [Node(2 * j + k, k * dz, j * dz)
              for j in range(rows + 1) for k in (0, 1)]
@@ -102,7 +102,7 @@ class TestAConvergedStepCarriesWhatItPublishes:
         assert 0.0 < d < TOL * (1.0 - w) / w, d
 
     def test_the_stored_water_is_that_of_the_published_heads(self):
-        from ogr_fem2d.solvers.seepage import TransientStage
+        from ogr_core.fem.seepage import TransientStage
         s, _mesh, bcs = _solver(0.5, time_steps=3)
         res = s.solve_transient([TransientStage(time=2700.0, label="45 min",
                                                 bcs=bcs)],

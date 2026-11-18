@@ -19,7 +19,7 @@ Reproduces the reference dialog's behaviour:
   ground surface puts it on the crest of the dam and down the far face as
   well, so a model with water on one side only was not expressible at
   all. A reservoir is one number and a side, and the wetted perimeter
-  follows from the geometry (``ogr_fem2d.solvers.bc_targets``). A
+  follows from the geometry (``ogr_core.fem.bc_targets``). A
   drawdown is the same target with a lower level.
 
 The dialog edits a :class:`SeepageBoundaryConditions` in place and is
@@ -46,11 +46,13 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ogr_fem2d.solvers import (
+from ogr_core.fem import (
     BCType,
+    SeepageBoundaryConditions,
+)
+from ogr_core.fem.bc_targets import (
     SIDE_LEFT,
     SIDE_RIGHT,
-    SeepageBoundaryConditions,
     apply_reservoir,
     wetted_nodes,
 )
@@ -75,10 +77,10 @@ def boundary_sides(mesh) -> dict:
     """Boundary nodes by side, under the dialog's names.
 
     v0.1.200 — the classification moved to
-    ``ogr_fem2d.solvers.bc_targets.boundary_sides``, which an agent uses
+    ``ogr_core.fem.bc_targets.boundary_sides``, which an agent uses
     too; this only renames its keys.
     """
-    from ogr_fem2d.solvers.bc_targets import boundary_sides as _core
+    from ogr_core.fem.bc_targets import boundary_sides as _core
     return {_SIDE_NAMES[k]: v for k, v in _core(mesh).items()}
 
 
@@ -164,8 +166,10 @@ class BoundaryConditionsDialog(QDialog):
         t = self.cbo_type.currentData()
         # v0.1.200 — the core's rules (``bc_targets``), which an agent's
         # conditions are checked against too.
-        from ogr_fem2d.solvers.bc_targets import (allows_seepage_face,
-                                                  needs_value)
+        from ogr_core.fem.bc_targets import (
+            allows_seepage_face,
+            needs_value,
+        )
         self.sp_value.setEnabled(needs_value(t))
         self.chk_seepage.setEnabled(allows_seepage_face(t))
         if not allows_seepage_face(t):
@@ -195,7 +199,7 @@ class BoundaryConditionsDialog(QDialog):
         # v0.1.200 — ``bc_targets.assign_to_nodes``, the core's assignment
         # (an agent uses it too). It also REPLACES infiltration already on
         # an edge: assigning twice here used to double the flux.
-        from ogr_fem2d.solvers.bc_targets import assign_to_nodes
+        from ogr_core.fem.bc_targets import assign_to_nodes
         assign_to_nodes(self.bcs, self.mesh, ids, t, self.sp_value.value(),
                         self.chk_seepage.isChecked())
         self._refresh_summary()
@@ -224,7 +228,7 @@ class BoundaryConditionsDialog(QDialog):
             % (level, len(ids)) + self.lbl_summary.text())
 
     def _defaults(self) -> None:
-        from ogr_fem2d.solvers import default_boundary_conditions
+        from ogr_core.fem.seepage import default_boundary_conditions
         fresh = default_boundary_conditions(self.mesh)
         self.bcs.nodes = list(fresh.nodes)
         self.bcs.segments = []

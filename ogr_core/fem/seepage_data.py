@@ -8,7 +8,8 @@ v0.1.342 (D337) -- moved word for word from ``ogr_fem2d/solvers/seepage.py``
 (the classes, ``restore_derived`` and ``hydraulic_props_of``) together with
 the solver's element-flux loop (:func:`element_fluxes`). The core's loader
 rebuilt these from a ``.ogr`` by importing the solver module; they are data,
-so they are the core's. ``ogr_fem2d.solvers.seepage`` re-exports every name.
+so they are the core's. Spec 009 (F1) moved the solver itself next to them
+(``ogr_core.fem.seepage``), which re-exports every name.
 
 Author: Samuel Sáez López (UPCT)
 """

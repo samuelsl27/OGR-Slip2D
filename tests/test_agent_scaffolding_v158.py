@@ -63,7 +63,7 @@ class TestAgentsFile:
 
     def test_lists_the_stack_and_the_layout(self):
         text = _read("AGENTS.md")
-        for pkg in ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_gui"):
+        for pkg in ("ogr_core", "ogr_slip2d", "ogr_gui"):
             assert pkg in text
 
 

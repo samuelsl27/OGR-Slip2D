@@ -52,9 +52,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel  # noqa: E402
-from ogr_fem2d.mesh.mesh import Element, Mesh, Node  # noqa: E402
-from ogr_fem2d.solvers import seepage  # noqa: E402
-from ogr_fem2d.solvers.seepage import (  # noqa: E402
+from ogr_core.fem.mesh import Element, Mesh, Node  # noqa: E402
+from ogr_core.fem import seepage  # noqa: E402
+from ogr_core.fem.seepage import (  # noqa: E402
     BCType,
     SeepageBoundaryConditions,
     UnsaturatedSeepageSolver,
@@ -150,7 +150,7 @@ H1, H2 = 10.0, 2.0
 def _rect_dam():
     from ogr_core.geometry import Polyline, Vertex
     from ogr_core.geometry.regions import MaterialRegion
-    from ogr_fem2d.mesh import generate_mesh
+    from ogr_core.fem.generator import generate_mesh
     poly = Polyline(vertices=[Vertex(0, 0), Vertex(L_DAM, 0),
                               Vertex(L_DAM, H_DAM), Vertex(0, H_DAM)],
                     closed=True)
@@ -289,7 +289,7 @@ def _dam2_project():
 
 
 def _dam2_discharge(elements, max_iterations):
-    from ogr_fem2d.mesh import generate_mesh_for_project
+    from ogr_core.fem.generator import generate_mesh_for_project
     g = DAM2
     base = g["up"] + g["crest"] + g["down"]
     p = _dam2_project()

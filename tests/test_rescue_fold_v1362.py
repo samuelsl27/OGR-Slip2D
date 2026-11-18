@@ -69,8 +69,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 import numpy as np  # noqa: E402
 
 from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel  # noqa: E402
-from ogr_fem2d.solvers import seepage  # noqa: E402
-from ogr_fem2d.solvers.seepage import (  # noqa: E402
+from ogr_core.fem import seepage  # noqa: E402
+from ogr_core.fem.seepage import (  # noqa: E402
     BCType,
     SeepageSolver,
     UnsaturatedSeepageSolver,

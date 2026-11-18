@@ -214,8 +214,11 @@ class TestTheWindowRefuses:
 def _darcy_discharge(project, props):
     """Head H1 on the left edge and H2 on the right, saturated: the discharge
     through the box from the mean horizontal velocity (q = vx * H)."""
-    from ogr_fem2d.solvers.seepage import (BCType, SeepageBoundaryConditions,
-                                           SeepageSolver)
+    from ogr_core.fem.seepage import (
+        BCType,
+        SeepageBoundaryConditions,
+        SeepageSolver,
+    )
     mesh = project.fem_mesh
     b = SeepageBoundaryConditions()
     # 1e-6 L: the mesher's node registry quantises coordinates (the right
@@ -234,7 +237,7 @@ def _darcy_discharge(project, props):
 class TestTheSolverSaysIt:
     def test_built_directly_with_a_mapping_that_misses_them(self):
         from ogr_api import call
-        from ogr_fem2d.solvers import hydraulic_props_of
+        from ogr_core.fem import hydraulic_props_of
         ws, pid = _box()
         call(ws, "material_delete", project_id=pid, material="B",
              reassign_to="A")
@@ -249,7 +252,7 @@ class TestTheSolverSaysIt:
     def test_a_mapped_mesh_gets_no_note_and_darcys_discharge(self):
         """After regenerating, the region's material, A: q = K dh / L * H."""
         from ogr_api import call
-        from ogr_fem2d.solvers import hydraulic_props_of
+        from ogr_core.fem import hydraulic_props_of
         ws, pid = _box()
         call(ws, "material_delete", project_id=pid, material="B",
              reassign_to="A")

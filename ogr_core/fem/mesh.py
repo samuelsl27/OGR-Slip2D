@@ -22,7 +22,8 @@ changing this container.
 
 v0.1.342 (D337) -- moved whole from ``ogr_fem2d/mesh/mesh.py``: the
 project stores a mesh and the core rebuilds it on load, so it is the core's.
-``ogr_fem2d.mesh`` and ``ogr_fem2d.mesh.mesh`` re-export these names.
+Spec 009 (F1) -- the mesh generator followed it into ``ogr_core.fem``
+(``generator.py``), and ``ogr_fem2d`` left the repository.
 
 v0.1.383 (V5 of the compute audit) -- ``Mesh.locate`` narrows its scan with
 a grid index whose boxes carry a certified floating-point margin; it still

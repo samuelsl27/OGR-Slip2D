@@ -12,13 +12,14 @@
 ┌──────────────────────────────────────────────────────┐
 │                     ogr_core                         │   ← pure Python
 │   geometry · materials · loads · support · project   │
-└──────┬───────────────────────────┬───────────────────┘
-       │                           │
-       ▼                           ▼
-┌─────────────────┐         ┌─────────────────┐
-│   ogr_slip2d    │         │    ogr_fem2d    │
-│  (LEM solvers)  │         │  (seepage FEM)  │
-└─────────────────┘         └─────────────────┘
+│   fem: mesh · seepage solvers · streamlines          │
+└──────┬───────────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────┐
+│   ogr_slip2d    │
+│  (LEM solvers)  │
+└─────────────────┘
         ▲
         │
 ┌──────────────────────────────────────────────────────┐
@@ -30,8 +31,11 @@
 **Golden rules**
 
 1. `ogr_core` has zero GUI / plotting dependencies.
-2. Every solver lives in its own sibling package (`ogr_slip2d`,
-   `ogr_fem2d`, future ones). They depend on `ogr_core` only.
+2. Every engine lives in its own sibling package (`ogr_slip2d`, future
+   ones), and depends on `ogr_core` only. The one exception is the
+   seepage solver, which both programs of the suite use: it lives in
+   `ogr_core/fem` (spec 009). `ogr_fem2d` is the name of the suite's
+   finite-element program, which the core never imports.
 3. The GUI and the CLI are two independent front-ends on top of the
    same core — *never* duplicate business logic.
 

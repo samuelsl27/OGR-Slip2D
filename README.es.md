@@ -258,9 +258,8 @@ suite termina, no una medida.
 
 | Paquete | Contenido |
 |---|---|
-| `ogr_core/` | Geometría, materiales, cargas, soportes, proyecto, hidráulica, estadística, anotaciones, DXF |
+| `ogr_core/` | Geometría, materiales, cargas, soportes, proyecto, hidráulica, estadística, anotaciones, DXF, y el mallado y los solvers de filtración por elementos finitos |
 | `ogr_slip2d/` | Motor de equilibrio límite: métodos, búsquedas, rebanado, foco, optimización, retroanálisis |
-| `ogr_fem2d/` | Elementos finitos: mallado y solvers de filtración |
 | `ogr_gui/` | Interfaz PySide6: lienzo, diálogos, ventanas de interpretación, traducciones |
 | `ogr_cli/` | Interfaz de línea de comandos |
 | `ogr_api/` | Capa de operaciones sin Qt: ediciones validadas, deshacer, análisis en segundo plano, imagen PNG |
