@@ -25,6 +25,10 @@ The invariants:
 * an image is drawn, and one whose file is missing is its frame;
 * no adapter computes geometry of its own: none of the three (canvas, DXF,
   PNG) calls ``outline``, ``measured_value`` or ``nice_step``.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -37,6 +41,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 ROOT = Path(__file__).resolve().parents[1]
+import _sources as S  # noqa: E402
 GREEN = "#00ff7f"
 GREEN_RGB = (0.0, 1.0, 127 / 255.0)
 
@@ -192,7 +197,7 @@ class TestNoAdapterComputesGeometry:
                     "ogr_api/render_annotations.py")
         bad = []
         for rel in adapters:
-            tree = ast.parse((ROOT / rel).read_text(encoding="utf-8"))
+            tree = ast.parse(S.source(rel).read_text(encoding="utf-8"))
             for n in ast.walk(tree):
                 if isinstance(n, ast.Call):
                     f = n.func

@@ -81,16 +81,18 @@ from ogr_core.materials import (  # noqa: E402
 )
 from ogr_core.project import Project  # noqa: E402
 from ogr_core.project.settings import GroundwaterMethod  # noqa: E402
-from ogr_fem2d.mesh import generate_mesh_for_project  # noqa: E402
-from ogr_fem2d.solvers import (  # noqa: E402
-    BCType,
+from ogr_core.fem.generator import generate_mesh_for_project  # noqa: E402
+from ogr_core.fem.bc_targets import (  # noqa: E402
     SIDE_LEFT,
     SIDE_RIGHT,
-    UnsaturatedSeepageSolver,
     apply_reservoir,
     boundary_cycle,
-    default_boundary_conditions,
     wetted_nodes,
+)
+from ogr_core.fem.seepage import (  # noqa: E402
+    BCType,
+    UnsaturatedSeepageSolver,
+    default_boundary_conditions,
 )
 from ogr_slip2d.methods import method_registry  # noqa: E402
 from ogr_slip2d.search import GridSearch  # noqa: E402

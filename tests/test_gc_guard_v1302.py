@@ -54,9 +54,6 @@ from PySide6.QtCore import QObject, Slot  # noqa: E402
 from PySide6.QtTest import QSignalSpy  # noqa: E402
 from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
 
-_RUNNER = Path(__file__).resolve().parent / "_runner.py"
-
-
 class _CyclicDialog(QDialog):
     pass
 
@@ -229,11 +226,12 @@ class TestWhoInstallsIt:
             if not was_installed:
                 gc_guard.uninstall()
 
-    def test_the_runner_installs_it_and_releases_before_every_file(self):
+    def test_the_runner_installs_it(self):
+        """v0.1.473 -- the runner is OGR-Core's now; this repository gives
+        it the two hooks, and that they install and release the guard is
+        ``test_runner_wrapper_v1473``'s (that the shared runner calls them
+        before the run and before every file, OGR-Core's
+        ``test_runner_shared_v10``). Here only that this test runs under
+        it."""
         from ogr_gui import gc_guard
-        # this test runs under the runner
         assert gc_guard.installed()
-        src = _RUNNER.read_text(encoding="utf-8")
-        loop = src[src.index("for i_file, f in enumerate(test_files, 1):"):]
-        loop = loop[:loop.index('print(f"\\n=== {f.name}')]
-        assert "gc_guard.release()" in loop and "gc.collect()" in loop

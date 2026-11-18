@@ -23,6 +23,10 @@ The invariants:
 * a pickled circle and a pickled focus object come back as the same class;
 * **the loader imports nothing above the core any more**: its census is
   empty, and ``test_core_layering_v1340`` has no entry for it.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -38,6 +42,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 _ROOT = Path(__file__).resolve().parent.parent
+import _sources as S  # noqa: E402
 
 
 def _project():
@@ -140,8 +145,8 @@ class TestTheLoaderImportsNothingAbove:
 
     def test_its_census_is_empty(self):
         import test_core_layering_v1340 as L
-        found = L.census_of(_ROOT / "ogr_core" / "project" / "project.py",
-                            _ROOT)
+        found = L.census_of(S.source("ogr_core/project/project.py"),
+                            S.core_root())
         assert found == Counter(), found
         assert not any(k[0] == "ogr_core/project/project.py"
                        for k in L.ALLOWED)

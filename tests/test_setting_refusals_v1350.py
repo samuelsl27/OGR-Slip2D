@@ -27,6 +27,10 @@ The invariants:
 * **in the window, in Spanish**: the Compute box on a model whose seismic
   coefficient a file left negative, and every refusal box reads the codes;
 * the API still answers in English.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -38,6 +42,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 _ROOT = Path(__file__).resolve().parent.parent
+import _sources as S  # noqa: E402
 
 #: ``{cat, code, args, english}``: the sentence v0.1.349 wrote. ``cat`` is
 #: the catalogue (``core``, ``engine``, or ``rules`` for a refusal of
@@ -399,7 +404,7 @@ class TestNoSentenceWithoutItsCode:
     def test_census(self):
         found = []
         for rel, names in _CODED.items():
-            src = (_ROOT / rel).read_text(encoding="utf-8")
+            src = S.source(rel).read_text(encoding="utf-8")
             tree = ast.parse(src)
             funcs = {n.name: n for n in ast.walk(tree)
                      if isinstance(n, ast.FunctionDef)}

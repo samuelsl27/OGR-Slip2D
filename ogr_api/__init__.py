@@ -13,7 +13,7 @@ arguments and JSON-safe answers, usable without Qt and without the MCP SDK:
     call(ws, "model_define", project_id=pid, spec={...})
     out = call(ws, "analysis_run", project_id=pid, wait_seconds=60)
 
-It sits ABOVE the engine (``ogr_core``, ``ogr_slip2d``, ``ogr_fem2d``) and
+It sits ABOVE the engine (``ogr_core``, ``ogr_slip2d``) and
 BELOW every front end: the MCP server (``ogr_mcp``), and — from phase F4 —
 the live bridge inside the interface. It never imports PySide6, ``ogr_gui``
 or ``mcp``; ``tests/test_api_layering_v1194.py`` fails if it does.
@@ -33,7 +33,7 @@ What it adds on top of the engine, and why each piece exists:
 
 Author: Samuel Sáez López (UPCT)
 """
-__version__ = "0.1.472"
+__version__ = "0.1.473"
 
 from .errors import (  # noqa: E402
     Busy,

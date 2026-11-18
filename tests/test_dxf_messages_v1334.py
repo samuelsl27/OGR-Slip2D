@@ -27,6 +27,10 @@ The invariants, as in ``test_core_messages_v1333``:
 * **in Spanish, the dialog and the panel speak Spanish.** And the screen
   test of 0.1.321 loses its exception for "Could not read the DXF file: ",
   whose no-ghost rule would fail if the English came back.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -40,6 +44,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 ROOT = Path(__file__).resolve().parents[1]
+import _sources as S  # noqa: E402
 
 try:
     import ezdxf
@@ -234,8 +239,8 @@ class TestTheImporterWritesItsCodes:
 
 # ======================================================================
 def _core_trees():
-    for path in sorted((ROOT / "ogr_core").rglob("*.py")):
-        yield path.relative_to(ROOT).as_posix(), ast.parse(
+    for path in S.package_files("ogr_core"):
+        yield S.relative(path), ast.parse(
             path.read_text(encoding="utf-8"))
 
 
@@ -257,7 +262,7 @@ class TestNoSiteWritesAProblemWithoutItsCode:
     def test_every_preview_error_has_its_code(self):
         """In ``preview``, each block that writes ``pv.error`` also writes
         ``pv.error_code``."""
-        tree = ast.parse((ROOT / "ogr_core/dxf/importer.py").read_text(
+        tree = ast.parse(S.source("ogr_core/dxf/importer.py").read_text(
             encoding="utf-8"))
         blocks = 0
         for node in ast.walk(tree):

@@ -30,6 +30,10 @@ The invariants:
   census), but for the exception names, which are data;
 * **in the dialog, in Spanish**: a refusal shown with its values, the
   dialog's own table of fixed sentences gone.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -42,6 +46,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 _ROOT = Path(__file__).resolve().parent.parent
+import _sources as S  # noqa: E402
 
 #: ``{case: [the refusal's code, the sentence v0.1.350 gave]}``.
 _V1350 = {'aniso.empty': ['anisotropic_table_empty',
@@ -741,7 +746,7 @@ class TestNoSentenceWithoutItsCode:
     def test_census(self):
         found = []
         for rel, names in _CODED.items():
-            src = (_ROOT / rel).read_text(encoding="utf-8")
+            src = S.source(rel).read_text(encoding="utf-8")
             tree = ast.parse(src)
             funcs = {}
             for n in ast.walk(tree):

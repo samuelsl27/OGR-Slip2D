@@ -66,7 +66,7 @@ def _no_modals():
 
 
 def _result(time, fos=None, initial=False):
-    from ogr_fem2d.solvers import SeepageResult
+    from ogr_core.fem.seepage import SeepageResult
     r = SeepageResult()
     r.notes["time"] = time
     if fos:

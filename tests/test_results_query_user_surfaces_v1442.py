@@ -843,18 +843,16 @@ class TestWithoutUserSurfacesNothingChanges:
         header does not match its rows."""
         import ogr_slip2d.interpretation as it
         root = os.path.dirname(os.path.dirname(os.path.abspath(it.__file__)))
+        # v0.1.473 -- the core in the tree that is imported (tests/_sources.py)
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import _sources as S
         found = []
-        for package in ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_api",
-                        "ogr_gui", "ogr_cli", "ogr_mcp"):
-            for folder, _dirs, files in os.walk(os.path.join(root, package)):
-                for name in files:
-                    if not name.endswith(".py"):
-                        continue
-                    path = os.path.join(folder, name)
-                    with open(path, encoding="utf-8") as fh:
-                        if '"fos_or_error_code"' in fh.read():
-                            found.append(os.path.relpath(path, root)
-                                         .replace(os.sep, "/"))
+        for package in ("ogr_core", "ogr_slip2d", "ogr_api", "ogr_gui",
+                        "ogr_cli", "ogr_mcp"):
+            for path in S.package_files(package):
+                if '"fos_or_error_code"' in path.read_text(encoding="utf-8"):
+                    found.append(S.relative(path))
         assert found == ["ogr_slip2d/interpretation.py"], found
         with open(os.path.join(root, "ogr_gui", "interpret_window.py"),
                   encoding="utf-8") as fh:

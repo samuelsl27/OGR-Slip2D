@@ -36,6 +36,10 @@ The invariants (rule 7 and round trips, no snapshot)
   agrees in step with it.
 
 Module switches and the language are restored in ``finally`` (rule 5).
+
+v0.1.473 (spec 010) -- the dam is ``tests/_dam_models.py``'s: it was taken
+from ``test_unsaturated_v127``, which moved to OGR-Core with the seepage
+solver; the copy is the same, value for value.
 """
 from __future__ import annotations
 
@@ -71,17 +75,14 @@ _CACHE: dict = {}
 
 def _dam():
     if "dam" not in _CACHE:
-        spec = importlib.util.spec_from_file_location(
-            "t127_d271", Path(__file__).parent / "test_unsaturated_v127.py")
-        t = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(t)
+        import _dam_models as t
         mesh = t._dam_mesh(1.0)
         _CACHE["dam"] = (mesh, t._dam_bcs(mesh))
     return _CACHE["dam"]
 
 
 def _heads(hp):
-    from ogr_fem2d.solvers import UnsaturatedSeepageSolver
+    from ogr_core.fem.seepage import UnsaturatedSeepageSolver
     mesh, bcs = _dam()
     r = UnsaturatedSeepageSolver(mesh, {"m": hp}, relaxation=0.4,
                                  max_iterations=400,

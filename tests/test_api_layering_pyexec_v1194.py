@@ -9,7 +9,7 @@ Invariants protected:
 * **Layering**, read from the source with the AST, not from what happens
   to be importable: ``ogr_api`` imports neither PySide6, nor ``ogr_gui``,
   nor ``mcp``/``ogr_mcp`` (it must run headless and without the MCP SDK);
-  the engine (``ogr_core``, ``ogr_slip2d``, ``ogr_fem2d``) never imports
+  the engine (``ogr_core``, ``ogr_slip2d``) never imports
   ``ogr_api``; and ``ogr_core/project/rules.py`` imports neither Qt nor
   the solver. A layer that reached upwards would make the headless server
   need a display, or the engine need its own front end.
@@ -20,6 +20,10 @@ Invariants protected:
   them** (rule 5), also when the script raises.
 * **REPL behaviour**: the last expression's value comes back; an exception
   comes back as data with its traceback.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -29,6 +33,8 @@ import threading
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).parent))
+import _sources as S  # noqa: E402
 
 
 def _imports(path: Path) -> set[str]:
@@ -44,8 +50,7 @@ def _imports(path: Path) -> set[str]:
 
 
 def _package_imports(pkg: str) -> dict[str, set[str]]:
-    return {str(p.relative_to(_ROOT)): _imports(p)
-            for p in sorted((_ROOT / pkg).rglob("*.py"))}
+    return {S.relative(p): _imports(p) for p in S.package_files(pkg)}
 
 
 class TestLayering:
@@ -57,13 +62,13 @@ class TestLayering:
         assert not found, found
 
     def test_the_engine_never_imports_the_operations_layer(self):
-        for pkg in ("ogr_core", "ogr_slip2d", "ogr_fem2d"):
+        for pkg in ("ogr_core", "ogr_slip2d"):
             found = [f for f, i in _package_imports(pkg).items()
                      if "ogr_api" in i]
             assert not found, (pkg, found)
 
     def test_the_rules_module_is_core_only(self):
-        imports = _imports(_ROOT / "ogr_core" / "project" / "rules.py")
+        imports = _imports(S.source("ogr_core/project/rules.py"))
         assert not imports & {"PySide6", "ogr_gui", "ogr_slip2d",
                               "ogr_fem2d", "ogr_api"}, imports
 

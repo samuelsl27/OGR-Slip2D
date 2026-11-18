@@ -80,6 +80,11 @@ budget of 25) is in ``test_picard_tolerance_v1272``.
 Cost: about 90 s; the rescued dam 2 alone takes 30, the continuation being
 the only road that converges there. Every test restores the switch it
 touches (rule 5).
+
+v0.1.473 (spec 010) -- the dams are ``tests/_dam_models.py``'s: they were
+taken from ``test_unsaturated_v127`` and ``test_rescue_face_v1356``, which
+moved to OGR-Core with the seepage solver; the copy is the same, value for
+value.
 """
 from __future__ import annotations
 
@@ -90,9 +95,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import _dam_models  # noqa: E402
+
 from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel  # noqa: E402
-from ogr_fem2d.solvers import seepage  # noqa: E402
-from ogr_fem2d.solvers.seepage import (  # noqa: E402
+from ogr_core.fem import seepage  # noqa: E402
+from ogr_core.fem.seepage import (  # noqa: E402
     BCType,
     SeepageBoundaryConditions,
     SeepageSolver,
@@ -194,7 +201,7 @@ def _dam2():
         from ogr_core.materials import Material
         from ogr_core.materials.builtin_models import MohrCoulomb
         from ogr_core.project import Project
-        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         p = Project("toe-drain dam 2")
         ext = Polyline(vertices=[Vertex(x, y) for x, y in DAM2], closed=True)
         ext.ensure_ccw()
@@ -303,7 +310,7 @@ class TestTheDoorOnDam2:
 def _harr(budget=None, on=True):
     key = ("harr", budget, on)
     if key not in _CACHE:
-        t = _module("test_rescue_face_v1356")
+        t = _dam_models
         mesh, props, bcs = t._case()
         kw = {} if budget is None else {"max_node_switches": budget}
         _CACHE[key] = _solve(mesh, props, bcs, on, gamma_w=GAMMA_W,
@@ -317,7 +324,7 @@ class TestSwitchedOffTheDefect:
         """Harr's dam with a budget of 1, switched off: what 0.1.357 did.
         It stops with a node of the drain's face held while water goes in
         (measured: the same in all 9 runs with w moved by up to 8 ulp)."""
-        t = _module("test_rescue_face_v1356")
+        t = _dam_models
         r = _harr(budget=1, on=False)
         assert r.converged is False
         assert "rescue" not in r.notes, r.notes
@@ -334,7 +341,7 @@ class TestTheRescueStartsWithoutTheFrozenNodes:
         without its frozen nodes, it lands where the loop alone does;
         started with them, a node held in dry ground stayed held, inside
         the flux band, 4.2 cm off."""
-        t = _module("test_rescue_face_v1356")
+        t = _dam_models
         ref = _harr()
         r = _harr(budget=1)
         assert ref.converged and "rescue" not in ref.notes, ref.notes
@@ -351,8 +358,8 @@ class TestTheRescueStartsWithoutTheFrozenNodes:
 def _starved_102(on):
     key = ("102", on)
     if key not in _CACHE:
-        from ogr_fem2d.solvers import (SIDE_LEFT, apply_reservoir,
-                                       default_boundary_conditions)
+        from ogr_core.fem.bc_targets import SIDE_LEFT, apply_reservoir
+        from ogr_core.fem.seepage import default_boundary_conditions
         t = _module("test_transient_coupling_v1125")
         p, m = t._dam_project(elements=1200)
         mesh = p.fem_mesh
@@ -396,7 +403,7 @@ class TestWhenNoRoadSettles:
 # ======================================================================
 class TestASettledLoopDoesNotMove:
     def test_switched_on_and_off(self):
-        t = _module("test_unsaturated_v127")
+        t = _dam_models
         mesh = t._dam_mesh(0.7)
         props = {"m": HydraulicProperties(
             ks=t.K_DAM, model=PermeabilityModel.GARDNER, gardner_a=1.0,

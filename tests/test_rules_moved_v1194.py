@@ -25,6 +25,8 @@ Invariants protected:
   reported and not changed).
 * The test runner refuses an ``async def`` test instead of counting a body
   that never ran as a pass.
+  v0.1.473: that case is in ``test_runner_wrapper_v1473`` now, against the
+  shared runner of OGR-Core, which took the runner.
 """
 from __future__ import annotations
 
@@ -223,36 +225,3 @@ class TestSnapshotCommand:
         undo, redo = stack.history()
         assert undo[0] == "noop" and undo[1].startswith("Paint material")
         assert redo == []
-
-
-class TestTheRunnerRefusesCoroutines:
-    def _runner(self):
-        saved = sys.modules.get("pytest")
-        try:
-            spec = importlib.util.spec_from_file_location(
-                "_ogr_runner_under_test_v1194", _TESTS / "_runner.py")
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            return mod
-        finally:
-            if saved is not None:
-                sys.modules["pytest"] = saved
-            else:
-                sys.modules.pop("pytest", None)
-
-    def test_an_async_test_fails_instead_of_passing_empty(self):
-        runner = self._runner()
-        ran = []
-
-        class Case:
-            async def test_async(self):
-                ran.append(True)
-
-            def test_plain(self):
-                ran.append("plain")
-
-        with pytest.raises(TypeError):
-            runner._run_method(Case(), Case.test_async)
-        assert ran == []
-        runner._run_method(Case(), Case.test_plain)
-        assert ran == ["plain"]

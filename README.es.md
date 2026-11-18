@@ -175,6 +175,11 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
+El núcleo compartido, `ogr_core` (geometría, materiales, modelo de proyecto,
+DXF, informes, y la malla y la filtración por elementos finitos), es el
+paquete `ogr-core` de [OGR-Core](https://github.com/samuelsl27/OGR-Core):
+`pyproject.toml` lo fija a una etiqueta y la instalación lo trae.
+
 Abrir la aplicación:
 
 ```bash
@@ -258,9 +263,8 @@ suite termina, no una medida.
 
 | Paquete | Contenido |
 |---|---|
-| `ogr_core/` | Geometría, materiales, cargas, soportes, proyecto, hidráulica, estadística, anotaciones, DXF |
+| `ogr_core` (dependencia, en [OGR-Core](https://github.com/samuelsl27/OGR-Core)) | Geometría, materiales, cargas, soportes, proyecto, hidráulica, estadística, anotaciones, DXF, informes; mallado y filtración por elementos finitos en `ogr_core.fem` |
 | `ogr_slip2d/` | Motor de equilibrio límite: métodos, búsquedas, rebanado, foco, optimización, retroanálisis |
-| `ogr_fem2d/` | Elementos finitos: mallado y solvers de filtración |
 | `ogr_gui/` | Interfaz PySide6: lienzo, diálogos, ventanas de interpretación, traducciones |
 | `ogr_cli/` | Interfaz de línea de comandos |
 | `ogr_api/` | Capa de operaciones sin Qt: ediciones validadas, deshacer, análisis en segundo plano, imagen PNG |

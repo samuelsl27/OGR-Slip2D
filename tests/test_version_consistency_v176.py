@@ -16,6 +16,13 @@ the reader sixteen releases into the past.
 
 A checklist in a document is only as good as the reader's attention; this
 makes the omission fail the build instead.
+
+v0.1.473 (spec 010) -- seven sites, not nine: ``ogr_core`` and ``ogr_fem2d``
+left this repository for OGR-Core, whose own series of versions the core
+keeps (0.2.0 for this one). What this program says of the core is the
+version it pins in ``pyproject.toml``, and the ``ogr_core`` that is imported
+must be that one: the runner refuses another before a single test runs, and
+this file says it too, for whoever imports the program outside the runner.
 """
 from __future__ import annotations
 
@@ -27,9 +34,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 # Every file that states the version, and how to find it in that file.
 _SOURCES = {
     "pyproject.toml": r'^version\s*=\s*"([^"]+)"',
-    "ogr_core/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
     "ogr_slip2d/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
-    "ogr_fem2d/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
     "ogr_gui/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
     "ogr_cli/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
     "ogr_gui/main_window.py": r'^\s*VERSION\s*=\s*"([^"]+)"',
@@ -78,3 +83,17 @@ class TestVersionConsistency:
         version = _declared()["pyproject.toml"]
         path = _ROOT / "docs" / "changelog" / f"CHANGELOG_v{version}.md"
         assert path.exists(), f"missing {path.relative_to(_ROOT)}"
+
+
+class TestTheCoreIsThePinnedOne:
+    def test_the_imported_core_is_the_version_pyproject_pins(self):
+        import ogr_core
+        from ogr_core.testing.runner import pinned_from_pyproject
+        pinned = pinned_from_pyproject(_ROOT / "pyproject.toml", "ogr-core")
+        assert pinned is not None, "pyproject.toml does not pin ogr-core"
+        assert ogr_core.__version__ == pinned, (ogr_core.__version__, pinned)
+
+    def test_the_two_old_sites_are_gone(self):
+        assert not (_ROOT / "ogr_core").exists()
+        assert not (_ROOT / "ogr_fem2d").exists()
+        assert len(_SOURCES) == 7, sorted(_SOURCES)

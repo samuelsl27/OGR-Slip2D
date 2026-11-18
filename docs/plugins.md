@@ -4,6 +4,12 @@ OGR is built around three independent plugin registries. Adding a new
 plugin never requires modifying existing code — just create a new file
 and decorate your class.
 
+Since v0.1.473 (spec 010) the registries of sections 1 and 3, strength
+models and supports, are in the shared core, `ogr_core`, which lives in
+OGR-Core: a new model or support is written there, released as a new
+version of `ogr-core`, and this program pins it in `pyproject.toml`. The
+paths below are inside that package.
+
 ## 1. Adding a new constitutive model (strength law)
 
 File: `ogr_core/materials/my_model.py`
@@ -361,7 +367,7 @@ add_translations("es", {
 
 ## 5. Design rules
 
-- The **core** modules (`ogr_core`, `ogr_slip2d`, `ogr_fem2d`) must
+- The **core** modules (`ogr_core`, in OGR-Core, and `ogr_slip2d`) must
   **never import from `ogr_gui`**. This is what keeps the CLI fast
   and the core testable in headless CI.
 - Every mutation of a `Project` from the GUI should go through the

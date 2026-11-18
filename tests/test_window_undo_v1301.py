@@ -30,6 +30,10 @@ The infrastructure this version adds, and what these tests protect:
   ``EXCEPTIONS`` with its reason. ``BUDGET`` only goes down: 0.1.303,
   0.1.304 and 0.1.305 take the families out (0.1.302 was D310);
 * every step name the stack can hold has its Spanish.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -43,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 _REPO = Path(__file__).resolve().parent.parent
+import _sources as S  # noqa: E402
 _WIN = _REPO / "ogr_gui" / "main_window.py"
 
 # ----------------------------------------------------------------------
@@ -692,7 +697,7 @@ def _literal_step_names():
     """Every step name written as a literal: the typed commands' defaults,
     the window's steps and the API's edits."""
     names = set()
-    cmds = ast.parse((_REPO / "ogr_core" / "project" / "commands.py")
+    cmds = ast.parse((S.source("ogr_core/project/commands.py"))
                      .read_text(encoding="utf-8"))
     for cls in (n for n in cmds.body if isinstance(n, ast.ClassDef)):
         for st in cls.body:

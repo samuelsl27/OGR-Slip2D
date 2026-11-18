@@ -11,8 +11,9 @@ source .venv/bin/activate           # Linux/macOS
 pip install -e .
 ```
 
-Core runtime dependencies (auto-installed): `numpy`, `scipy`, `shapely`,
-`h5py`, `ezdxf`, `PySide6`, `qtawesome`, `typer`, `rich`, `pydantic`.
+Core runtime dependencies (auto-installed): `ogr-core` (the shared core,
+from its tag in OGR-Core), `numpy`, `scipy`, `shapely`, `h5py`, `ezdxf`,
+`PySide6`, `qtawesome`, `typer`, `rich`, `pydantic`.
 
 ## 2. Launch the GUI
 

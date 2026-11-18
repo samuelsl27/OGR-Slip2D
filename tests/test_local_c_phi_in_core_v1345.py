@@ -28,6 +28,10 @@ The invariants:
 * the support's equivalent c and phi is computed in a fresh interpreter
   without importing the engine;
 * the census of ``test_core_layering_v1340`` loses the entry.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -40,6 +44,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 _ROOT = Path(__file__).resolve().parent.parent
+import _sources as S  # noqa: E402
 _SIGMAS = (-5.0, 0.0, 0.0004, 0.5, 10.0, 150.0, 2000.0)
 
 
@@ -175,8 +180,7 @@ class TestTheCoresFunctionIsTheOldBody:
             local_c_phi(None, m, 100.0)
         # the docstring went with the body: where the methods linearise
         # (D84) and the figures the bank reads
-        tree = ast.parse((_ROOT / "ogr_core" / "materials"
-                          / "strength_model.py").read_text(encoding="utf-8"))
+        tree = ast.parse(S.source("ogr_core/materials/strength_model.py").read_text(encoding="utf-8"))
         doc = next(ast.get_docstring(n) for n in ast.walk(tree)
                    if isinstance(n, ast.FunctionDef)
                    and n.name == "local_c_phi")
@@ -244,5 +248,5 @@ class TestTheCensusLosesTheEntry:
         from collections import Counter
 
         import test_core_layering_v1340 as L
-        found = L.census_of(_ROOT / "ogr_core" / "support" / "bond.py", _ROOT)
+        found = L.census_of(S.source("ogr_core/support/bond.py"), S.core_root())
         assert found == Counter(), found

@@ -11,7 +11,7 @@ initial-state notes, the transient's warnings, the back analysis' and the
 sweep's ``notes["error"]``, the runner's "Could not build the search for" and
 the calculator's notes were English sentences, most with their values baked
 in, shown through ``tr()`` -- which found nothing for those. Each is a code
-now (``ogr_fem2d.messages``, ``ogr_slip2d.run_messages``,
+now (``ogr_core.fem.messages``, ``ogr_slip2d.run_messages``,
 ``ogr_core.statistics.messages``, ``ogr_core.materials.messages``); a reason
 that follows another (an initial state that failed because there is no
 prescribed head) is nested with its own code.
@@ -33,6 +33,10 @@ The invariants:
   (D341: it must not raise); the sweep's refusal box; the Interpret
   groundwater summary; the Hoek-Brown calculator;
 * the API still reads English, and a note survives the pickle of a job.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -45,6 +49,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 _ROOT = Path(__file__).resolve().parent.parent
+import _sources as S  # noqa: E402
 
 #: ``{cat, code, args, english}``: the sentence v0.1.351 wrote. ``cat`` is
 #: the catalogue; a nested value is ``{"$code", "$cat", "$args"}``, an uncoded
@@ -335,7 +340,7 @@ _LATER = [
 
 def _cat(name):
     if name == "seepage":
-        from ogr_fem2d.messages import SEEPAGE_NOTES
+        from ogr_core.fem.messages import SEEPAGE_NOTES
         return SEEPAGE_NOTES
     if name == "run":
         from ogr_slip2d.run_messages import RUN_NOTES
@@ -429,7 +434,7 @@ class TestEveryCodeSaysItselfInSpanish:
                 assert "{" not in said, (case["code"], said)
 
     def test_a_nested_reason_is_said_in_spanish_too(self):
-        from ogr_fem2d import messages as M
+        from ogr_core.fem import messages as M
         from ogr_core.messages import as_nested
         from ogr_gui.core_messages import note_text
         note = M.seepage_note(M.INITIAL_FAILED_WHY,
@@ -459,8 +464,8 @@ class TestEveryCodeSaysItselfInSpanish:
 
 # ======================================================================
 _CODED = {
-    "ogr_fem2d/solvers/seepage.py": ("_note_degenerate", "solve",
-                                     "solve_unsaturated", "solve_transient"),
+    "ogr_core/fem/seepage.py": ("_note_degenerate", "solve",
+                                "solve_unsaturated", "solve_transient"),
     "ogr_slip2d/transient_stability.py": ("run_transient_stability",),
     # v0.1.440 (D419) -- and the count on one computed result
     "ogr_slip2d/back_analysis.py": ("run_back_analysis", "required_force",
@@ -478,7 +483,7 @@ class TestNoSentenceWithoutItsCode:
     def test_census(self):
         found = []
         for rel, names in _CODED.items():
-            src = (_ROOT / rel).read_text(encoding="utf-8")
+            src = S.source(rel).read_text(encoding="utf-8")
             tree = ast.parse(src)
             # a module-level function first (``required_force`` is also a
             # property of the result), else the one method of that name
@@ -551,8 +556,8 @@ def _seepage_project(transient: bool):
     from ogr_core.materials.builtin_models import MohrCoulomb
     from ogr_core.project import Project
     from ogr_core.geometry.regions import MaterialRegion
-    from ogr_fem2d.mesh import generate_mesh
-    from ogr_fem2d.solvers import BCType, SeepageBoundaryConditions
+    from ogr_core.fem.generator import generate_mesh
+    from ogr_core.fem.seepage import BCType, SeepageBoundaryConditions
     poly = Polyline(vertices=[Vertex(0, 0), Vertex(_W, 0), Vertex(_W, _H),
                               Vertex(0, _H)], closed=True)
     mesh = generate_mesh([MaterialRegion(polygon=poly, material_id="m")],
@@ -667,8 +672,8 @@ class TestTheWindowSaysThemInSpanish:
 
         from PySide6.QtWidgets import QLabel
 
-        from ogr_fem2d import messages as M
-        from ogr_fem2d.solvers import SeepageResult
+        from ogr_core.fem import messages as M
+        from ogr_core.fem.seepage import SeepageResult
         from ogr_gui.interpret_groundwater_window import (
             InterpretGroundwaterWindow)
         _app()
@@ -712,7 +717,7 @@ class TestTheApiReadsEnglish:
         assert out.notes["error"].code == "run.back_target_positive"
 
     def test_a_note_survives_the_pickle_of_a_job(self):
-        from ogr_fem2d import messages as M
+        from ogr_core.fem import messages as M
         from ogr_core.messages import as_nested
         note = M.seepage_note(M.INITIAL_FAILED_WHY,
                               why=as_nested(M.seepage_note(M.NO_DIRICHLET)))

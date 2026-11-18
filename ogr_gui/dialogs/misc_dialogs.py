@@ -51,6 +51,13 @@ except Exception:  # noqa: BLE001
     except Exception:  # noqa: BLE001
         VERSION = "unknown"
 BUILD_DATE = "2026-08"
+# v0.1.473 (spec 010) -- the core is OGR-Core's since this version, with its
+# own series (0.2.0 here): a report that quotes the program's version alone
+# does not say which core computed it.
+try:
+    from ogr_core import __version__ as CORE_VERSION
+except Exception:  # noqa: BLE001
+    CORE_VERSION = "unknown"
 COPYRIGHT = "© 2026 Samuel Sáez López"
 AUTHOR = "Samuel Sáez López"
 INSTITUTION = "Universidad Politécnica de Cartagena (UPCT)"
@@ -77,7 +84,7 @@ class AboutDialog(QDialog):
         info = QTextBrowser()
         info.setOpenExternalLinks(True)
         info.setHtml(
-            tr("\n            <table>\n            <tr><td><b>Version:</b></td><td>{0}</td></tr>\n            <tr><td><b>Build:</b></td><td>{1}</td></tr>\n            <tr><td><b>License:</b></td><td>{2}</td></tr>\n            <tr><td><b>Developer:</b></td><td>{3}</td></tr>\n            <tr><td><b>Institution:</b></td><td>{4}</td></tr>\n            <tr><td><b>Website:</b></td><td><a href='{5}'>{6}</a></td></tr>\n            </table>\n            <hr>\n            <p><b>{7}</b> is an open-source 2D slope-stability\n            analysis tool based on the Limit Equilibrium Method (LEM).\n            It is part of the <b>{8}</b>, a modular family of\n            geotechnical analysis programs developed as part of a PhD\n            research project at {9}.</p>\n            <p>{10}, released under the <b>GNU Affero General\n            Public License v3.0 or later</b>.</p>\n            <p>You may use this software freely, including for commercial\n            engineering work. If you modify it and let others use your\n            version remotely over a network, you must offer them its\n            source. There is no warranty of any kind: results must be\n            checked against independent calculations before being relied\n            on.</p>\n            ").format(VERSION, BUILD_DATE, LICENSE, AUTHOR, INSTITUTION, WEBSITE, WEBSITE, SOFTWARE_NAME, SUITE_NAME, INSTITUTION, COPYRIGHT)
+            tr("\n            <table>\n            <tr><td><b>Version:</b></td><td>{0}</td></tr>\n            <tr><td><b>Core:</b></td><td>ogr-core {11}</td></tr>\n            <tr><td><b>Build:</b></td><td>{1}</td></tr>\n            <tr><td><b>License:</b></td><td>{2}</td></tr>\n            <tr><td><b>Developer:</b></td><td>{3}</td></tr>\n            <tr><td><b>Institution:</b></td><td>{4}</td></tr>\n            <tr><td><b>Website:</b></td><td><a href='{5}'>{6}</a></td></tr>\n            </table>\n            <hr>\n            <p><b>{7}</b> is an open-source 2D slope-stability\n            analysis tool based on the Limit Equilibrium Method (LEM).\n            It is part of the <b>{8}</b>, a modular family of\n            geotechnical analysis programs developed as part of a PhD\n            research project at {9}.</p>\n            <p>{10}, released under the <b>GNU Affero General\n            Public License v3.0 or later</b>.</p>\n            <p>You may use this software freely, including for commercial\n            engineering work. If you modify it and let others use your\n            version remotely over a network, you must offer them its\n            source. There is no warranty of any kind: results must be\n            checked against independent calculations before being relied\n            on.</p>\n            ").format(VERSION, BUILD_DATE, LICENSE, AUTHOR, INSTITUTION, WEBSITE, WEBSITE, SOFTWARE_NAME, SUITE_NAME, INSTITUTION, COPYRIGHT, CORE_VERSION)
         )
         layout.addWidget(info)
 

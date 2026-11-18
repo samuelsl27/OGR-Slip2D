@@ -19,7 +19,7 @@ the seepage field of ``test_interpret_i3_v153`` solved on it:
   water table;
 * the piezometric lines are the model's;
 * the vectors are one per element drawn, along its Darcy velocity;
-* the streamlines are those of ``ogr_fem2d.solvers.streamlines``, validated
+* the streamlines are those of ``ogr_core.fem.streamlines``, validated
   in ``test_streamlines_v1332``;
 * without a finite-element result the two layers that need one are
   disabled, and say why.
@@ -107,8 +107,8 @@ class TestEveryLayerMovesTheDrawing:
 
 class TestWhatTheyDraw:
     def test_the_phreatic_surface_is_the_results(self):
-        from ogr_fem2d.solvers import UnsaturatedSeepageSolver
-        from ogr_fem2d.solvers.seepage import free_surface_points
+        from ogr_core.fem.seepage import UnsaturatedSeepageSolver
+        from ogr_core.fem.seepage import free_surface_points
         from ogr_core.annotations import AnnotationKind
         w = _window(seepage=True)
         try:
@@ -148,7 +148,7 @@ class TestWhatTheyDraw:
 
     def test_the_streamlines_are_the_tracers(self):
         from ogr_core.annotations import AnnotationKind
-        from ogr_fem2d.solvers.streamlines import streamlines
+        from ogr_core.fem.streamlines import streamlines
         w = _window(seepage=True)
         try:
             w._act_gw_streams.setChecked(True)

@@ -28,6 +28,10 @@ The invariants:
 * in a fresh interpreter the stress along a support and the stress of the
   loads are computed without importing the engine;
 * the census of ``test_core_layering_v1340`` loses the six entries.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -41,6 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 _ROOT = Path(__file__).resolve().parent.parent
+import _sources as S  # noqa: E402
 
 
 def _V():
@@ -109,8 +114,8 @@ def _switches():
     """``{NAME: [modules]}`` for every top-level ``NAME = True/False`` of the
     engine and the core."""
     found = defaultdict(list)
-    for pkg in ("ogr_core", "ogr_slip2d", "ogr_fem2d"):
-        for path in sorted((_ROOT / pkg).rglob("*.py")):
+    for pkg in ("ogr_core", "ogr_slip2d"):
+        for path in S.package_files(pkg):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in tree.body:
                 if (isinstance(node, ast.Assign)
@@ -119,7 +124,7 @@ def _switches():
                     for t in node.targets:
                         if isinstance(t, ast.Name) and t.id.isupper():
                             found[t.id].append(
-                                path.relative_to(_ROOT).as_posix())
+                                S.relative(path))
     return found
 
 
@@ -172,6 +177,7 @@ class TestTheCensusLosesTheSix:
     def test_no_entry_for_the_column_or_the_loads(self):
         import test_core_layering_v1340 as L
         for rel in ("ogr_core/hydraulic/excess_pore_pressure.py",):
-            assert not L.census_of(_ROOT / rel, _ROOT), rel
-        bond = L.census_of(_ROOT / "ogr_core" / "support" / "bond.py", _ROOT)
+            assert not L.census_of(S.source(rel), S.root_for(rel)), rel
+        bond = L.census_of(S.source("ogr_core/support/bond.py"),
+                           S.core_root())
         assert set(k[1] for k in bond) <= {"equivalent_c_phi_at"}, bond

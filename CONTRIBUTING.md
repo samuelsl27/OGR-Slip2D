@@ -18,8 +18,16 @@ two minutes and it exists so the free version can never be taken away.
 git clone https://github.com/samuelsl27/OGR-Slip2D.git
 cd OGR-Slip2D
 python -m venv .venv && source .venv/bin/activate
-pip install -e .
+pip install -e ".[mcp]"
 ```
+
+The shared core, `ogr_core`, is not in this repository: it is the `ogr-core`
+package of [OGR-Core](https://github.com/samuelsl27/OGR-Core), pinned to a
+tag in `pyproject.toml`, and the install above brings it. To work on the
+core and this program together, clone OGR-Core next to it and install it in
+editable mode afterwards (`pip install -e ../OGR-Core`); its code is changed
+there, never here. The test runner names the core it measures and refuses
+one that is not the pinned version.
 
 Run the whole suite:
 
@@ -49,9 +57,8 @@ totals. Before opening a pull request, run the suite with no arguments.
 
 | Package | Contents |
 |---|---|
-| `ogr_core` | Geometry, materials, loads, supports, project model, hydraulics, statistics |
+| `ogr_core` (dependency, in OGR-Core) | Geometry, materials, loads, supports, project model, hydraulics, statistics, DXF, reports, and in `ogr_core.fem` the finite-element mesh and seepage solvers |
 | `ogr_slip2d` | Limit-equilibrium engine: 7 methods, 6 search algorithms, slicer, post-processing, back analysis |
-| `ogr_fem2d` | Finite-element seepage: mesh generation and solvers |
 | `ogr_gui` | PySide6 interface: canvas, dialogs, interpret windows, i18n |
 | `ogr_cli` | Command-line interface |
 | `ogr_data` | Placeholder for the shared materials database (planned for v0.2.0) |
@@ -154,8 +161,9 @@ that proves it **moves the number**.
 ## Versioning
 
 Semantic-ish: `0.MINOR.PATCH` while pre-1.0. Each release bumps the
-version in `pyproject.toml`, `ogr_gui/main_window.py`,
-`ogr_slip2d/__init__.py` and `ogr_fem2d/__init__.py`, and adds a changelog
+version in the seven places `tests/test_version_consistency_v176.py`
+lists (`pyproject.toml`, `ogr_gui/main_window.py` and the `__version__` of
+the five packages), and adds a changelog
 entry recording **what was found**, not only what was written — including
 wrong turns, because those are the parts worth remembering.
 

@@ -143,7 +143,7 @@ def _with_head(w):
     boundary condition"). These tests passed on its empty result, which was
     written over the project and counted as the step. A refusal now leaves
     the project, and the history, as they were."""
-    from ogr_fem2d.solvers import BCType, default_boundary_conditions
+    from ogr_core.fem.seepage import BCType, default_boundary_conditions
     mesh = w.project.fem_mesh
     # what the groundwater door puts when the project has none
     # (``transient_stability._current_bcs``)

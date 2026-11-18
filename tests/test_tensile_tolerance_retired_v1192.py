@@ -36,6 +36,10 @@ retirement must not break, and v0.1.191 already had it. The header said
 "3 fail, 2 pass" before it was measured; the door test fails on the old
 tree too, because consuming the name was never the problem — forwarding it
 was.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -47,6 +51,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 _ROOT = Path(__file__).resolve().parent.parent
+import _sources as S  # noqa: E402
 _NAME = "tensile_" "tolerance"   # split: this file is scanned below
 
 
@@ -88,13 +93,12 @@ class TestTheParameterIsGone:
         ``BaseSearch.__init__`` assigned ``self.<name>`` and nothing in the
         whole tree ever read it back."""
         hits = []
-        for pkg in ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_gui",
-                    "ogr_cli"):
-            for path in sorted((_ROOT / pkg).rglob("*.py")):
+        for pkg in ("ogr_core", "ogr_slip2d", "ogr_gui", "ogr_cli"):
+            for path in S.package_files(pkg):
                 tree = ast.parse(path.read_text(encoding="utf-8"))
                 for node in ast.walk(tree):
                     if isinstance(node, ast.Attribute) and node.attr == _NAME:
-                        hits.append(f"{path.relative_to(_ROOT)}:"
+                        hits.append(f"{S.relative(path)}:"
                                     f"{node.lineno}")
         assert not hits, hits
 

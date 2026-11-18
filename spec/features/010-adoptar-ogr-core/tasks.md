@@ -28,30 +28,29 @@ OK de la propietaria antes de cada fase; una a la vez.
 
 ## Fase 2 · v0.1.473, la adopción
 
-- [ ] 2.1 Plan de la fase y OK.
-- [ ] 2.2 Bundle a refs locales `ensayo/trial` y `ensayo/envoltorio`.
-- [ ] 2.3 `pyproject.toml`: `ogr-core` fijado; fuera `pyclipper` y `[fem]`.
-- [ ] 2.4 Fuera `ogr_core/` y `ogr_fem2d/`.
-- [ ] 2.5 `reescribir_imports.py` (226 sentencias, 58 archivos) y las 62 menciones; al terminar,
-      ninguna línea importa `ogr_fem2d`.
-- [ ] 2.6 Fuera los 39 tests de `censo.md` §1. Antes, los seis que cargan por ruta
-      `test_unsaturated_v127` o `test_rescue_face_v1356` dejan de hacerlo (opción de `censo.md` §1
-      que elija la propietaria), y un `grep` confirma que ningún otro carga ninguno de los 39.
-- [ ] 2.7 `tests/_runner.py` (envoltorio) y `tests/_leaks.py` (puente); `test_runner_wrapper_v1473`
-      con lo de `censo.md` §4; fuera lo que ya está en OGR-Core.
-- [ ] 2.8 `tests/_sources.py` y los tests de `censo.md` §3, cada uno con su diente.
-- [ ] 2.9 Versión en siete sitios; `test_version_consistency_v176` comprueba también la versión
-      fijada del núcleo.
-- [ ] 2.10 *Acerca de* con la versión del núcleo, `tr()` y español.
-- [ ] 2.11 Documentos (`spec.md`, criterios de la v0.1.473) y CI.
-- [ ] 2.12 Diff del programa contra `ensayo/trial`, explicado.
-- [ ] 2.13 Changelog registrando **qué se encontró**.
+- [x] 2.1 Plan de la fase y OK (2026-11-18): el `.venv` primero; parar antes de borrar el núcleo; las presas a
+      `tests/_dam_models.py`.
+- [x] 2.2 Bundle a refs locales `ensayo/trial` y `ensayo/envoltorio`.
+- [x] 2.3 `pyproject.toml`: `ogr-core` fijado; fuera `pyclipper` y `[fem]`.
+- [x] 2.4 Fuera `ogr_core/` y `ogr_fem2d/` (tras cerrar la propietaria Claude Desktop).
+- [x] 2.5 `reescribir_imports.py` (225 sentencias en 57 archivos) y las menciones; ninguna línea importa
+      `ogr_fem2d`.
+- [x] 2.6 Fuera los 39; `_dam_models.py` para los seis que cargaban dos de ellos.
+- [x] 2.7 Envoltorio y puente; `test_runner_wrapper_v1473`; fuera los ocho del runner; el censo del núcleo
+      entero queda solo en OGR-Core (decisión de la propietaria).
+- [x] 2.8 `tests/_sources.py`, `test_sources_v1473` y los 22 + 6 archivos; con el núcleo vacío fallan 30.
+- [x] 2.9 Versión en siete sitios; el núcleo importado es el fijado.
+- [x] 2.10 *Acerca de* con la versión del núcleo, `tr()` y español.
+- [x] 2.11 Documentos y CI.
+- [x] 2.12 Diff del programa contra `ensayo/trial`, explicado en el changelog.
+- [x] 2.13 Changelog; suite entera `--jobs 4` en el `.venv`: 7529 de 7531, 0 fallos, sin fugas.
 
 ## Fase 3 · Entorno
 
-- [ ] 3.1 Plan y OK.
-- [ ] 3.2 `.venv` con `requisitos_fijados.txt`; `pip install -e …\OGR-Core`; Slip2D en editable con
-      `[mcp]`; `pip check`. El Python del sistema, sin tocar.
+- [x] 3.1 Adelantada a la fase 2, por decisión de la propietaria.
+- [x] 3.2 `.venv` con `requisitos_fijados.txt` (95, comprobados con `pip freeze`), `ogr-core` en editable,
+      Slip2D en editable con `--no-deps` (con dependencias reinstalaba `ogr-core` desde GitHub); `pip check`
+      limpio. El Python del sistema, sin tocar.
 
 ## Fase 4 · El banco (fuera de git)
 

@@ -58,7 +58,7 @@ def _fea_project(mesh=True):
     from ogr_core.materials import Material, MohrCoulomb
     from ogr_core.project import Project
     from ogr_core.project.settings import GroundwaterMethod
-    from ogr_fem2d.mesh import generate_mesh_for_project
+    from ogr_core.fem.generator import generate_mesh_for_project
     p = Project("gw")
     p.boundaries.append(Boundary(btype=BoundaryType.EXTERNAL, polyline=Polyline(
         [Vertex(0, 0), Vertex(20, 0), Vertex(20, 12), Vertex(0, 12)],
@@ -104,7 +104,7 @@ class TestTheGroundwaterMenuAfterOpen:
     def test_a_project_event_refreshes_it(self):
         """A change made elsewhere (the API, the agent bridge) reaches the
         menu through the project's listener."""
-        from ogr_fem2d.mesh import generate_mesh_for_project
+        from ogr_core.fem.generator import generate_mesh_for_project
         w = _window()
         p = _fea_project(mesh=False)
         w._attach_project(p)

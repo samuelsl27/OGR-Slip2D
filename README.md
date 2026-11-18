@@ -170,6 +170,11 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
+The shared core, `ogr_core` (geometry, materials, the project model, DXF,
+reports, and the finite-element mesh and seepage), is the `ogr-core` package
+of [OGR-Core](https://github.com/samuelsl27/OGR-Core): `pyproject.toml` pins
+it to a tag and the install brings it.
+
 Open the application:
 
 ```bash
@@ -198,7 +203,8 @@ QT_QPA_PLATFORM=offscreen python tests/_runner.py
 
 `QT_QPA_PLATFORM=offscreen` is needed because the GUI tests build real Qt
 widgets; they simply never reach a display. Note that the project uses its
-own runner in `tests/_runner.py` — **pytest is not required**, and the test
+own runner (OGR-Core's `ogr_core.testing.runner`, set up by
+`tests/_runner.py`) — **pytest is not required**, and the test
 modules cannot be imported outside the runner.
 
 To work on one area, run only that part of the suite:
@@ -253,9 +259,8 @@ suite finishes, not a measurement.
 
 | Package | Contents |
 |---|---|
-| `ogr_core/` | Geometry, materials, loads, supports, project model, hydraulics, statistics, annotations, DXF |
+| `ogr_core` (dependency, in [OGR-Core](https://github.com/samuelsl27/OGR-Core)) | Geometry, materials, loads, supports, project model, hydraulics, statistics, annotations, DXF, reports; finite-element meshing and seepage in `ogr_core.fem` |
 | `ogr_slip2d/` | Limit-equilibrium engine: methods, searches, slicer, focus, optimisation, back analysis |
-| `ogr_fem2d/` | Finite elements: meshing and seepage solvers |
 | `ogr_gui/` | PySide6 interface: canvas, dialogs, interpret windows, translations |
 | `ogr_cli/` | Command-line interface |
 | `ogr_api/` | Operations layer without Qt: validated edits, undo, background analyses, PNG render |

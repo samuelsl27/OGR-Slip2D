@@ -36,6 +36,10 @@ their free surface, their flux and the API's point queries away
 The non-converged case is the reproduction of the defect's prompt: the
 rectangular Gardner dam of ``test_unsaturated_v127`` with two Picard
 passes and the rescue switched off (restored in ``finally``, rule 5).
+
+v0.1.473 (spec 010) -- the dam is ``tests/_dam_models.py``'s: it was taken
+from ``test_unsaturated_v127``, which moved to OGR-Core with the seepage
+solver; the copy is the same, value for value.
 """
 from __future__ import annotations
 
@@ -46,8 +50,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel  # noqa: E402
-from ogr_fem2d.solvers import seepage  # noqa: E402
-from ogr_fem2d.solvers.seepage import (  # noqa: E402
+from ogr_core.fem import seepage  # noqa: E402
+from ogr_core.fem.seepage import (  # noqa: E402
     TransientSeepageSolver,
     TransientStage,
 )
@@ -64,10 +68,7 @@ def _requires_qt(cls):
 
 
 def _dam():
-    spec = importlib.util.spec_from_file_location(
-        "t127_d268", Path(__file__).parent / "test_unsaturated_v127.py")
-    t = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(t)
+    import _dam_models as t
     mesh = t._dam_mesh(0.7)
     props = {"m": HydraulicProperties(
         ks=t.K_DAM, model=PermeabilityModel.GARDNER, gardner_a=1.0,

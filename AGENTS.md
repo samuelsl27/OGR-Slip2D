@@ -6,9 +6,13 @@ elementos finitos y análisis probabilístico.
 **Dos niveles de nombre, y conviene no confundirlos**: *OpenGeoRock* (u
 *OGR Suite*) es el paraguas de cinco programas planificados; **OGR Slip2D**
 es este programa, y es lo que contiene este repositorio. El paquete
-instalable se llama `ogr-slip2d`. El núcleo compartido `ogr_core` vive aquí
-por ahora, y se extraerá a su propio paquete cuando exista un segundo
-programa que lo use — no antes.
+instalable se llama `ogr-slip2d`. El núcleo compartido `ogr_core`
+(geometría, materiales, proyecto, DXF, informes, y la malla y la filtración
+que eran `ogr_fem2d`) **no vive aquí** desde v0.1.473 (spec 010): es el
+paquete `ogr-core`, del repositorio OGR-Core
+(`C:\Samuel\OGR_Suite\Core\OGR-Core`, `samuelsl27/OGR-Core`), y este
+programa depende de él con la versión que fija `pyproject.toml`. Lo usa
+también OGR FEM2D, el segundo programa.
 
 Autor y titular del copyright: Samuel Sáez López (UPCT). Licencia
 AGPL-3.0-or-later.
@@ -26,21 +30,39 @@ AGPL-3.0-or-later.
 - **GUI**: PySide6 (Qt 6).
 - **Geometría**: Shapely. **Numérico**: NumPy, SciPy.
 - **Gráficas**: Matplotlib. **Informes**: reportlab. **CAD**: ezdxf.
-- **Tests**: runner propio en `tests/_runner.py` (aporta un `pytest`
-  simulado; **no** hay pytest real instalado).
+- **Núcleo**: `ogr-core`, fijado a una etiqueta en `pyproject.toml`
+  (`ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.0`).
+- **Tests**: el runner compartido de `ogr_core.testing.runner`, con
+  `tests/_runner.py` como envoltorio que le dice lo de este repositorio
+  (aporta un `pytest` simulado; **no** hay pytest real instalado).
 - **Formato de proyecto**: `.ogr`, JSON puro.
 
 ## Comandos
+
+Todo con el intérprete del entorno virtual del repositorio, `.venv`
+(`.venv\Scripts\python` en Windows): donde aquí pone `python`, es ese. El
+Python del sistema no tiene el núcleo.
 
 ```bash
 QT_QPA_PLATFORM=offscreen python tests/_runner.py --jobs 4  # toda la suite, en 4 procesos
 QT_QPA_PLATFORM=offscreen python tests/_runner.py   # toda la suite, en serie (la CI)
 python -m ogr_gui                                    # abrir la aplicación
 python -m ogr_cli --help                             # interfaz de terminal
-pip install -e .                                     # instalar en editable
-pip install -e ".[mcp]"                              # + servidor MCP (agentes)
 python -m ogr_mcp --help                             # servidor MCP
 ```
+
+Instalación para desarrollo, una vez (spec 010):
+
+```bash
+python -m venv .venv                                       # con el Python 3.11+ del sistema
+.venv/Scripts/python -m pip install -e ".[mcp]"            # el programa; trae ogr-core de su etiqueta
+.venv/Scripts/python -m pip install -e ../../Core/OGR-Core # el núcleo, en editable, desde su árbol
+```
+
+Después, **no repitas** `pip install -e ".[mcp]"` sin `--no-deps`: volvería
+a traer `ogr-core` de la etiqueta encima del editable. El runner nombra el
+núcleo que mide (`shared: ogr_core 0.2.0 … @ commit`) y **se niega** si no
+es la versión fijada.
 
 `QT_QPA_PLATFORM=offscreen` es **obligatorio** para los tests: construyen
 widgets Qt reales, solo que nunca llegan a una pantalla.
@@ -70,9 +92,8 @@ tests»).
 
 | Ruta | Contenido |
 |---|---|
-| `ogr_core/` | Geometría, materiales, cargas, soportes, proyecto, hidráulica, estadística, anotaciones, DXF |
+| `ogr_core` (dependencia, **no está aquí**) | En OGR-Core: geometría, materiales, cargas, soportes, proyecto, hidráulica, estadística, anotaciones, DXF, informes, y en `ogr_core.fem` la malla y la filtración (lo que era `ogr_fem2d`) |
 | `ogr_slip2d/` | Motor LEM: 10 métodos, 7 búsquedas, rebanado, foco, optimización, retroanálisis |
-| `ogr_fem2d/` | Elementos finitos: mallado y solvers de filtración |
 | `ogr_gui/` | Interfaz PySide6: lienzo, ~30 diálogos, ventanas de interpretación, i18n |
 | `ogr_cli/` | Interfaz de línea de comandos |
 | `ogr_api/` | Capa de operaciones sin Qt (spec 008): *handles*, validación, deshacer, trabajos en subproceso, render PNG, `python_exec`. La usan el servidor MCP y un script; **no** importa PySide6, `ogr_gui` ni `mcp` |
@@ -81,10 +102,17 @@ tests»).
 | `docs/` | Planes, auditorías, changelog |
 | `spec/` | Especificaciones SDD (constitución y features) |
 
-Capas en un solo sentido: `ogr_core → ogr_slip2d / ogr_fem2d → ogr_api →
-{ogr_gui, ogr_cli, ogr_mcp}`. Una regla que hoy solo impone la interfaz se
-**mueve** a `ogr_core/project/rules.py` y la interfaz pasa a preguntarla;
-copiarla es cómo acaban diciendo cosas distintas.
+Capas en un solo sentido: `[OGR-Core] ogr_core (con fem) → ogr_slip2d →
+ogr_api → {ogr_gui, ogr_cli, ogr_mcp}`. Una regla que hoy solo impone la
+interfaz se **mueve** a `ogr_core/project/rules.py` y la interfaz pasa a
+preguntarla; copiarla es cómo acaban diciendo cosas distintas.
+
+**El código de `ogr_core` solo se cambia en OGR-Core** (desde v0.1.473).
+Si un cambio de este programa necesita algo del núcleo, se para y se pide
+en la ventana de OGR-Core: sale como una versión nueva del núcleo, y este
+programa sube la que fija. Para probar un cambio del núcleo contra este
+programa antes de etiquetarlo, el runner tiene `--dev-core`, que nunca vale
+para publicar.
 
 ---
 
@@ -201,15 +229,18 @@ opción, añade también el test que demuestra que **mueve el número**.
   resultado posible aquí, porque parece que funciona.
 - **Sé escéptico con lo que te pido.** Si algo huele mal, dilo.
 - **Al terminar, lista qué probaste y qué falta por probar.**
-- Cada versión sube el número en **nueve** sitios y añade un changelog en
+- Cada versión sube el número en **siete** sitios y añade un changelog en
   `docs/changelog/`: `pyproject.toml`, `ogr_gui/main_window.py`
-  (`MainWindow.VERSION`) y el `__version__` de `ogr_core`, `ogr_slip2d`,
-  `ogr_fem2d`, `ogr_gui`, `ogr_cli`, `ogr_api` (desde v0.1.194) y
-  `ogr_mcp` (desde v0.1.195). Esta lista decía cuatro hasta v0.1.76, y los
-  tres que omitía llevaban congelados en 0.1.59 desde v0.1.59. Hay un test
-  que falla si discrepan (`tests/test_version_consistency_v176.py`, que es
-  la lista que manda), porque una lista en un documento solo vale lo que
-  valga la atención de quien la lee.
+  (`MainWindow.VERSION`) y el `__version__` de `ogr_slip2d`, `ogr_gui`,
+  `ogr_cli`, `ogr_api` (desde v0.1.194) y `ogr_mcp` (desde v0.1.195). Eran
+  nueve hasta v0.1.472, con `ogr_core` y `ogr_fem2d`, que se fueron a
+  OGR-Core: el núcleo lleva su propia serie, y lo que este programa dice de
+  él es la versión que fija `pyproject.toml`. Esta lista decía cuatro hasta
+  v0.1.76, y los tres que omitía llevaban congelados en 0.1.59 desde
+  v0.1.59. Hay un test que falla si discrepan, y si el `ogr_core` importado
+  no es el fijado (`tests/test_version_consistency_v176.py`, que es la lista
+  que manda), porque una lista en un documento solo vale lo que valga la
+  atención de quien la lee.
 
 ### Sobre los changelogs
 
@@ -242,6 +273,9 @@ lista funciones añadidas ha desperdiciado la mitad de su valor.
   fuera de *loopback*: `python_exec` está siempre disponible (decisión del
   propietario), así que quien alcance ese puerto ejecuta código como el
   usuario. Ver `docs/mcp/seguridad.md`.
+- **No edites `ogr_core` ni lo copies aquí.** Vive en OGR-Core y se cambia
+  allí (ver «Estructura»). Una carpeta `ogr_core/` u `ogr_fem2d/` en este
+  árbol sería un segundo núcleo; hay un test que lo impide.
 - **No toques los casos de validación** (`tests/test_slide_validation_*`)
   para hacer pasar un cambio. Si un caso de referencia falla, el fallo
   está en el código.
@@ -348,8 +382,8 @@ sin verse:
   perder ningún caso. Pero **nunca bajes mallas, dovelas ni tolerancias de
   un test de validación** para ganar segundos: su finura puede ser el
   invariante.
-- **Prueba en la capa más baja que tenga la regla:** `ogr_core`,
-  `ogr_slip2d` u `ogr_api`, sin Qt. Abre una `MainWindow` solo para
+- **Prueba en la capa más baja que tenga la regla:** `ogr_slip2d` u
+  `ogr_api`, sin Qt; si la regla es del núcleo, su test va a OGR-Core. Abre una `MainWindow` solo para
   probar la ventana: cada una sigue viva hasta el final del proceso, en
   memoria, y un cambio de tema las recorre todas.
 - **Búsquedas pequeñas:** una rejilla de 400 círculos o más abre un pool

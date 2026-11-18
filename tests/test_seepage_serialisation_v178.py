@@ -182,8 +182,11 @@ class TestTheOriginalBugIsGone:
         """A field whose node count differs from the mesh is not a field
         for that mesh. Interpolating it would be arithmetic on unrelated
         numbers, so it is dropped and the guard reports it."""
-        from ogr_fem2d.solvers import (SeepageResult, restore_derived,
-                                       hydraulic_props_of)
+        from ogr_core.fem.seepage import (
+            SeepageResult,
+            restore_derived,
+            hydraulic_props_of,
+        )
         p = _project()
         d = p.seepage_result.to_dict()
         d["total_head"] = d["total_head"][:-3]      # mesh changed since

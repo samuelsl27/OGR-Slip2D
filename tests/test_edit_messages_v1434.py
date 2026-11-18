@@ -30,8 +30,14 @@ Invariants protected here:
 
 One main window with the demo for the whole file; no search, no modal
 dialog.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
+
+import sys
 
 import ast
 import json
@@ -43,6 +49,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).parent))
+import _sources as S  # noqa: E402
 
 try:
     from PySide6.QtWidgets import QApplication
@@ -1277,10 +1285,10 @@ class TestTheCensuses:
         es = _DICTS["es"]
         loose, missing = [], []
         files = [_ROOT / "ogr_gui" / "main_window.py",
-                 _ROOT / "ogr_core" / "project" / "commands.py",
+                 S.source("ogr_core/project/commands.py"),
                  *sorted((_ROOT / "ogr_api" / "ops").glob("*.py"))]
         for p in files:
-            rel = p.relative_to(_ROOT).as_posix()
+            rel = S.relative(p)
             for row in _step_name_census(p.read_text(encoding="utf-8"), rel):
                 if row[2].startswith("literal:"):
                     if row[2][8:] not in es:
@@ -1348,7 +1356,7 @@ class TestTheCensuses:
         }
         found = []
         for rel, names in coded.items():
-            src = (_ROOT / rel).read_text(encoding="utf-8")
+            src = S.source(rel).read_text(encoding="utf-8")
             found += _uncoded(src, names, rel)
         assert not found, found
 

@@ -218,6 +218,18 @@ if variant == "venv_pythonw":
 elif variant == "base_without_launcher":
     processes.venv_launcher = lambda executable=None: None
 
+# what the pool's context used for each worker it started
+started = []
+_raw_start = processes._start_in_venv
+
+
+def _recorded(process_obj, popen=None):
+    started.append([processes.child_executable(), processes.venv_launcher()])
+    return _raw_start(process_obj, popen)
+
+
+processes._start_in_venv = _recorded
+
 
 def work(_):
     import ogr_core, ogr_slip2d
@@ -226,13 +238,20 @@ def work(_):
 
 
 if __name__ == "__main__":
-    out = {"context": processes.pool_context() is not None}
+    out = {"context": processes.pool_context() is not None,
+           "base_pythonw": os.path.join(os.path.dirname(sys._base_executable),
+                                        "pythonw.exe"),
+           # the venv's own launcher, from sys.executable: one variant
+           # replaces venv_launcher
+           "venv_pythonw": os.path.join(os.path.dirname(sys.executable),
+                                        "pythonw.exe")}
     try:
         pool, stop = processes.stoppable_pool(2)
         with pool:
             out["children"] = list(pool.map(work, range(4)))
     except Exception as exc:
         out["error"] = type(exc).__name__
+    out["started"] = started
     print(json.dumps(out))
 '''
 
@@ -311,13 +330,33 @@ class TestARealPoolInAVenv:
         assert _judge(out) == [], out
         assert len(out["children"]) == 4
 
+    def test_the_program_starts_the_base_one_with_the_launcher(self):
+        _windows_only()
+        out = _run("program")
+        assert out["started"], out
+        for exe, launcher in out["started"]:
+            assert _same(exe, out["base_pythonw"]), (exe, out)
+            assert _same(launcher, out["venv_pythonw"]), (launcher, out)
+
     def test_the_venvs_pythonw_is_caught(self):
         _windows_only()
-        problems = _judge(_run("venv_pythonw"))
+        out = _run("venv_pythonw")
+        assert out["started"] and all(_same(e, out["venv_pythonw"])
+                                      for e, _ in out["started"]), out
+        problems = _judge(out)
         assert any(p.startswith("the pool died") for p in problems), problems
 
     def test_the_base_one_without_the_launcher_is_caught(self):
+        """Caught either way it shows. Outside the venv the worker either
+        runs with the base interpreter's ``sys.prefix`` (measured in
+        v0.1.472, from a system Python that had this tree installed), or
+        cannot even load the program and the pool dies (measured in
+        v0.1.473, in the ``.venv``: the core is only there)."""
         _windows_only()
-        problems = _judge(_run("base_without_launcher"))
-        assert any(p.startswith("a worker is outside the venv")
-                   for p in problems), problems
+        out = _run("base_without_launcher")
+        assert out["started"] and all(
+            _same(e, out["base_pythonw"]) and l is None
+            for e, l in out["started"]), out
+        problems = _judge(out)
+        assert any(p.startswith(("a worker is outside the venv",
+                                 "the pool died")) for p in problems), problems

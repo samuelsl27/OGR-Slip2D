@@ -45,6 +45,10 @@ Invariants protected here:
 
 One main window for the whole file, given a fresh project by each test that
 changes it; no search, no modal dialog left open.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -60,6 +64,7 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).parent))
+import _sources as S  # noqa: E402
 
 try:
     from PySide6.QtWidgets import QApplication
@@ -1074,7 +1079,7 @@ class TestTheWindowSaysIt:
 #: the numbering «X (2)» (``_unique``) to ``ogr_core.naming``
 _NOT_A_NOTE = ()
 #: the packages whose readers the enumeration census reads
-_PACKAGES = ("ogr_core", "ogr_fem2d", "ogr_slip2d")
+_PACKAGES = ("ogr_core", "ogr_slip2d")
 #: readers that put a default in place of a value they do not know, said
 #: nowhere: left to D429 (the owner's decision in the review of 0.1.437)
 _TOLERANT = {
@@ -1203,9 +1208,9 @@ _ENUM_DEF = re.compile(r"\bclass \w+\s*\([^)]*Enum")
 def _package_sources():
     out = {}
     for pkg in _PACKAGES:
-        for f in sorted((_ROOT / pkg).rglob("*.py")):
+        for f in S.package_files(pkg):
             if "__pycache__" not in f.parts:
-                out[f.relative_to(_ROOT).as_posix()] = f.read_text(
+                out[S.relative(f)] = f.read_text(
                     encoding="utf-8")
     return out
 
@@ -1213,8 +1218,8 @@ def _package_sources():
 class TestTheCensuses:
 
     def test_no_note_of_import_properties_is_built_in_place(self):
-        src = (_ROOT / "ogr_core" / "project" / "properties_import.py"
-               ).read_text(encoding="utf-8")
+        src = S.source("ogr_core/project/properties_import.py"
+                     ).read_text(encoding="utf-8")
         assert _sentences(src, _NOT_A_NOTE) == []
         # the numbering is the core's rule, imported (D421)
         assert "numbered_name" in src and "def _unique" not in src

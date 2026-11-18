@@ -30,8 +30,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from ogr_core.geometry import Polyline, Vertex  # noqa: E402
 from ogr_core.geometry.regions import MaterialRegion  # noqa: E402
-from ogr_fem2d.mesh import Mesh, generate_mesh  # noqa: E402
-from ogr_fem2d.mesh.generator import (  # noqa: E402
+from ogr_core.fem.generator import generate_mesh  # noqa: E402
+from ogr_core.fem.mesh import Mesh  # noqa: E402
+from ogr_core.fem.generator import (  # noqa: E402
     _bowyer_watson,
     generate_mesh_for_project,
 )

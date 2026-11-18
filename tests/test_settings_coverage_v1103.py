@@ -27,6 +27,10 @@ exact SET, and not merely checking membership of a permitted list, means a
 NEW unread field fails immediately, and closing one of those defects fails
 too — forcing the inventory down instead of letting it drift up. Same
 budget shape as the i18n test that counts unwrapped strings.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 import re
@@ -35,7 +39,7 @@ from pathlib import Path
 
 #: Packages that are the analysis, as opposed to the interface. A setting
 #: read only by ``ogr_gui`` is read only by the dialog that edits it.
-_ENGINE_PACKAGES = ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_cli")
+_ENGINE_PACKAGES = ("ogr_core", "ogr_slip2d", "ogr_cli")
 
 #: Search settings that no engine module reads yet, each with the open
 #: defect that owns it. Shrinks; never grows.
@@ -76,10 +80,12 @@ def _engine_source() -> str:
     the class body is not a reader, and counting it would make the test
     pass for every field forever.
     """
-    root = Path(__file__).resolve().parent.parent
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import _sources as S
     out = []
     for pkg in _ENGINE_PACKAGES:
-        for f in sorted((root / pkg).rglob("*.py")):
+        for f in S.package_files(pkg):
             src = f.read_text(encoding="utf-8", errors="replace")
             if f.as_posix().endswith("ogr_core/project/settings.py"):
                 src = "\n".join(

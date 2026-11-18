@@ -242,6 +242,39 @@ class TestHelpAndAbout:
         assert "Affero" in html
         assert "GNU General Public License v3." not in html
 
+    def test_about_gives_the_version_of_the_core(self):
+        """v0.1.473 (spec 010) -- the core is OGR-Core's, with its own
+        series of versions: About gives the one that is imported, next to
+        the program's, so that a report names both."""
+        import ogr_core
+        from PySide6.QtWidgets import QTextBrowser
+
+        from ogr_gui.dialogs.misc_dialogs import AboutDialog
+        QApplication.instance() or QApplication([])
+        dlg = AboutDialog(None)
+        html = " ".join(b.toPlainText()
+                        for b in dlg.findChildren(QTextBrowser))
+        assert f"ogr-core {ogr_core.__version__}" in html, html
+        assert "Core:" in html
+
+    def test_about_gives_it_in_spanish_too(self):
+        import ogr_core
+        from PySide6.QtWidgets import QTextBrowser
+
+        from ogr_gui.dialogs.misc_dialogs import AboutDialog
+        from ogr_gui.i18n import current_language, set_language
+        QApplication.instance() or QApplication([])
+        language = current_language()
+        try:
+            set_language("es")
+            dlg = AboutDialog(None)
+            html = " ".join(b.toPlainText()
+                            for b in dlg.findChildren(QTextBrowser))
+        finally:
+            set_language(language)
+        assert "Núcleo:" in html, html
+        assert f"ogr-core {ogr_core.__version__}" in html
+
     def test_about_warns_that_results_must_be_checked(self):
         """A calculation tool with no warranty should say so where the
         user will see it."""

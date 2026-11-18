@@ -83,9 +83,12 @@ def _heads(hp):
     """A 2 m column, water table at 0.5 m, the base raised to 1.5 m at
     t = 0: the heads after 60 s (the saturated zone, Ss) and after 2 h
     (the unsaturated zone, the retention curve)."""
-    from ogr_fem2d.mesh.mesh import Element, Mesh, Node
-    from ogr_fem2d.solvers.seepage import (BCType, SeepageBoundaryConditions,
-                                           TransientSeepageSolver)
+    from ogr_core.fem.mesh import Element, Mesh, Node
+    from ogr_core.fem.seepage import (
+        BCType,
+        SeepageBoundaryConditions,
+        TransientSeepageSolver,
+    )
     dz, rows = 0.1, 20
     nodes = [Node(2 * j + k, k * dz, j * dz)
              for j in range(rows + 1) for k in (0, 1)]

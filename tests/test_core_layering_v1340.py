@@ -30,8 +30,19 @@ The invariants:
   project's settings is the engine's (``ogr_slip2d.optimize.
   settings_from_project`` and ``optimize_kwargs``), no longer a method of
   ``ProjectSettings``.
+
+v0.1.473 (spec 010) -- the core left this repository for OGR-Core, and with
+it the census of the whole core against its list: it is OGR-Core's
+``test_core_layering_v10`` now, one list in one place (its only entry is the
+shared runner's ``importlib``, which this file found the first time it read
+the installed core). What stays here reads the core in the tree that is
+imported (``tests/_sources.py``, which fails rather than find nothing):
+``census_of``, which five files of this suite use for their own entries, its
+self-check, that it sees the whole core, and what each version moved.
 """
 from __future__ import annotations
+
+import sys
 
 import ast
 import tempfile
@@ -39,6 +50,8 @@ from collections import Counter
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).parent))
+import _sources as S  # noqa: E402
 
 #: The layers above the core, and the two ways around an import statement.
 BANNED = frozenset({"ogr_slip2d", "ogr_fem2d", "ogr_api", "ogr_gui",
@@ -50,6 +63,10 @@ DYNAMIC = "__import__"
 ALLOWED = Counter()
 #: v0.1.346 (D337) -- empty: the core imports none of the layers above it.
 #: ``test_core_layering_closed_v1346`` adds the runtime check.
+#: v0.1.473 (spec 010) -- the census of the whole core against this list left
+#: for OGR-Core with the core (its ``test_core_layering_v10``, whose list has
+#: the one entry the shared runner needs: it loads test files by path). Kept
+#: here, empty, for the files of this suite that check their own entries.
 
 
 def census_of(path: Path, root: Path) -> Counter:
@@ -83,23 +100,8 @@ def census_of(path: Path, root: Path) -> Counter:
     return found
 
 
-def core_census() -> Counter:
-    found: Counter = Counter()
-    for path in sorted((_ROOT / "ogr_core").rglob("*.py")):
-        found.update(census_of(path, _ROOT))
-    return found
-
-
 # ======================================================================
 class TestTheCoreImportsNoLayerAbove:
-
-    def test_the_census_is_the_allowed_list_exactly(self):
-        found = core_census()
-        new = found - ALLOWED
-        gone = ALLOWED - found
-        assert not new, ("imports of an upper layer not in the list", new)
-        assert not gone, ("entries that match nothing any more: delete "
-                          "them", gone)
 
     def test_the_census_sees_every_kind_of_import(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -132,11 +134,20 @@ class TestTheCoreImportsNoLayerAbove:
 
 
 # ======================================================================
+class TestTheCensusSeesTheCore:
+    def test_it_reads_the_whole_imported_core(self):
+        """v0.1.473 -- with the core in another tree, a census that looked
+        for it here would find nothing and match the empty allow-list."""
+        files = S.package_files("ogr_core")
+        assert len(files) > 80, len(files)
+        assert S.relative(files[0]).startswith("ogr_core/")
+
+
 class TestWhatThisVersionMoved:
 
     def test_results_io_names_the_type_without_importing_it(self):
-        found = census_of(_ROOT / "ogr_core" / "project" / "results_io.py",
-                          _ROOT)
+        found = census_of(S.source("ogr_core/project/results_io.py"),
+                          S.core_root())
         assert found == Counter()
 
     def test_the_optimisation_settings_are_built_by_the_engine(self):

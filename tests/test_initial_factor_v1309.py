@@ -50,8 +50,8 @@ def _drawdown(stages=(1e4,), calc_sf=True, t0_stage=False):
     from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel
     from ogr_core.materials import PorePressureType
     from ogr_core.project.settings import GroundwaterMethod
-    from ogr_fem2d.mesh import generate_mesh_for_project
-    from ogr_fem2d.solvers import BCType, default_boundary_conditions
+    from ogr_core.fem.generator import generate_mesh_for_project
+    from ogr_core.fem.seepage import BCType, default_boundary_conditions
     from ogr_gui.dialogs.boundary_conditions_dialog import boundary_sides
     p = _ej1_project()
     gw = p.settings.groundwater

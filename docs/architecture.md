@@ -16,7 +16,7 @@
        │                           │
        ▼                           ▼
 ┌─────────────────┐         ┌─────────────────┐
-│   ogr_slip2d    │         │    ogr_fem2d    │
+│   ogr_slip2d    │         │  ogr_core.fem   │
 │  (LEM solvers)  │         │  (seepage FEM)  │
 └─────────────────┘         └─────────────────┘
         ▲
@@ -30,10 +30,17 @@
 **Golden rules**
 
 1. `ogr_core` has zero GUI / plotting dependencies.
-2. Every solver lives in its own sibling package (`ogr_slip2d`,
-   `ogr_fem2d`, future ones). They depend on `ogr_core` only.
+2. Every solver lives in its own sibling package (`ogr_slip2d`, future
+   ones), and depends on `ogr_core` only. The finite-element seepage solver
+   is part of the shared core (`ogr_core.fem`, what was `ogr_fem2d` until
+   spec 009), because OGR FEM2D uses it too.
 3. The GUI and the CLI are two independent front-ends on top of the
    same core — *never* duplicate business logic.
+
+Since v0.1.473 (spec 010) `ogr_core` is not in this repository: it is the
+`ogr-core` package of OGR-Core, pinned to a tag in `pyproject.toml`, and its
+code is changed only there. In the diagram, the `ogr_core` box and the
+`ogr_core.fem` one are that package.
 
 ## File persistence (hybrid)
 

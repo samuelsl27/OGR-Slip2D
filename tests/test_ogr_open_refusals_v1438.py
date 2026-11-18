@@ -36,6 +36,10 @@ Invariants protected here:
 * **Each code says it in Spanish**, and the window does, by Open.
 
 One main window and one MCP server for the whole file.
+
+v0.1.473 (spec 010) -- the core's sources are read in the tree of the
+``ogr_core`` that is imported (``tests/_sources.py``), which fails
+rather than find nothing: the core left this repository for OGR-Core.
 """
 from __future__ import annotations
 
@@ -51,6 +55,7 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).parent))
+import _sources as S  # noqa: E402
 
 try:
     from PySide6.QtWidgets import QApplication
@@ -806,12 +811,12 @@ class TestEveryValidFileOpensTheSame:
         since 0.1.59, read by nothing); the settings likewise."""
         from ogr_core.project.file_shape import (SCALARS, SECTIONS,
                                                  SETTINGS_SECTIONS)
-        src = (_ROOT / "ogr_core" / "project" / "project.py").read_text(
+        src = S.source("ogr_core/project/project.py").read_text(
             encoding="utf-8")
         read = _function_keys(src, "Project", "from_dict")
         assert read == set(SECTIONS) | set(SCALARS) - {"format_version"}, (
             read ^ (set(SECTIONS) | set(SCALARS)))
-        src = (_ROOT / "ogr_core" / "project" / "settings.py").read_text(
+        src = S.source("ogr_core/project/settings.py").read_text(
             encoding="utf-8")
         read = _function_keys(src, "ProjectSettings", "from_dict")
         assert read == set(SETTINGS_SECTIONS) | {"max_materials",

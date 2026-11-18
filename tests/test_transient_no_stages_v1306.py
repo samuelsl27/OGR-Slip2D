@@ -124,7 +124,7 @@ def _heads(w, h_left, h_right):
     """Total heads on the two vertical edges of the demo slope (x = 0 is
     25 m high, x = 50 is 15 m), as Set Boundary Conditions would store
     them."""
-    from ogr_fem2d.solvers import BCType
+    from ogr_core.fem.seepage import BCType
     from ogr_gui.dialogs.boundary_conditions_dialog import boundary_sides
     bcs = w._seepage_bcs()
     sides = boundary_sides(w.project.fem_mesh)
@@ -137,7 +137,7 @@ def _heads(w, h_left, h_right):
 
 
 def _bcs(head):
-    from ogr_fem2d.solvers import BCType, SeepageBoundaryConditions
+    from ogr_core.fem.seepage import BCType, SeepageBoundaryConditions
     b = SeepageBoundaryConditions()
     b.add_node(0, BCType.TOTAL_HEAD, head)
     return b

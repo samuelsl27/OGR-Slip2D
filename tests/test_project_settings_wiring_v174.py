@@ -268,8 +268,10 @@ class TestTheLambdaRangeClipsACalibratedGrid:
         import sys
         from pathlib import Path
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import _runner
-        val = _runner._load_module(
+        # v0.1.473 -- the shared runner's loader (tests/_runner.py is a
+        # wrapper now): the same function, the same meaning
+        from ogr_core.testing.runner import _load_module
+        val = _load_module(
             Path(__file__).resolve().parent / "test_slide_validation_ej1.py")
 
         from ogr_slip2d import SlipCircle, slice_surface
@@ -346,8 +348,10 @@ class TestTheTensileCheckReachesTheSearch:
         import sys
         from pathlib import Path
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import _runner
-        val = _runner._load_module(
+        # v0.1.473 -- the shared runner's loader (tests/_runner.py is a
+        # wrapper now): the same function, the same meaning
+        from ogr_core.testing.runner import _load_module
+        val = _load_module(
             Path(__file__).resolve().parent / "test_slide_validation_ej1.py")
 
         from ogr_slip2d import BishopSimplified
@@ -398,8 +402,10 @@ class TestTheMAlphaCheckIsReachableButOff:
         import sys
         from pathlib import Path
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import _runner
-        val = _runner._load_module(
+        # v0.1.473 -- the shared runner's loader (tests/_runner.py is a
+        # wrapper now): the same function, the same meaning
+        from ogr_core.testing.runner import _load_module
+        val = _load_module(
             Path(__file__).resolve().parent / "test_slide_validation_ej1.py")
         from ogr_slip2d import SlipCircle, slice_surface
         from ogr_slip2d.methods import BishopSimplified

@@ -31,8 +31,8 @@ from ogr_core.hydraulic import (  # noqa: E402
     PermeabilityModel,
 )
 from ogr_core.materials import Material, MohrCoulomb, PorePressureType  # noqa: E402
-from ogr_fem2d.mesh import generate_mesh_for_project  # noqa: E402
-from ogr_fem2d.solvers import (  # noqa: E402
+from ogr_core.fem.generator import generate_mesh_for_project  # noqa: E402
+from ogr_core.fem.seepage import (  # noqa: E402
     BCType,
     SeepageBoundaryConditions,
     UnsaturatedSeepageSolver,

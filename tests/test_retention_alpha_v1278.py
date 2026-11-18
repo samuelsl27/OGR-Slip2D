@@ -31,6 +31,10 @@ What these tests protect:
   the ``vg_alpha`` the file carries (0.036 when that is missing too), as
   every version up to 0.1.277 did;
 * the interface and the API say which alpha a model reads.
+
+v0.1.473 (spec 010) -- the dam is ``tests/_dam_models.py``'s: it was taken
+from ``test_unsaturated_v127``, which moved to OGR-Core with the seepage
+solver; the copy is the same, value for value.
 """
 from __future__ import annotations
 
@@ -86,10 +90,13 @@ def _error_18(hp):
     from ogr_core.materials import Material
     from ogr_core.materials.builtin_models import MohrCoulomb
     from ogr_core.project import Project
-    from ogr_fem2d.mesh import generate_mesh_for_project
-    from ogr_fem2d.solvers.seepage import (BCType, SeepageBoundaryConditions,
-                                           TransientSeepageSolver,
-                                           TransientStage)
+    from ogr_core.fem.generator import generate_mesh_for_project
+    from ogr_core.fem.seepage import (
+        BCType,
+        SeepageBoundaryConditions,
+        TransientSeepageSolver,
+        TransientStage,
+    )
     p = Project("18")
     ext = Polyline(vertices=[Vertex(x, y) for x, y in
                              [(0.0, 0.0), (BASE, 0.0), (P_ARR + CORONA, ALT),
@@ -227,16 +234,13 @@ def _moved(a, b):
 
 
 def _dam():
-    spec = importlib.util.spec_from_file_location(
-        "t127_d275", Path(__file__).parent / "test_unsaturated_v127.py")
-    t = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(t)
+    import _dam_models as t
     mesh = t._dam_mesh(0.7)
     return t, mesh, t._dam_bcs(mesh)
 
 
 def _steady(hp):
-    from ogr_fem2d.solvers.seepage import UnsaturatedSeepageSolver
+    from ogr_core.fem.seepage import UnsaturatedSeepageSolver
     t, mesh, bcs = _dam()
     hp.ks = t.K_DAM
     r = UnsaturatedSeepageSolver(mesh, {"m": hp}, gamma_w=9.81,

@@ -52,7 +52,9 @@ import re
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
-_TREES = ("ogr_core", "ogr_slip2d", "ogr_fem2d", "ogr_gui", "ogr_cli", "tests")
+# v0.1.473 (spec 010) -- without ogr_core and ogr_fem2d, which left for
+# OGR-Core: its own test_no_vendor_names_v10 reads them there.
+_TREES = ("ogr_slip2d", "ogr_gui", "ogr_cli", "tests")
 
 # Split on purpose — see the docstring. The halves are meaningless apart, so
 # this file does not match its own pattern and needs no exemption.

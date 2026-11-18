@@ -6,7 +6,7 @@ v0.1.364 (D342) — a saved groundwater field keeps the codes of its notes, so
 does for the field just computed.
 
 The finding (2026-10-21, while making 0.1.352): since that version the
-solver's notes carry a code (``ogr_fem2d/messages.py``), but
+solver's notes carry a code (``ogr_core/fem/messages.py``), but
 ``SeepageResult.to_dict`` wrote each one as its English sentence and
 ``from_dict`` read it back as a ``str``. Measured: a ``seepage.stage_steps``
 note with ``k = 1``, through ``to_dict`` → JSON → ``from_dict``, came back as
@@ -60,12 +60,12 @@ class _Spanish:
 
 
 def _round_trip(result):
-    from ogr_fem2d.solvers import SeepageResult
+    from ogr_core.fem.seepage import SeepageResult
     return SeepageResult.from_dict(json.loads(json.dumps(result.to_dict())))
 
 
 def _result(**notes):
-    from ogr_fem2d.solvers import SeepageResult
+    from ogr_core.fem.seepage import SeepageResult
     r = SeepageResult()
     r.total_head = [1.0]
     r.notes.update(notes)
@@ -77,7 +77,7 @@ class TestTheCodeComesBack:
 
     def test_the_reproduction_of_the_ticket(self):
         from ogr_core.messages import Coded
-        from ogr_fem2d import messages as M
+        from ogr_core.fem import messages as M
         note = M.seepage_note(M.STAGE_STEPS, k=1)
         back = _round_trip(_result(warning=note)).notes["warning"]
         assert isinstance(back, Coded), type(back)
@@ -86,7 +86,7 @@ class TestTheCodeComesBack:
         assert back == note
 
     def test_the_english_in_the_file_is_the_english_of_before(self):
-        from ogr_fem2d import messages as M
+        from ogr_core.fem import messages as M
         note = M.seepage_note(M.STAGE_STEPS, k=1)
         d = _result(warning=note).to_dict()
         assert d["notes"]["warning"] == (
@@ -98,7 +98,7 @@ class TestTheCodeComesBack:
 
     def test_a_nested_reason(self):
         from ogr_core.messages import as_nested
-        from ogr_fem2d import messages as M
+        from ogr_core.fem import messages as M
         from ogr_gui.core_messages import note_text
         note = M.seepage_note(M.INITIAL_FAILED_WHY,
                               why=as_nested(M.seepage_note(M.NO_DIRICHLET)))
@@ -113,7 +113,7 @@ class TestTheCodeComesBack:
         """json_args writes NaN as "nan"; read back as a string, the
         template's ``{change:.3e}`` would not format it and the note would
         fall back on its English."""
-        from ogr_fem2d import messages as M
+        from ogr_core.fem import messages as M
         from ogr_gui.core_messages import note_text
         note = M.seepage_note(M.PICARD_NO_RESCUE, steps=200,
                               change=float("nan"))
@@ -147,7 +147,7 @@ class TestWhatDoesNotChange:
         assert "note_codes" not in d, d
 
     def test_an_older_file_reads_as_it_always_did(self):
-        from ogr_fem2d.solvers import SeepageResult
+        from ogr_core.fem.seepage import SeepageResult
         d = {"schema": 1, "total_head": [1.0], "gamma_w": 9.81,
              "seepage_nodes": [], "converged": True, "iterations": 3,
              "notes": {"warning": "stage 1: some time steps did not "
@@ -159,7 +159,7 @@ class TestWhatDoesNotChange:
         assert r.converged and r.iterations == 3
 
     def test_a_code_for_a_note_the_file_does_not_have_is_ignored(self):
-        from ogr_fem2d.solvers import SeepageResult
+        from ogr_core.fem.seepage import SeepageResult
         r = SeepageResult.from_dict({
             "total_head": [1.0], "notes": {},
             "note_codes": {"warning": {"code": "seepage.stage_steps",
@@ -172,7 +172,7 @@ def _seepage_project():
     """The rectangle of ``test_seepage_run_notes_v1352``, solved, with heads
     on its two sides."""
     import test_seepage_run_notes_v1352 as srn
-    from ogr_fem2d.solvers import BCType, SeepageBoundaryConditions
+    from ogr_core.fem.seepage import BCType, SeepageBoundaryConditions
     p = srn._seepage_project(transient=False)
     bcs = SeepageBoundaryConditions()
     for nid in sorted(p.fem_mesh.boundary_node_ids()):
@@ -189,8 +189,8 @@ class TestThroughTheFile:
 
     def test_the_transient_stages_and_the_initial_state(self):
         from ogr_core.project import Project
-        from ogr_fem2d import messages as M
-        from ogr_fem2d.solvers import SeepageResult
+        from ogr_core.fem import messages as M
+        from ogr_core.fem.seepage import SeepageResult
         from ogr_slip2d import run_messages as RM
         from ogr_slip2d.transient_stability import solve_project_groundwater
         p = _seepage_project()
@@ -218,7 +218,7 @@ class TestThroughTheFile:
         from PySide6.QtWidgets import QLabel
 
         from ogr_core.project import Project
-        from ogr_fem2d import messages as M
+        from ogr_core.fem import messages as M
         from ogr_gui.interpret_groundwater_window import (
             InterpretGroundwaterWindow)
         from ogr_slip2d.transient_stability import solve_project_groundwater

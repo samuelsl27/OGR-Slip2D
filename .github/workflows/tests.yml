@@ -55,6 +55,9 @@ jobs:
           # v0.1.195 — with the [mcp] extra: the MCP server tests FAIL in
           # CI without the SDK (they only return early on a machine without
           # it), so the extra cannot be forgotten here unnoticed.
+          # v0.1.473 (spec 010) -- and it brings the shared core, ogr-core,
+          # from the tag pyproject.toml pins (a git dependency on the public
+          # OGR-Core repository): nothing of the core is in this tree.
           pip install -e ".[mcp]"
 
       - name: Run the test suite

@@ -50,7 +50,7 @@ def _catalogue() -> dict:
         from ogr_core.project.messages import (REFUSALS, RULES,
                                                STRENGTH_REFUSALS)
         from ogr_core.statistics.messages import SWEEP_NOTES
-        from ogr_fem2d.messages import SEEPAGE_NOTES
+        from ogr_core.fem.messages import SEEPAGE_NOTES
         from ogr_slip2d.messages import MESSAGES as LEM
         from ogr_slip2d.method_note_messages import METHOD_NOTES
         from ogr_slip2d.note_messages import NOTES

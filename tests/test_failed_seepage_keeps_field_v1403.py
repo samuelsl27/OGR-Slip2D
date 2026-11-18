@@ -49,8 +49,8 @@ def _project(heads: bool):
     from ogr_core.materials import Material, PorePressureType
     from ogr_core.materials.builtin_models import MohrCoulomb
     from ogr_core.project import Project
-    from ogr_fem2d.mesh import generate_mesh
-    from ogr_fem2d.solvers import BCType, SeepageBoundaryConditions
+    from ogr_core.fem.generator import generate_mesh
+    from ogr_core.fem.seepage import BCType, SeepageBoundaryConditions
     poly = Polyline(vertices=[Vertex(0, 0), Vertex(_W, 0), Vertex(_W, _H),
                               Vertex(0, _H)], closed=True)
     mesh = generate_mesh([MaterialRegion(polygon=poly, material_id="m")],
@@ -78,7 +78,7 @@ def _project(heads: bool):
 def _with_stored_field():
     """A project with a solved field, whose heads are then removed: what
     bank problem 010 is (a field stored, no conditions saved)."""
-    from ogr_fem2d.solvers import SeepageBoundaryConditions
+    from ogr_core.fem.seepage import SeepageBoundaryConditions
     from ogr_slip2d.transient_stability import solve_project_groundwater
     p = _project(heads=True)
     field = solve_project_groundwater(p)
@@ -115,7 +115,7 @@ class TestARefusalLeavesTheProject:
         assert p.seepage_result is field
 
     def test_a_transient_whose_initial_state_fails_keeps_them(self):
-        from ogr_fem2d.solvers import SeepageBoundaryConditions
+        from ogr_core.fem.seepage import SeepageBoundaryConditions
         from ogr_slip2d.transient_stability import solve_project_groundwater
         p, field = _with_stored_field()
         p.seepage_bcs = _project(heads=True).seepage_bcs   # stages solvable

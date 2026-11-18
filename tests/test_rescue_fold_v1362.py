@@ -56,6 +56,10 @@ The invariants
 Cost: about 3 min. Each fine mesh needs one continuation (about 60 s) and
 one path (about 30 s), shared by every test on it. Every test restores the
 switch it touches (rule 5).
+
+v0.1.473 (spec 010) -- the dam is ``tests/_dam_models.py``'s: it was taken
+from ``test_unsaturated_v127``, which moved to OGR-Core with the seepage
+solver; the copy is the same, value for value.
 """
 from __future__ import annotations
 
@@ -66,11 +70,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import _dam_models  # noqa: E402
+
 import numpy as np  # noqa: E402
 
 from ogr_core.hydraulic import HydraulicProperties, PermeabilityModel  # noqa: E402
-from ogr_fem2d.solvers import seepage  # noqa: E402
-from ogr_fem2d.solvers.seepage import (  # noqa: E402
+from ogr_core.fem import seepage  # noqa: E402
+from ogr_core.fem.seepage import (  # noqa: E402
     BCType,
     SeepageSolver,
     UnsaturatedSeepageSolver,
@@ -300,7 +306,7 @@ class TestOtherModelsAreTold:
     the face is still unsettled, and that warning comes first."""
 
     def _run(self, on):
-        t = _module("test_unsaturated_v127")
+        t = _dam_models
         mesh = t._dam_mesh(0.7)
         props = {"m": HydraulicProperties(
             ks=t.K_DAM, model=PermeabilityModel.GARDNER, gardner_a=1.0,
