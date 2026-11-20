@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ogr-slip2d"
-version = "0.1.473"
+version = "0.1.474"
 description = "OGR Slip2D — open-source slope stability and groundwater analysis (OpenGeoRock Suite)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -26,7 +26,9 @@ dependencies = [
     # v0.1.473 (spec 010) -- the shared core, pinned to its tag: geometry,
     # materials, project, DXF, reports, and the finite-element mesh and
     # seepage that were ogr_fem2d. Its code is changed only in OGR-Core.
-    "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.0",
+    # v0.1.474 -- v0.2.1: the leak detector lets through the locale that the
+    # first QApplication adopts on Unix (the LEAK of the Linux CI).
+    "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.1",
     "numpy>=1.26",
     "scipy>=1.14",
     "shapely>=2.0",

@@ -44,6 +44,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tempfile
 from pathlib import Path
 
@@ -65,6 +66,17 @@ def _inside(path, root) -> bool:
         return False
 
 
+def _core_lives_elsewhere(path) -> bool:
+    """Not a copy in this tree. v0.1.474: the core is installed from its
+    tag into the ``.venv``, and that folder is inside the repository, so
+    the interpreter's own library folders do not count as the tree."""
+    paths = sysconfig.get_paths()
+    for lib in {paths["purelib"], paths["platlib"]}:
+        if _inside(path, lib):
+            return True
+    return not _inside(path, _ROOT)
+
+
 # ----------------------------------------------------------------------
 class TestThePackages:
     def test_the_five_own_resolve_in_this_repository(self):
@@ -78,7 +90,17 @@ class TestThePackages:
     def test_the_core_is_shared_and_lives_elsewhere(self):
         import ogr_core
         assert W.SHARED == ("ogr_core",)
-        assert not _inside(ogr_core.__file__, _ROOT), ogr_core.__file__
+        assert _core_lives_elsewhere(ogr_core.__file__), ogr_core.__file__
+
+    def test_an_installed_core_inside_the_tree_is_not_a_copy(self):
+        """v0.1.474 -- the ``.venv`` sits in this folder, so a core
+        installed from its tag lives under ``_ROOT`` too: that is an
+        install, not a copy. Anywhere else under ``_ROOT`` still is."""
+        lib = Path(sysconfig.get_paths()["purelib"])
+        assert _core_lives_elsewhere(lib / "ogr_core" / "__init__.py")
+        assert not _core_lives_elsewhere(_ROOT / "ogr_core" / "__init__.py")
+        assert not _core_lives_elsewhere(
+            _ROOT / "vendor" / "ogr_core" / "__init__.py")
 
     def test_the_two_copies_are_gone(self):
         """Its code is changed only in OGR-Core (AGENTS.md): a folder of

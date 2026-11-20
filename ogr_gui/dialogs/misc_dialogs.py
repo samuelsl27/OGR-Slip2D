@@ -52,8 +52,8 @@ except Exception:  # noqa: BLE001
         VERSION = "unknown"
 BUILD_DATE = "2026-08"
 # v0.1.473 (spec 010) -- the core is OGR-Core's since this version, with its
-# own series (0.2.0 here): a report that quotes the program's version alone
-# does not say which core computed it.
+# own series (the one pyproject.toml pins): a report that quotes the
+# program's version alone does not say which core computed it.
 try:
     from ogr_core import __version__ as CORE_VERSION
 except Exception:  # noqa: BLE001

@@ -31,7 +31,7 @@ AGPL-3.0-or-later.
 - **Geometría**: Shapely. **Numérico**: NumPy, SciPy.
 - **Gráficas**: Matplotlib. **Informes**: reportlab. **CAD**: ezdxf.
 - **Núcleo**: `ogr-core`, fijado a una etiqueta en `pyproject.toml`
-  (`ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.0`).
+  (`ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.1`).
 - **Tests**: el runner compartido de `ogr_core.testing.runner`, con
   `tests/_runner.py` como envoltorio que le dice lo de este repositorio
   (aporta un `pytest` simulado; **no** hay pytest real instalado).
@@ -56,13 +56,22 @@ Instalación para desarrollo, una vez (spec 010):
 ```bash
 python -m venv .venv                                       # con el Python 3.11+ del sistema
 .venv/Scripts/python -m pip install -e ".[mcp]"            # el programa; trae ogr-core de su etiqueta
-.venv/Scripts/python -m pip install -e ../../Core/OGR-Core # el núcleo, en editable, desde su árbol
 ```
 
-Después, **no repitas** `pip install -e ".[mcp]"` sin `--no-deps`: volvería
-a traer `ogr-core` de la etiqueta encima del editable. El runner nombra el
-núcleo que mide (`shared: ogr_core 0.2.0 … @ commit`) y **se niega** si no
-es la versión fijada.
+El núcleo va **instalado desde la etiqueta fijada**, como en la CI (desde
+v0.1.474). En editable desde su árbol (`pip install -e ../../Core/OGR-Core`)
+solo cuando ese árbol está en la etiqueta que fija `pyproject.toml`: lo
+comparte OGR FEM2D, que puede fijar otra. Para un núcleo sin etiquetar está
+`--dev-core`. Al subir la fijación, se cambia la del entorno:
+
+```bash
+.venv/Scripts/python -m pip install --no-deps --force-reinstall "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@vX.Y.Z"
+```
+
+Con el núcleo en editable, **no repitas** `pip install -e ".[mcp]"` sin
+`--no-deps`: volvería a traer `ogr-core` de la etiqueta encima del editable.
+El runner nombra el núcleo que mide (`shared: ogr_core 0.2.1 …`) y **se
+niega** si no es la versión fijada.
 
 `QT_QPA_PLATFORM=offscreen` es **obligatorio** para los tests: construyen
 widgets Qt reales, solo que nunca llegan a una pantalla.

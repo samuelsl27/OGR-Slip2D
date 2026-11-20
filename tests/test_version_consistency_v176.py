@@ -19,8 +19,9 @@ makes the omission fail the build instead.
 
 v0.1.473 (spec 010) -- seven sites, not nine: ``ogr_core`` and ``ogr_fem2d``
 left this repository for OGR-Core, whose own series of versions the core
-keeps (0.2.0 for this one). What this program says of the core is the
-version it pins in ``pyproject.toml``, and the ``ogr_core`` that is imported
+keeps (0.2.0 for that one, 0.2.1 since v0.1.474). What this program
+says of the core is the version it pins in ``pyproject.toml``, and the
+``ogr_core`` that is imported
 must be that one: the runner refuses another before a single test runs, and
 this file says it too, for whoever imports the program outside the runner.
 """
