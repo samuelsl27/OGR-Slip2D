@@ -131,9 +131,20 @@ def _compute(tmp_path, project):
 
 
 def _heading_and_value(output):
-    """The heading of the critical column and the number under it."""
-    rows = [[c.strip() for c in line.split("│")[1:-1]]
-            for line in output.splitlines() if "│" in line]
+    """The heading of the critical column and the number under it.
+
+    v0.1.476 — rich draws its default table (``box.HEAVY_HEAD``) with a
+    heavy ``┃`` in the heading row and a light ``│`` in the body, and only a
+    legacy Windows console substitutes ``SQUARE``, light everywhere. Split
+    on ``│`` alone, the heading row was never found on Linux. The ASCII box
+    (``|``) is not read on purpose: rich falls back to it only when the
+    stream is not UTF, and ``CliRunner`` captures in UTF-8 on every system
+    (``ascii_only`` measured False); splitting on ``|`` would also cut a
+    cell holding one. Should that table ever arrive, the assertion below
+    fails showing it.
+    """
+    rows = [[c.strip() for c in re.split("[│┃]", line)[1:-1]]
+            for line in output.splitlines() if re.search("[│┃]", line)]
     # v0.1.476 — a missing row fails with the output, not a bare
     # StopIteration: on Linux's CI no row was found and nobody could see why
     head = next((r for r in rows if r and r[0] == "Method"), None)
@@ -194,6 +205,32 @@ class TestTheCommandLine:
         assert _close_enough(_heading_and_value(out)[1],
                              _closed("ky", standard=False)), out
         assert _standard_line(out) is None, out
+
+
+class TestTheTableReader:
+    """v0.1.476 — the reader above reads the table as rich draws it on
+    every system, checked here on both drawings written by hand (Linux's
+    CI drew the first; a legacy Windows console, the second), so that a
+    reader that only knows one of them fails on any system."""
+
+    _LINUX = (
+        "┏━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━┓\n"
+        "┃ Method           ┃ Critical Ky ┃ Valid ┃\n"
+        "┡━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━┩\n"
+        "│ janbu_simplified │ 0.1556      │ 0     │\n"
+        "└──────────────────┴─────────────┴───────┘\n")
+    _WINDOWS = (
+        "┌──────────────────┬─────────────┬───────┐\n"
+        "│ Method           │ Critical Ky │ Valid │\n"
+        "├──────────────────┼─────────────┼───────┤\n"
+        "│ janbu_simplified │ 0.1556      │ 0     │\n"
+        "└──────────────────┴─────────────┴───────┘\n")
+
+    def test_a_heavy_heading_row(self):
+        assert _heading_and_value(self._LINUX) == ("Critical Ky", 0.1556)
+
+    def test_a_light_heading_row(self):
+        assert _heading_and_value(self._WINDOWS) == ("Critical Ky", 0.1556)
 
 
 class TestTheCommandLineEscapesTheModel:
