@@ -24,6 +24,7 @@ package stays importable without it.
 Author: Samuel Sáez López (UPCT)
 """
 import contextlib
+import inspect
 import json
 import logging
 import time
@@ -54,6 +55,20 @@ _STEPS = {"analysis": "surfaces evaluated", "groundwater": "stages solved",
 #: Longest a tool call waits for a job before handing back its job_id.
 #: Many clients cut a request at about 60 s whatever the protocol allows.
 DEFAULT_MAX_WAIT_S = 50.0
+
+
+def _tool_description(fn) -> Optional[str]:
+    """What a model reads about a tool: its docstring without the source's
+    indentation.
+
+    v0.1.476 — the SDK takes ``fn.__doc__`` as it is, and Python strips the
+    common indentation of docstrings at compile time only from 3.13 on: on
+    3.11 and 3.12 every continuation line carried eight spaces into the
+    model's context (88 characters in the compact profile, which then
+    measured 14 060 against its 14 000), and the same server said different
+    text depending on the interpreter serving it.
+    """
+    return inspect.cleandoc(fn.__doc__) if fn.__doc__ else None
 
 # ----------------------------------------------------------------------
 # Shared parameter types
@@ -1846,6 +1861,7 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
         if name in pending:
             fn, ann, structured = pending[name]
             srv.tool(name=name, annotations=ann,
+                     description=_tool_description(fn),
                      structured_output=structured)(fn)
             registered.append(name)
     missing = [t for t in selected if t not in registered]

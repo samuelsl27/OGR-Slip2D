@@ -134,8 +134,12 @@ def _heading_and_value(output):
     """The heading of the critical column and the number under it."""
     rows = [[c.strip() for c in line.split("│")[1:-1]]
             for line in output.splitlines() if "│" in line]
-    head = next(r for r in rows if r and r[0] == "Method")
-    row = next(r for r in rows if r and r[0] == "janbu_simplified")
+    # v0.1.476 — a missing row fails with the output, not a bare
+    # StopIteration: on Linux's CI no row was found and nobody could see why
+    head = next((r for r in rows if r and r[0] == "Method"), None)
+    row = next((r for r in rows if r and r[0] == "janbu_simplified"), None)
+    assert head is not None and row is not None, (
+        "no 'Method' or 'janbu_simplified' row in the table:\n" + output)
     return head[1], float(row[1])
 
 
