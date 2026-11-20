@@ -110,8 +110,16 @@ class TestThePackages:
         assert not (_ROOT / "ogr_fem2d").exists()
 
     def test_the_pin_is_the_core_that_is_imported(self):
+        """v0.1.475 -- the core the run was held to: the pinned one in an
+        ordinary run, the one ``--dev-core`` accepts in a development run
+        (``test_version_consistency_v176.core_problems``, with its teeth)."""
         import ogr_core
-        assert W.pinned() == {"ogr_core": ogr_core.__version__}
+        from test_version_consistency_v176 import core_problems
+        assert W.pinned(), "pyproject.toml does not pin ogr-core"
+        problems = core_problems(runner.package_origins(W.SHARED), W.pinned())
+        assert problems == [], problems
+        if not runner.dev_core_run():
+            assert W.pinned() == {"ogr_core": ogr_core.__version__}
 
 
 class TestWithoutAPinNothingRuns:

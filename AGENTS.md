@@ -31,7 +31,7 @@ AGPL-3.0-or-later.
 - **Geometría**: Shapely. **Numérico**: NumPy, SciPy.
 - **Gráficas**: Matplotlib. **Informes**: reportlab. **CAD**: ezdxf.
 - **Núcleo**: `ogr-core`, fijado a una etiqueta en `pyproject.toml`
-  (`ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.1`).
+  (`ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.2`).
 - **Tests**: el runner compartido de `ogr_core.testing.runner`, con
   `tests/_runner.py` como envoltorio que le dice lo de este repositorio
   (aporta un `pytest` simulado; **no** hay pytest real instalado).
@@ -58,20 +58,19 @@ python -m venv .venv                                       # con el Python 3.11+
 .venv/Scripts/python -m pip install -e ".[mcp]"            # el programa; trae ogr-core de su etiqueta
 ```
 
-El núcleo va **instalado desde la etiqueta fijada**, como en la CI (desde
-v0.1.474). En editable desde su árbol (`pip install -e ../../Core/OGR-Core`)
-solo cuando ese árbol está en la etiqueta que fija `pyproject.toml`: lo
-comparte OGR FEM2D, que puede fijar otra. Para un núcleo sin etiquetar está
-`--dev-core`. Al subir la fijación, se cambia la del entorno:
+El `.venv` tiene **siempre** el núcleo instalado desde la etiqueta fijada,
+como la CI, y nunca el árbol de OGR-Core en editable: lo comparte OGR FEM2D,
+que puede fijar otra. Al subir la fijación, se cambia la del entorno:
 
 ```bash
 .venv/Scripts/python -m pip install --no-deps --force-reinstall "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@vX.Y.Z"
 ```
 
-Con el núcleo en editable, **no repitas** `pip install -e ".[mcp]"` sin
-`--no-deps`: volvería a traer `ogr-core` de la etiqueta encima del editable.
-El runner nombra el núcleo que mide (`shared: ogr_core 0.2.1 …`) y **se
-niega** si no es la versión fijada.
+Después, **no repitas** `pip install -e ".[mcp]"` sin `--no-deps`: reinstala
+`ogr-core` desde GitHub. El runner nombra el núcleo que mide
+(`shared: ogr_core 0.2.2 …`) y **se niega** si no es la versión fijada. Un
+núcleo sin etiquetar (`X.Y.Z.devN`) se prueba sin instalar nada (ver «Un
+núcleo y varios programas»).
 
 `QT_QPA_PLATFORM=offscreen` es **obligatorio** para los tests: construyen
 widgets Qt reales, solo que nunca llegan a una pantalla.
@@ -116,12 +115,29 @@ ogr_api → {ogr_gui, ogr_cli, ogr_mcp}`. Una regla que hoy solo impone la
 interfaz se **mueve** a `ogr_core/project/rules.py` y la interfaz pasa a
 preguntarla; copiarla es cómo acaban diciendo cosas distintas.
 
-**El código de `ogr_core` solo se cambia en OGR-Core** (desde v0.1.473).
-Si un cambio de este programa necesita algo del núcleo, se para y se pide
-en la ventana de OGR-Core: sale como una versión nueva del núcleo, y este
-programa sube la que fija. Para probar un cambio del núcleo contra este
-programa antes de etiquetarlo, el runner tiene `--dev-core`, que nunca vale
-para publicar.
+## Un núcleo y varios programas
+
+Las de OGR-Core (`AGENTS.md`, `docs/consumidores.md`), desde aquí (v0.1.475):
+
+- **El código de `ogr_core` solo se cambia en OGR-Core** (desde v0.1.473),
+  en un solo `main` y con cada cambio en una rama corta con su PR; aquí
+  **no se copia**. Si este programa necesita algo del núcleo, se para y se
+  pide en la ventana de OGR-Core: sale como una versión nueva del núcleo.
+- **La fijación se sube a propósito, en un commit**, a una etiqueta y nunca
+  a una rama. La fila de Slip2D en `docs/consumidores.md` de OGR-Core se
+  corrige **allí**: díselo a la propietaria, que lo lleva a esa sesión.
+- **Antes de etiquetar un núcleo, esta suite entera corre contra él** y
+  tiene que salir en verde, sin instalar nada:
+
+  ```bash
+  QT_QPA_PLATFORM=offscreen PYTHONPATH=<árbol o worktree de OGR-Core> .venv/Scripts/python tests/_runner.py --jobs 4 --dev-core
+  ```
+
+  `--dev-core` acepta solo una `.devN` posterior a la fijada; la corrida dice
+  `DEV CORE` antes y después de los totales, no vale para publicar y deja
+  `OGR_DEV_CORE=1` a sus tests y a los runners que relancen. Un test que
+  compare el núcleo con la fijación pregunta `runner.dev_core_run()`
+  (`core_problems`, en `tests/test_version_consistency_v176.py`).
 
 ---
 
@@ -283,8 +299,8 @@ lista funciones añadidas ha desperdiciado la mitad de su valor.
   propietario), así que quien alcance ese puerto ejecuta código como el
   usuario. Ver `docs/mcp/seguridad.md`.
 - **No edites `ogr_core` ni lo copies aquí.** Vive en OGR-Core y se cambia
-  allí (ver «Estructura»). Una carpeta `ogr_core/` u `ogr_fem2d/` en este
-  árbol sería un segundo núcleo; hay un test que lo impide.
+  allí (ver «Un núcleo y varios programas»). Una carpeta `ogr_core/` u
+  `ogr_fem2d/` en este árbol sería un segundo núcleo; un test lo impide.
 - **No toques los casos de validación** (`tests/test_slide_validation_*`)
   para hacer pasar un cambio. Si un caso de referencia falla, el fallo
   está en el código.

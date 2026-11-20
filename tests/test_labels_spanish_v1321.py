@@ -482,11 +482,34 @@ def _vocabulary():
     return _VOCABULARY[0]
 
 
-def _reads_english(text, spanish, data_names, identifiers=()):
+def _core_shown(core_version=None):
+    """The one text of the core's version the program shows (About:
+    «ogr-core 0.2.2»), as a pattern bounded so that no longer version,
+    other version or word hides behind it.
+
+    v0.1.475 (OGR Core 0.2.2) -- the version of the core imported is data,
+    like a material's name: in a run against the core of an OGR-Core PR it
+    reads «ogr-core 0.2.3.dev0», and «dev» is a word of the vocabulary
+    (the statistics window's «std dev»), so the census counted it as English.
+    Only this string is taken out, for the core actually imported: not the
+    word «dev», not any ``.devN``, not the rest of About. It cannot go to
+    ``SHOWN_EXCEPTIONS``: in an ordinary run «ogr-core 0.2.2» reads as
+    nothing, and a pattern that matches nothing is a ghost there."""
+    import re
+    if core_version is None:
+        import ogr_core
+        core_version = ogr_core.__version__
+    return re.compile(r"(?<![\w.-])ogr-core %s(?![\w.])"
+                      % re.escape(core_version))
+
+
+def _reads_english(text, spanish, data_names, identifiers=(),
+                   core_version=None):
     import re
     if text in spanish:
         return False
     plain = re.sub(r"<[^>]+>", " ", text)
+    plain = _core_shown(core_version).sub("ogr-core", plain)
     for name in data_names:
         plain = plain.replace(name, " ")
     # v0.1.324 (D315) — a stored identifier reads English whatever Spanish
@@ -537,6 +560,39 @@ def _data_names(p):
     names += [r.name for r in p.seismic_records
               if r.name != DEFAULT_RECORD_NAME]
     return sorted({n for n in names if n}, key=len, reverse=True)
+
+
+class TestTheCoresVersionIsData:
+    """v0.1.475 -- the census lets through the version of the core imported,
+    as About shows it, and nothing else (:func:`_core_shown`). Measured with
+    the development core an OGR-Core PR runs this suite against."""
+
+    DEV = "0.2.3.dev0"
+
+    def _english(self, text):
+        return _reads_english(text, set(_spanish().values()), [],
+                              core_version=self.DEV)
+
+    def test_the_core_imported_as_about_shows_it(self):
+        assert not self._english(f"ogr-core {self.DEV}")
+
+    def test_without_the_exception_it_reads_english(self):
+        # the reason for the exception: «dev» is in the vocabulary
+        assert _reads_english(f"ogr-core {self.DEV}",
+                              set(_spanish().values()), [],
+                              core_version="9.9.9")
+
+    def test_not_another_version(self):
+        assert self._english("ogr-core 0.9.9.dev3")
+        assert self._english(f"ogr-core {self.DEV}1")
+
+    def test_not_the_word_dev_anywhere_else(self):
+        assert self._english("std dev: 1.0")
+        assert self._english(f"{self.DEV}")
+
+    def test_not_what_goes_with_it(self):
+        assert self._english(f"ogr-core {self.DEV} settings")
+        assert self._english(f"Version: ogr-core {self.DEV}")
 
 
 @_requires_qt

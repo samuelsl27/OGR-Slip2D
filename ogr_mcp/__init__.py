@@ -16,4 +16,4 @@ can say "install the [mcp] extra" instead of crashing on an import.
 
 Author: Samuel Sáez López (UPCT)
 """
-__version__ = "0.1.474"
+__version__ = "0.1.475"

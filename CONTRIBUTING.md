@@ -23,11 +23,20 @@ pip install -e ".[mcp]"
 
 The shared core, `ogr_core`, is not in this repository: it is the `ogr-core`
 package of [OGR-Core](https://github.com/samuelsl27/OGR-Core), pinned to a
-tag in `pyproject.toml`, and the install above brings it. To work on the
-core and this program together, clone OGR-Core next to it and install it in
-editable mode afterwards (`pip install -e ../OGR-Core`); its code is changed
-there, never here. The test runner names the core it measures and refuses
-one that is not the pinned version.
+tag in `pyproject.toml`, and the install above brings it. The environment
+always has that tagged core installed, never an OGR-Core tree in editable
+mode; its code is changed there, never here. The test runner names the core
+it measures and refuses one that is not the pinned version. To run this
+program against an untagged core (OGR-Core's `main` or a worktree of a
+change, at a `X.Y.Z.devN`), install nothing: put that tree first and ask
+for it,
+
+```bash
+QT_QPA_PLATFORM=offscreen PYTHONPATH=../OGR-Core python tests/_runner.py --jobs 4 --dev-core
+```
+
+which says `DEV CORE` before and after its totals and is not evidence for a
+release.
 
 Run the whole suite:
 
