@@ -99,9 +99,21 @@ Windows, Python 3.14.7, con el `.venv` y el núcleo instalado desde la etiqueta,
 | Dientes del caso nuevo | Dos mutantes, sobre una copia, y mueren los dos (§0) |
 | Arranque | `ogr_gui` fuera de pantalla (`MainWindow.VERSION` 0.1.474, «Acerca de» con `ogr-core 0.2.1`), `ogr_cli --help`, `ogr_mcp --help` |
 
-### Sin probar aquí
+### La CI de Linux: la regla del locale, confirmada con Qt
 
-- **La regla del locale con Qt en Linux.** La confirma la CI de esta versión: la línea
-  `✗ [LEAK] locale` de `test_action_inventory_v1195.py` debe desaparecer en los tres trabajos de Linux (3.11,
-  3.12 y 3.13). Si sigue saliendo, se lleva entera a la sesión de OGR-Core y no se tapa con una entrada de la
-  lista de Slip2D.
+Run 44696129877, sobre `dba074c`. Frente a la de `dbc316c` (run 44399595565, núcleo 0.2.0):
+
+| Trabajo | `dbc316c` (núcleo 0.2.0) | `dba074c` (núcleo 0.2.1) |
+|---|---|---|
+| 3.11 | 7520 pasan, 5 fallan, 6 saltados, **Leaks: 1** | 7521 pasan, 5 fallan, 6 saltados, **sin fugas** |
+| 3.12 | 7520 pasan, 5 fallan, 6 saltados, **Leaks: 1** | 7521 pasan, 5 fallan, 6 saltados, **sin fugas** |
+| 3.13 | 7521 pasan, 4 fallan, 6 saltados, **Leaks: 1** | 7522 pasan, 4 fallan, 6 saltados, **sin fugas** |
+
+- La cabecera de los tres trabajos dice `shared: ogr_core 0.2.1 … (installed, no git tree)`.
+- `test_action_inventory_v1195.py` ya no da `✗ [LEAK] locale: LC_CTYPE=C.UTF-8;LC_NUMERIC=C;… → C.UTF-8`, y sus
+  tests pasan. No queda ninguna línea `LEAK` en ninguno de los tres logs. Es la primera prueba con Qt real en
+  Linux de la regla `ADOPTED_WITH_THE_FIRST_APPLICATION` de OGR-Core, que solo la había probado sin Qt.
+- Los fallos son los aparcados y no cambian: `test_cli_reported_caption_v1430` (×4) en los tres trabajos.
+  `test_mcp_server_v1195::test_the_compact_profile_stays_small` solo falla en 3.11 y 3.12: en 3.13 ya pasaba con
+  `dbc316c`. El traspaso lo daba como fallo de Linux sin distinguir versiones.
+- *Licence consistency*, en verde.
