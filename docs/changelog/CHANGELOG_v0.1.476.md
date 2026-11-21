@@ -93,4 +93,7 @@ llegara algún día, el test falla enseñándola, que es lo que no hacía antes.
 - Primer intento en la CI (run 44784829031, `b60202c`, sin el arreglo del lector): el perfil
   compacto pasa en 3.11, 3.12 y 3.13; quedan los cuatro del CLI en los tres, con la tabla a la
   vista.
-- CI de Linux en los tres Python: PENDIENTE.
+- Segundo intento en la CI (run **44805603906**, `7cbd25f`, en `dev/ci-linux-verde`): **verde en
+  3.11, 3.12 y 3.13**, cada uno con 7547 casos, 7541 pasan, 0 fallan, 6 saltados, sin fugas, y
+  `shared: ogr_core 0.2.2 … (installed, no git tree)`; licencias en verde. La corrida de `main`
+  tras la fusión (fast-forward) es la que se da a la sesión de OGR-Core.
