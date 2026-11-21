@@ -7,7 +7,8 @@ OK de la propietaria antes de cada fase; una a la vez.
 
 - [x] 0.1 `main` sigue en `d48e2b3`, limpio (2026-11-18).
 - [x] 0.2 Leídos `AGENTS.md`, el `LEEME.md` del traspaso, `CHANGELOG_v0.2.0.md` de OGR-Core y la
-      spec 009 de la rama `dev/extraer-ogr-core`.
+      spec 009 de la rama `dev/extraer-ogr-core` (desde la v0.1.477, la etiqueta
+      `archivo/dev-extraer-ogr-core`).
 - [x] 0.3 Censo (`censo.md`): los 39 tests comparados con los de OGR-Core, las importaciones, los
       tests que leen fuentes del núcleo, el runner y las fugas, los pools, el banco.
 - [x] 0.4 Decisiones Q1–Q3 de la propietaria (`spec.md`).

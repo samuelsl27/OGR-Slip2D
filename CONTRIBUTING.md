@@ -160,7 +160,10 @@ that proves it **moves the number**.
 
 ## Commits and branches
 
-- Branch from `main` as `dev/short-description`.
+- Branch from `main` as `dev/short-description`. Only `main` lives: a branch
+  merged into `main` is deleted, on GitHub and locally; an unmerged one only
+  with the owner's OK, and if it carries something `main` lacks, it is first
+  archived in an annotated tag `archivo/<name>` (since v0.1.477).
 - Sign off your commits: `git commit -s -m "..."` (Developer Certificate
   of Origin).
 - Write commit subjects that say what changed and why, not "fix stuff".

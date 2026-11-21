@@ -3673,8 +3673,9 @@ class CanvasView(QGraphicsView):
         # measured, on Python 3.11 with PySide6 6.12.0, one reference to None
         # lost per ``setPen`` of a line or rect item and none for a path
         # item (the bench's ficha; the probe is ``tests/_d370_none.py`` at
-        # commit 739885e of branch dev/d370-shutdown, deleted there by
-        # 7d88eb1). v0.1.427 wrote here that the path item had not been
+        # commit 739885e, deleted by 7d88eb1, of what was the branch
+        # dev/d370-shutdown and is now the tag archivo/dev-d370-shutdown,
+        # v0.1.477). v0.1.427 wrote here that the path item had not been
         # measured, which was false; corrected in v0.1.428.
         # A stored polyline that is not a surface (a hand-edited file) is
         # drawn as given, so the user sees what the run refuses; one with

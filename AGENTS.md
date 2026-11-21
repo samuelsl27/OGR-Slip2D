@@ -119,13 +119,14 @@ preguntarla; copiarla es cómo acaban diciendo cosas distintas.
 
 Las de OGR-Core (`AGENTS.md`, `docs/consumidores.md`), desde aquí (v0.1.475):
 
-- **El código de `ogr_core` solo se cambia en OGR-Core** (desde v0.1.473),
-  en un solo `main` y con cada cambio en una rama corta con su PR; aquí
-  **no se copia**. Si este programa necesita algo del núcleo, se para y se
-  pide en la ventana de OGR-Core: sale como una versión nueva del núcleo.
-- **La fijación se sube a propósito, en un commit**, a una etiqueta y nunca
-  a una rama. La fila de Slip2D en `docs/consumidores.md` de OGR-Core se
-  corrige **allí**: díselo a la propietaria, que lo lleva a esa sesión.
+- **El código de `ogr_core` solo se cambia en OGR-Core** (desde v0.1.473), en
+  un solo `main` y en ramas cortas con su PR; aquí **no se copia**: si falta algo
+  del núcleo, se para y se pide en la ventana de OGR-Core, y sale como versión nueva.
+- **La fijación se sube a propósito, en un commit**, a una etiqueta y nunca a una rama. La fila
+  de Slip2D en `docs/consumidores.md` de OGR-Core se corrige **allí**: díselo a la propietaria, que lo lleva a esa sesión.
+- **Solo vive `main`** (v0.1.477). Una rama fusionada en `main` se borra, en
+  GitHub y en local; una sin fusionar, solo con el OK de la propietaria, y si
+  lleva algo que `main` no tiene, antes se archiva en una etiqueta `archivo/<nombre>`.
 - **Antes de etiquetar un núcleo, esta suite entera corre contra él** y
   tiene que salir en verde, sin instalar nada:
 
@@ -133,11 +134,10 @@ Las de OGR-Core (`AGENTS.md`, `docs/consumidores.md`), desde aquí (v0.1.475):
   QT_QPA_PLATFORM=offscreen PYTHONPATH=<árbol o worktree de OGR-Core> .venv/Scripts/python tests/_runner.py --jobs 4 --dev-core
   ```
 
-  `--dev-core` acepta solo una `.devN` posterior a la fijada; la corrida dice
-  `DEV CORE` antes y después de los totales, no vale para publicar y deja
-  `OGR_DEV_CORE=1` a sus tests y a los runners que relancen. Un test que
-  compare el núcleo con la fijación pregunta `runner.dev_core_run()`
-  (`core_problems`, en `tests/test_version_consistency_v176.py`).
+  `--dev-core` acepta solo una `.devN` posterior a la fijada, dice `DEV CORE` antes y
+  después de los totales, no vale para publicar y deja `OGR_DEV_CORE=1` a sus tests y a
+  los runners que relancen; un test que compare el núcleo con la fijación pregunta
+  `runner.dev_core_run()` (`core_problems`, en `tests/test_version_consistency_v176.py`).
 
 ---
 

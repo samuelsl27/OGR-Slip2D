@@ -1,7 +1,8 @@
 # OGR Slip2D adopta `ogr-core` 0.2.0
 
 > Fase 2 de «un solo OGR-Core». Rehecha el 2026-11-18 sobre `main` (`d48e2b3`, v0.1.471) a partir
-> de la spec 009 de la extracción (solo en la rama `dev/extraer-ogr-core`, que no se toca) y del
+> de la spec 009 de la extracción (solo en la etiqueta `archivo/dev-extraer-ogr-core`, que era la
+> rama `dev/extraer-ogr-core`, borrada en la v0.1.477) y del
 > ensayo de la fase 1 (`referencias/_traspaso_ogr_core_0.2.0`). El número 009 está ocupado en
 > `main` por `009-sarma-dovelas-no-verticales`: esta es la **010**.
 
