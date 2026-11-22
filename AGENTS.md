@@ -380,13 +380,13 @@ precio es que el segfault al cerrar el intérprete, que la CI de Linux daba
 desde v0.1.276, ya no se ve: es D370, abierta. En Windows no: allí
 `os._exit` rompía la salida de los tramos (medido con un A/B).
 
-Lanza la suite en segundo plano, guarda el código de salida del proceso
-(`echo EXIT=$?`) y no toques el programa mientras corre. Nunca lances dos
-corridas a la vez: compiten por los mismos núcleos y falsean el tiempo, y
-la máquina se comparte con la sesión de OGR-FEM2D. **Nunca uses
-`PYTHONFAULTHANDLER=1` ni `-X faulthandler` con la suite:** llegan a los
-trabajadores `pythonw.exe` de un test, que mueren al arrancar sin decir
-nada, y la suite se cuelga.
+Lanza la suite en segundo plano, guarda su código de salida (`echo EXIT=$?`) y
+no toques el programa mientras corre. Suites de programas distintos, a la vez
+sí (este PC, 2026-11-22); dos de este, no: comparten `%TEMP%/ogr-slip2d-*.json`
+(pasa si OGR-Core la corre contra un núcleo sin etiquetar: se avisa antes). Lo
+cronometrado, suite o banco de cómputo, va solo: si comparte máquina, su reloj
+no se compara con nada. **Nunca uses `PYTHONFAULTHANDLER=1` ni `-X faulthandler`
+con la suite:** los `pythonw.exe` de un test mueren mudos y la suite se cuelga.
 
 ### Dónde y cómo van los tests nuevos
 

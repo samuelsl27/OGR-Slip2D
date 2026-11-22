@@ -45,3 +45,40 @@ detrás de otra:
   corrida fue sobre el árbol de esta versión antes de confirmarla. `SERIAL RUN DUE` deja de salir.
   Es una sola corrida: no reescribe la tabla «Coste de los tests» de AGENTS.md, que sigue siendo
   del portátil antiguo.
+
+## 4. Después de esta versión, sin número: suites a la vez
+
+Decisión de la propietaria (2026-11-22). En este PC (16 núcleos físicos, 32 lógicos, 64 GB) se
+llevan varios desarrollos a la vez, y «nunca dos corridas a la vez» era del portátil anterior
+(4 núcleos, 16 GB), donde competían por los núcleos y la máquina paginaba. Probado ese día: con
+esta suite en marcha (`--jobs 4`), las de OGR-Core y OGR FEM2D dieron 796 de 796 en 1,3 min y
+205 de 205 en 0,9 min, sin fugas. AGENTS.md («Coste de los tests») dice ahora:
+
+- las suites de programas distintos pueden correr a la vez;
+- dos de este programa, no: comparten `%TEMP%/ogr-slip2d-test-durations.json`, `-test-times.json`
+  y `-serial-run.json`. Pasa cuando la sesión de OGR-Core corre esta suite contra un núcleo sin
+  etiquetar (`--dev-core`) mientras esta sesión corre la suya: se avisa antes;
+- lo que se cronometra va solo, también el banco de cómputo: si comparte máquina, su reloj no se
+  compara con nada.
+
+Cabe en las mismas siete líneas: AGENTS.md sigue en 499 (tope 500, `test_agent_scaffolding_v158`).
+
+**Lo que se buscó antes de escribirlo**, por si la regla rompía algo:
+
+- **Nada choca entre programas.** Los registros del runner llevan el nombre del programa
+  (`ogr_core.testing.runner`, `Records`); los tramos de `--jobs` y las dos carpetas de cada
+  corrida (puente y preferencias) son `mkdtemp`; todo puerto de los tests es efímero
+  (`bind(("127.0.0.1", 0))`) y el puente de la ventana toma uno aleatorio. OGR FEM2D no importa
+  `ogr_slip2d`, y ningún nombre fijo de la carpeta temporal de esta suite aparece en OGR-Core ni
+  en OGR FEM2D.
+- **Los tres archivos con reloj** (`SERIAL_LANE = True`: `test_optimizations_v111`, < 5 s para
+  ~1 s; `test_jobs_file_race_v1198`, < 5 s; `test_remote_oauth_v1204`, 40 s para arrancar)
+  siguen corriendo solos dentro de esta suite, pero ya no en la máquina: el comentario de
+  `test_optimizations_v111` («so that no other process shares its cores») deja de ser cierto con
+  otra suite en marcha. Con 32 lógicos el margen es holgado; no se tocan salvo que fallen a ratos.
+- **Dos nombres fijos en la carpeta temporal, preexistentes**, que solo chocan entre dos corridas
+  de este programa (lo que la regla prohíbe) y van contra «nunca en una ruta fija»:
+  `test_seepage_serialisation_v178` (`ogr_seepage_roundtrip.ogr`) y `test_slide_validation_ej1`
+  (`ogr_test_report.pdf`, un caso de validación). Anotados, sin tocar.
+- `%TEMP%/ogr_slices` lo comparten todos los procesos de OGR Slip2D (suite, ventana, banco); sus
+  limpiezas no pueden borrar en Windows una carpeta abierta. Tampoco es un choque entre programas.
