@@ -28,8 +28,11 @@ material boundary.
 """
 from __future__ import annotations
 
+import atexit
 import math
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -63,7 +66,12 @@ from ogr_core.geometry import (  # noqa: E402
 )
 from ogr_core.project import Project  # noqa: E402
 
-_OUT = Path("/tmp/ogr_export_test.dxf")
+# v0.1.479 — a folder of this module's own and not the fixed ``/tmp``: on
+# Windows that is ``C:\tmp``, which need not exist, and two chunks of
+# ``--jobs`` would share it (AGENTS.md, «Dónde y cómo van los tests nuevos»).
+_TMP = Path(tempfile.mkdtemp(prefix="ogr_dxf_export_"))
+atexit.register(shutil.rmtree, _TMP, ignore_errors=True)
+_OUT = _TMP / "ogr_export_test.dxf"
 
 
 def _requires(flag):

@@ -23,7 +23,10 @@ What the tests pin down:
 """
 from __future__ import annotations
 
+import atexit
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -55,8 +58,13 @@ def _requires(flag):
     return deco
 
 
-_MESSY = Path("/tmp/ogr_problems.dxf")
-_CLEAN = Path("/tmp/ogr_clean.dxf")
+# v0.1.479 — a folder of this module's own and not the fixed ``/tmp``: on
+# Windows that is ``C:\tmp``, which need not exist, and two chunks of
+# ``--jobs`` would share it (AGENTS.md, «Dónde y cómo van los tests nuevos»).
+_TMP = Path(tempfile.mkdtemp(prefix="ogr_dxf_problems_"))
+atexit.register(shutil.rmtree, _TMP, ignore_errors=True)
+_MESSY = _TMP / "ogr_problems.dxf"
+_CLEAN = _TMP / "ogr_clean.dxf"
 
 
 def _make_messy(path=_MESSY):

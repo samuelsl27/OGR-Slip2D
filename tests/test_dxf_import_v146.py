@@ -22,7 +22,10 @@ Points the tests pin down:
 """
 from __future__ import annotations
 
+import atexit
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -49,7 +52,13 @@ from ogr_core.dxf import (  # noqa: E402
 from ogr_core.geometry import BoundaryType  # noqa: E402
 from ogr_core.project import Project  # noqa: E402
 
-_DXF = Path("/tmp/ogr_import_test.dxf")
+# v0.1.479 — a folder of this module's own and not the fixed ``/tmp``: on
+# Windows that is ``C:\tmp``, which need not exist (on the machine of
+# 2026-11-22 it had to be made by hand), and two chunks of ``--jobs`` would
+# share it (AGENTS.md, «Dónde y cómo van los tests nuevos»).
+_TMP = Path(tempfile.mkdtemp(prefix="ogr_dxf_import_"))
+atexit.register(shutil.rmtree, _TMP, ignore_errors=True)
+_DXF = _TMP / "ogr_import_test.dxf"
 
 
 def _requires(flag):
@@ -132,7 +141,7 @@ class TestPreview:
         assert "geometry type" in pv.error
 
     def test_missing_file_reports_cleanly(self):
-        pv = preview("/tmp/definitely_absent.dxf", _opts())
+        pv = preview(str(_TMP / "definitely_absent.dxf"), _opts())
         assert not pv.ok
         assert pv.error
 
@@ -212,7 +221,7 @@ class TestApplyToProject:
         """A broken file must not half-populate the model."""
         p = Project(name="dxf")
         before = len(p.boundaries)
-        pv, created = import_dxf(p, "/tmp/absent.dxf", _opts())
+        pv, created = import_dxf(p, str(_TMP / "absent.dxf"), _opts())
         assert not pv.ok
         assert created == {}
         assert len(p.boundaries) == before
