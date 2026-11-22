@@ -125,10 +125,14 @@ class TestTheChildInterpreter:
         processes.child_executable = windowless
         try:
             p = par._project()
-            split = par._search(p, 2).run(p)
+            search = par._search(p, 2)
+            with par._pools() as seen:
+                split = search.run(p)
         finally:
             processes.child_executable = raw
             spawn.set_executable(before)
+        # v0.1.478 — no note is also what a run that never split says
+        par._assert_pools(seen, 2)
         assert not any("ran in one" in n for n in split.notes), split.notes
         p = par._project()
         alone = par._search(p, 1).run(p)

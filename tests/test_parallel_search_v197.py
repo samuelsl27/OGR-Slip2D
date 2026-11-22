@@ -64,21 +64,49 @@ def _project():
     return p
 
 
+def _share_for(workers):
+    """The smallest whole percentage with which THIS machine gets exactly
+    ``workers`` processes, or None when no percentage gives that many.
+
+    v0.1.478 — asked of the engine's own rule (``_worker_count``), not
+    rewritten here. Until this version the helper computed
+    ``round(100 * workers / cpu_count)``, which the engine then rounds DOWN
+    to whole processes: on the 8 logical processors of the old laptop 2
+    gave 25 % and 2 processes, on the 32 of the machine of 2026-11-22 it
+    gave 6 % and int(32 * 0.06) = 1 process. Every test below that asked
+    for a split then compared the sequential run with itself and passed.
+    """
+    from types import SimpleNamespace
+    from ogr_slip2d.search import _worker_count
+    adv = SimpleNamespace(parallel_search=True, parallel_cpu_percent=1)
+    stub = SimpleNamespace(settings=SimpleNamespace(advanced=adv))
+    for pct in range(1, 101):
+        adv.parallel_cpu_percent = pct
+        if _worker_count(stub, 10 ** 9) == workers:
+            return pct
+    return None
+
+
 def _search(project, workers):
     """``workers`` here is a process count, translated into the two
     controls the user actually sees: off when 1, otherwise the share of
-    this machine that yields that many."""
+    this machine that yields EXACTLY that many — or a skip that says why,
+    never a run in fewer processes that passes for a split one."""
     import os
+
+    import pytest
     from ogr_slip2d.methods import get_method
     from ogr_slip2d.search import GridSearch
     adv = project.settings.advanced
     if workers <= 1:
         adv.parallel_search = False
     else:
+        pct = _share_for(workers)
+        if pct is None:
+            pytest.skip(f"{os.cpu_count()} logical processors: no share of "
+                        f"this machine gives {workers} processes")
         adv.parallel_search = True
-        total = os.cpu_count() or 1
-        adv.parallel_cpu_percent = max(1, min(100,
-                                              int(round(100 * workers / total))))
+        adv.parallel_cpu_percent = pct
     return GridSearch(
         method=get_method("bishop_simplified")(),
         grid_x=(-40.0, 70.0), grid_y=(35.0, 135.0),
@@ -107,15 +135,55 @@ def _fingerprint(result):
     return out
 
 
+import contextlib
+
+
+@contextlib.contextmanager
+def _pools():
+    """The size of every pool the engine opens inside the block.
+
+    Both ways a search gets one — its own and a calculation's borrowed one
+    (``processes.PoolScope.borrow``) — go through
+    ``processes.stoppable_pool``, looked up on the module at call time.
+    """
+    import ogr_slip2d.processes as processes
+    raw = processes.stoppable_pool
+    seen = []
+
+    def spy(workers):
+        seen.append(workers)
+        return raw(workers)
+    processes.stoppable_pool = spy
+    try:
+        yield seen
+    finally:
+        processes.stoppable_pool = raw
+
+
+def _assert_pools(seen, workers):
+    """v0.1.478 — a test that says it compares a split run has to have
+    split it: one pool of exactly that size, or none for one process."""
+    expected = [] if workers <= 1 else [workers]
+    assert seen == expected, (
+        f"asked for {workers} processes, pools opened: {seen}")
+
+
 _CACHE: dict = {}
 
 
 def _run(workers):
-    if workers in _CACHE:
-        return _CACHE[workers]
-    p = _project()
-    _CACHE[workers] = _search(p, workers).run(p)
-    return _CACHE[workers]
+    """The search in ``workers`` processes, shared by the cases of this
+    file. The pool check is made on EVERY call and not only the first:
+    with it inside the cache, only the first case would see a run that did
+    not split."""
+    if workers not in _CACHE:
+        p = _project()
+        search = _search(p, workers)
+        with _pools() as seen:
+            _CACHE[workers] = (search.run(p), seen)
+    result, seen = _CACHE[workers]
+    _assert_pools(seen, workers)
+    return result
 
 
 # ======================================================================
@@ -208,6 +276,54 @@ class TestTheSettingDecides:
         p.settings.advanced.parallel_search = True
         assert _worker_count(p, _PARALLEL_MIN_CIRCLES - 1) == 1
 
+    def test_the_helper_asks_for_exactly_the_processes_named(self):
+        """v0.1.478 — on any machine, the share ``_search`` sets gives
+        exactly the processes asked for, or there is none and it says so.
+
+        Machines from one logical processor to 128. The 32 of the machine
+        of 2026-11-22 is the case that failed: ``round(100 * 2 / 32)`` is
+        6 %, which the engine, rounding down as documented, turns into one
+        process, and 7 % into two.
+
+        Up to 100 logical processors one whole percent is at most one
+        process, so every count up to the cap can be asked for. Above 100 it
+        is not: on 128, 3 % gives 3 processes and 4 % gives 5, and no share
+        gives 4. That is the control's granularity, not this helper's, and
+        there the helper must skip rather than run in another count
+        (reported in the changelog of 0.1.478, the engine untouched).
+        """
+        import os
+        from types import SimpleNamespace
+        from ogr_slip2d.search import _MAX_WORKERS, _worker_count
+        raw = os.cpu_count
+        try:
+            for total in (1, 2, 3, 8, 32, 128):
+                os.cpu_count = lambda total=total: total
+                for workers in range(2, _MAX_WORKERS + 1):
+                    pct = _share_for(workers)
+                    if workers > total:
+                        assert pct is None, (total, workers, pct)
+                        continue
+                    if total > 100 and pct is None:
+                        continue
+                    assert pct is not None, (total, workers)
+                    adv = SimpleNamespace(parallel_search=True,
+                                          parallel_cpu_percent=pct)
+                    stub = SimpleNamespace(
+                        settings=SimpleNamespace(advanced=adv))
+                    assert _worker_count(stub, 10 ** 9) == workers, (
+                        total, workers, pct)
+            os.cpu_count = lambda: 128
+            assert _share_for(4) is None
+            os.cpu_count = lambda: 32
+            assert _share_for(2) == 7
+            adv = SimpleNamespace(parallel_search=True,
+                                  parallel_cpu_percent=round(100 * 2 / 32))
+            stub = SimpleNamespace(settings=SimpleNamespace(advanced=adv))
+            assert _worker_count(stub, 10 ** 9) == 1
+        finally:
+            os.cpu_count = raw
+
     def test_both_settings_survive_a_save(self):
         from ogr_core.project.settings import AdvancedSettings
         a = AdvancedSettings.from_dict({"parallel_search": False,
@@ -259,11 +375,15 @@ class TestItFallsBackInsteadOfFailing:
         real = cf.ProcessPoolExecutor
         cf.ProcessPoolExecutor = _Boom
         try:
-            got = search.run(p)
+            with _pools() as seen:
+                got = search.run(p)
         finally:
             cf.ProcessPoolExecutor = real
             if original is not None:
                 SM.ProcessPoolExecutor = original
+        # v0.1.478 — the pool was ASKED for, and broke: without this, a run
+        # that never tried one would pass as a fallback
+        _assert_pools(seen, 2)
 
         seq = _run(1)
         assert got.valid_count == seq.valid_count
@@ -282,7 +402,10 @@ class TestItFallsBackInsteadOfFailing:
         p = _project()
         search = _search(p, 2)
         search.progress_cb = lambda done, total: seen.append((done, total))
-        search.run(p)
+        with _pools() as pools:
+            search.run(p)
+        # v0.1.478 — the sequential path reports progress too
+        _assert_pools(pools, 2)
         assert search.progress_cb is not None
         assert seen, "the parallel run reported no progress at all"
         assert seen[-1][0] == seen[-1][1]
