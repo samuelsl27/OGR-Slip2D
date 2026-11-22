@@ -281,8 +281,12 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
             "warnings": version_warnings(window),
             "units": "SI: m, kN, kPa, kN/m3, degrees",
             "profile": profile, "tools": list(registered),
+            # v0.1.481 — with --attach there is no workspace of the
+            # server's own, and the --workdir it was given lives on the
+            # router, which hands it to the window in its greeting: it was
+            # in use and this said null.
             "workdir": (str(ws.workdir) if ws is not None and ws.workdir
-                        else None),
+                        else getattr(backend, "workdir", None) or None),
             "open_models": models,
             # F4 / v0.1.207: whether an OGR Slip2D window is open, and
             # so where a call that names nothing of this server's goes.
