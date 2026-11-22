@@ -73,3 +73,38 @@ propietaria, y si lleva algo que `main` no tiene, antes se archiva en una etique
 - `git branch -a`: `main` y `origin/main`. `git ls-remote origin`: `refs/heads/main` y las tres
   etiquetas `archivo/*` con su `^{}`.
 - La CI de `main` sobre esta versión se da a la sesión de OGR-Core con su número.
+
+## 6. Después de la versión: la sección «Development» del README (2026-11-21)
+
+Solo documentación: ni la versión ni una línea de código cambian. Sale de escribir la guía para
+montar la suite en un PC nuevo (`DESARROLLO.md`, en la carpeta de trabajo `OGR_Suite`) y de
+ensayarla.
+
+- `README.md`, «Development», y `README.es.md`, «Desarrollo», entre «Tests» y «Layout»: la
+  instalación para cambiar el programa (con el extra `[mcp]`, como la CI; «Installation» sigue
+  dando `pip install -e .`, que es la de quien solo lo usa), la misma receta en PowerShell, que
+  el entorno lleva siempre el núcleo de la etiqueta fijada, que la suite va con el Python del
+  entorno y sin pantalla, y dónde está la guía de la suite entera.
+
+Lo que se encontró:
+
+- **La suite sale igual en un entorno limpio y con las dependencias de hoy.** Ensayo del
+  2026-11-21 en una carpeta temporal: clon de GitHub (`45c5146`), `.venv` nuevo de Python 3.14.7,
+  `pip install -e ".[mcp]"`. Trae PySide6 6.12.0 (6.11.1 en el `.venv` de desarrollo), numpy
+  2.5.5, scipy 1.18.1, shapely 2.2.0, matplotlib 3.11.2, `mcp` 2.3.0 y typer 0.29.2 (0.27.1 en
+  el de desarrollo, anotado en la 0.1.476). Suite entera con `--jobs 4`, fuera de pantalla:
+  **7547 casos, 7545 pasan, 0 fallan, 2 saltados, sin fugas** ni tramos muertos, en 33,0 min;
+  `shared: ogr_core 0.2.2 … (installed, no git tree)`. Sin ninguna carpeta de fuera del
+  repositorio: ni `referencias` ni `historico`.
+- **El `.venv` de desarrollo no está limpio**: lleva paquetes que el programa no pide (`yt-dlp`,
+  `ipykernel`, `pyserial`…), los mismos que el Python del sistema, y dice `ogr-slip2d 0.1.475`.
+  No se toca aquí; al cambiar de PC se crea de cero.
+- **Uno de los dos saltados no es de la máquina.** `test_the_fifteen_sheets_give_what_they_gave`
+  (`tests/test_support_failure_v1161.py`) busca su modelo en
+  `C:/Samuel/OpenGeoRock_Slip2d/referencias/…`, la ruta de antes de `OGR_Suite`; al no
+  encontrarlo se salta con «the verification bank is not on this machine», también en el PC de
+  desarrollo, donde el modelo sí existe en `Slip2D/referencias/…`. Se salta, por tanto, en todas
+  partes desde la reorganización. **Anotado, no corregido**: es un test, y esta entrada no toca
+  código.
+- `docs/EMPEZAR_EN_VSCODE.md` y `.vscode/tasks.json` siguen diciendo `pip install -e .` y
+  `python tests/_runner.py` a secas (sin el extra y sin el `.venv`). No se tocan aquí.

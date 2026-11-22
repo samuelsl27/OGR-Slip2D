@@ -255,6 +255,52 @@ suite finishes, not a measurement.
 
 ---
 
+## Development
+
+To change the program, install it with the `[mcp]` extra: the tests of the MCP
+server need its SDK, and CI installs it too.
+
+```bash
+git clone https://github.com/samuelsl27/OGR-Slip2D.git
+cd OGR-Slip2D
+python -m venv .venv
+.venv/bin/python -m pip install -e ".[mcp]"
+QT_QPA_PLATFORM=offscreen .venv/bin/python tests/_runner.py --jobs 4
+```
+
+On Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python -m pip install -e ".[mcp]"
+$env:QT_QPA_PLATFORM = "offscreen"
+.venv\Scripts\python tests\_runner.py --jobs 4
+```
+
+- **Python 3.11 or newer** (CI runs 3.11, 3.12 and 3.13 on Linux) and **git**:
+  pip fetches `ogr-core` from the tag `pyproject.toml` pins. On Windows
+  nothing else is needed, Qt comes with PySide6; the system libraries Qt asks
+  for on Linux are listed in `.github/workflows/tests.yml`.
+- **The environment always has the core from the pinned tag**, never an
+  OGR-Core tree in editable mode. The runner names the core it measures
+  (`shared: ogr_core X.Y.Z …`) and refuses any other version. How the pin is
+  raised, and how to test against a core that is being changed, is in
+  [`AGENTS.md`](AGENTS.md).
+- **Always run the tests with the environment's Python and off screen.**
+  Without `QT_QPA_PLATFORM=offscreen` the suite opens its windows on the
+  desktop and the run is not valid.
+- Working in VS Code: [`docs/EMPEZAR_EN_VSCODE.md`](docs/EMPEZAR_EN_VSCODE.md)
+  (in Spanish). The rules a change must meet: [`AGENTS.md`](AGENTS.md) and
+  [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+To work on the whole suite (this program, OGR-Core and OGR FEM2D side by
+side, each in its own environment), this repository lives inside the
+`OGR_Suite` workspace, and `DESARROLLO.md` at the root of that workspace says
+what to install on a Windows machine and how to set it all up (in Spanish;
+from this folder it is `../../DESARROLLO.md`).
+
+---
+
 ## Layout
 
 | Package | Contents |
