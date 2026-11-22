@@ -14,10 +14,12 @@ claude mcp add ogr-slip2d -- ogr-slip2d-mcp --workdir "C:\ruta\a\mis\proyectos"
 
 Edita `%APPDATA%\Claude\claude_desktop_config.json` (Windows) o
 `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS).
-**La versión de la Microsoft Store** lo guarda en su propia carpeta:
-`%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude_desktop_config.json`.
-Comprobado el 2026-09-25: su configuración estaba allí, y lo que se añadió
-allí fue lo que cargó.
+**La versión de la Microsoft Store** lo lee de su propia carpeta:
+`%LOCALAPPDATA%\Claude-Data\claude_<id>\claude_desktop_config.json`.
+Comprobado en dos PC, el 2026-11-21 y el 2026-11-22. La carpeta que daba
+esta guía hasta entonces,
+`%LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\`, era la
+buena el 2026-09-25, y hoy está vacía: lo que se escribe allí no se carga.
 Si el comando no está en el `PATH` de la aplicación, pon la ruta completa de
 `ogr-slip2d-mcp.exe`:
 
