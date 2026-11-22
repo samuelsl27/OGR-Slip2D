@@ -10,7 +10,7 @@ instalable se llama `ogr-slip2d`. El núcleo compartido `ogr_core`
 (geometría, materiales, proyecto, DXF, informes, y la malla y la filtración
 que eran `ogr_fem2d`) **no vive aquí** desde v0.1.473 (spec 010): es el
 paquete `ogr-core`, del repositorio OGR-Core
-(`C:\Samuel\OGR_Suite\Core\OGR-Core`, `samuelsl27/OGR-Core`), y este
+(`../../Core/OGR-Core` en `OGR_Suite`, `samuelsl27/OGR-Core`), y este
 programa depende de él con la versión que fija `pyproject.toml`. Lo usa
 también OGR FEM2D, el segundo programa.
 

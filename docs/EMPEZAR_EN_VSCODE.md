@@ -57,18 +57,22 @@ Pylance, Claude Code y el corrector ortográfico español.
 cd ~/proyectos/OGR-Slip2D
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e .
+python -m pip install -e ".[mcp]"  # el extra lo piden los tests del servidor MCP
 ```
+
+A partir de aquí, `python` es **el del `.venv`** (`.venv\Scripts\python` en
+Windows): el del sistema no tiene el núcleo.
 
 Comprueba que funciona:
 
 ```bash
-QT_QPA_PLATFORM=offscreen python tests/_runner.py
+QT_QPA_PLATFORM=offscreen python tests/_runner.py --jobs 4
 ```
 
-Debe terminar con `Failed: 0`. Tarda entre 5 y 7½ minutos. En VSCode tienes
-la tarea **Tests: suite completa** (`Ctrl+Shift+P` → *Run Task*) que ya
-lleva la variable puesta.
+Debe terminar con `Failed: 0`. Lo que tarda depende de la máquina: la tabla
+«Coste de los tests» de `AGENTS.md` dice lo medido. En VSCode tienes
+la tarea **Tests: suite completa** (`Ctrl+Shift+P` → *Run Task*), que usa el
+Python del `.venv` y ya lleva la variable puesta.
 
 Mientras trabajas en un área concreta no hace falta pagar ese rato entero:
 

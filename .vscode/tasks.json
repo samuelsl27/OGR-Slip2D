@@ -4,7 +4,8 @@
     {
       "label": "Tests: suite completa",
       "type": "shell",
-      "command": "python tests/_runner.py",
+      "command": ".venv/bin/python tests/_runner.py --jobs 4",
+      "windows": { "command": ".venv\\Scripts\\python tests\\_runner.py --jobs 4" },
       "options": { "env": { "QT_QPA_PLATFORM": "offscreen" } },
       "group": { "kind": "test", "isDefault": true },
       "problemMatcher": []
@@ -12,7 +13,8 @@
     {
       "label": "Tests: selección",
       "type": "shell",
-      "command": "python tests/_runner.py ${input:patronDeTests}",
+      "command": ".venv/bin/python tests/_runner.py ${input:patronDeTests}",
+      "windows": { "command": ".venv\\Scripts\\python tests\\_runner.py ${input:patronDeTests}" },
       "options": { "env": { "QT_QPA_PLATFORM": "offscreen" } },
       "group": "test",
       "problemMatcher": []
@@ -20,7 +22,8 @@
     {
       "label": "Abrir OGR Slip2D",
       "type": "shell",
-      "command": "python -m ogr_gui",
+      "command": ".venv/bin/python -m ogr_gui",
+      "windows": { "command": ".venv\\Scripts\\python -m ogr_gui" },
       "problemMatcher": []
     }
   ],

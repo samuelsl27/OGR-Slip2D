@@ -357,10 +357,13 @@ class TestNothingMoved:
     tolerance was tight enough to see it.
     """
 
-    BANCO = Path(r"C:/Samuel/OpenGeoRock_Slip2d/referencias/Ejemplos"
-                 r"/RS2_Verification Manuals"
-                 r"/02_Slide2_Slope_Stability_Verification_Manual"
-                 r"/02_Slide2_Problema091")
+    # v0.1.480 — next to the repository (``<OGR_Suite>/Slip2D/referencias``)
+    # and not a written path: the one of before ``OGR_Suite`` made this case
+    # skip everywhere from the reorganisation to this version.
+    BANCO = (Path(__file__).resolve().parents[2] / "referencias"
+             / "Ejemplos" / "RS2_Verification Manuals"
+             / "02_Slide2_Slope_Stability_Verification_Manual"
+             / "02_Slide2_Problema091")
     CIRCULO = (4.658, 15.0, 10.934)
     #: Bishop was the CONTROL of v0.1.172 and did not move then; Spencer was
     #: 0.9641449174231770 until that version. See the class docstring.
