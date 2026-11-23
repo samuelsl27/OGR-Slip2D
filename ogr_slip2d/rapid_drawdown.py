@@ -295,8 +295,8 @@ class DrawdownStageUnconverged(DrawdownStageFailed):
     every slice (``_stage1_state``), and stage 2 builds its undrained
     strengths from it. Stages 2 and 3 are solved, not fixed, and since D112b
     the one that produced the factor carries its own ``converged`` into the
-    surface (a stage 2 that does not converge while the drained cap does is
-    D203, open). A pass that did not
+    surface; a stage 2 that does not converge only seeds the drained cap
+    and is not compared with it (D203, v0.1.484). A pass that did not
     converge is where its solver stopped -- the last iterate of an iteration
     that ran out of passes, or the sampled F of smallest residual of the
     prescribed-inclination family -- and not a state of the slope.
@@ -332,7 +332,10 @@ class DrawdownResult:
     fos: float
     method: str
     fos_stage1: float
-    fos_stage2: float
+    # v0.1.484 (D203) -- None when the stage-2 pass did not converge: it is
+    # then where its solver stopped, not a factor of stage 2, and the number
+    # it stopped at is ``stage2_unconverged_fos``.
+    fos_stage2: Optional[float]
     fos_stage3: Optional[float] = None
     n_undrained_slices: int = 0
     n_stage3_switched: int = 0
@@ -371,6 +374,11 @@ class DrawdownResult:
     # inadmissible. Kept whole for the reason the docstring gives: stage 1
     # conditions everything after it.
     stage1_result: object = None
+    # v0.1.484 (D203) -- whether the stage-2 pass converged, and the factor
+    # it stopped at when it did not (None when it did). An unconverged
+    # stage 2 only seeds the drained cap: it is never compared with stage 3.
+    stage2_converged: bool = True
+    stage2_unconverged_fos: Optional[float] = None
 
 
 # ----------------------------------------------------------------------
@@ -732,11 +740,37 @@ def rapid_drawdown_fos(
       state WAS solved, and the verdict is its method's, carried as an
       ordinary analysis carries it.
 
-    A stage 2 that does not converge while the drained cap does is left as
-    it was: what stages 2 and 3 do is D112b's, D194's and D200's, and the
-    census of D202 only measures it. It is defect D203, open: that pass
-    seeds the cap and enters the ``fos_stage3 < fos_stage2`` comparison, and
-    three search minima of the bank's problem 096 stand on one.
+    v0.1.484 (D203) -- a stage-2 pass that did NOT converge only SEEDS the
+    drained cap. Its factor is not a factor of stage 2 -- for the
+    prescribed-inclination family it is 5.0, the top of the F grid it
+    samples (``REASON_NO_FORCE_BRACKET``) -- so it is kept out of the
+    ``fos_stage3 < fos_stage2`` comparison, ``fos_stage2`` is None and the
+    number it stopped at is ``stage2_unconverged_fos``. The answer is then
+    the cap's own, with the verdict of the pass that produced it (D112b):
+    valid when a capped pass converged, invalid when the cap could not bite
+    (the answer would be the unconverged pass itself) or its passes did not
+    converge either. Two measurements on the bank's problems 095-098, the
+    owner's decision (2026-11-23) between invalidating the surface, this,
+    and keeping it with a note:
+
+    * The fixed point does not depend on the seed. On the critical circle
+      of problem 096 (Corps of Engineers #1 and #2, Lowe-Karafiath), the cap
+      seeded with the unconverged normals, with Bishop's converged ones,
+      with those of a stage 2 solved on an F grid extended to 20, and with
+      its own scaled by 0.8 and 1.2 lands within 9e-6 of itself, under
+      ``CAP_TOL``, in the same 16 passes.
+    * The comparison it skips could not have gone the other way. The root
+      of an unbracketed stage 2 lies outside the sampled range, and on the
+      bank it lies ABOVE it (1061 of 1149 such passes converge between 5.0
+      and 20 on the extended grid; 6.40, 6.41 and 6.19 on that circle), so
+      a capped pass that converged inside the range is below it.
+
+    Of 1193 unconverged stage-2 passes with a factor in the sixteen searches
+    of 095-098, none moved a minimum or a count of valid surfaces: the 530
+    valid ones keep their factor, and the 663 where the reserve "won" were
+    already invalid and stay so, on the verdict of their own capped pass.
+    Invalidating them instead would have raised three minima of 096 by 3.5
+    to 5.3 %, for factors the cap does solve.
     """
     from .slicer import slice_surface
 
@@ -817,13 +851,20 @@ def rapid_drawdown_fos(
     r2 = method.compute_fos(p2, surface, sl2u)
     if r2.fos is None:
         raise DrawdownStageFailed(2, r2)
+    # v0.1.484 (D203) -- an unconverged stage 2 is a seed, not a factor of
+    # stage 2: see the docstring. Without a cap to solve it, the answer is
+    # that pass and its own verdict makes the surface invalid (D112b).
+    stage2_converged = bool(r2.converged)
 
     res = DrawdownResult(
-        fos=r2.fos, method=procedure, fos_stage1=r1.fos, fos_stage2=r2.fos,
+        fos=r2.fos, method=procedure, fos_stage1=r1.fos,
+        fos_stage2=r2.fos if stage2_converged else None,
         n_undrained_slices=len(tau_by_index),
         final_result=r2,
         invariant_details=_invariant_details(r2),
         stage1_result=r1,
+        stage2_converged=stage2_converged,
+        stage2_unconverged_fos=None if stage2_converged else r2.fos,
     )
     if not drained_cap or not tau_by_index:
         return res
@@ -933,7 +974,12 @@ def rapid_drawdown_fos(
     # Every iterate is a convex combination of the undrained strength and
     # something no larger than it, so cur[i] <= tau_by_index[i] always —
     # which is what keeps FS_DWW <= FS_LoweKarafiath structural.
-    if res.fos_stage3 < res.fos_stage2:
+    if not stage2_converged:
+        # v0.1.484 (D203) -- nothing to compare with: the answer is the
+        # cap's, and ``final_result`` stays the pass (or the cycle) that
+        # produced it. When the cap never bit, that pass IS stage 2.
+        res.fos = res.fos_stage3
+    elif res.fos_stage3 < res.fos_stage2:
         res.fos = res.fos_stage3
     else:
         # Stage 2 wins, so stage 2's forces are the ones that go with the
@@ -1177,6 +1223,10 @@ class MultiStageDrawdownMethod:
                 # v0.1.212 (D202) -- the machine-readable half of the note
                 # above: ``admissibility_reason`` is for screens only.
                 "stage1_admissible": stage1_admissible,
+                # v0.1.484 (D203) -- ``fos_stage2`` is None when stage 2 did
+                # not converge; the number it stopped at is kept here.
+                "stage2_converged": res.stage2_converged,
+                "stage2_unconverged_fos": res.stage2_unconverged_fos,
                 "kh": kh,
                 "kv": kv,
             },

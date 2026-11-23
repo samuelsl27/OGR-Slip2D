@@ -86,6 +86,9 @@ _DRAWDOWN_KEYS = {"drawdown_procedure", "fos_stage1", "fos_stage2",
 # from ``_DRAWDOWN_KEYS`` so that the controls below keep asking only for
 # what v0.1.210 wrote.
 _WRAPPER_KEYS_SINCE_D202 = {"stage1_admissible"}
+# v0.1.484 (D203) -- the same kind of key, for stage 2: whether its pass
+# converged and the factor it stopped at if not (test_drawdown_stage2_v1484).
+_WRAPPER_KEYS_SINCE_D202 |= {"stage2_converged", "stage2_unconverged_fos"}
 # v0.1.214 (D173) -- ``kh`` joined ``kv``: the horizontal coefficient the
 # method applied, a scalar of the project the same in every pass and not a
 # per-slice key, published so that the interslice march of the
