@@ -312,6 +312,26 @@ def surface_score(result, objective: str = OBJECTIVE_FOS) -> float:
     return result.fos
 
 
+def criticality_key(result, score) -> tuple:
+    """The order in which surfaces compete to be the critical one: valid
+    before invalid, admissible before inadmissible (declared so by its
+    method or by the post-analysis checks), then lower
+    ``score(result)``. Lower key is more critical.
+
+    v0.1.485 (D374) -- one key for the three places that choose:
+    ``SearchResult.critical``, ``SearchResult.top_n`` and the choice among
+    the disjoint masses and weak-layer cases of one surface
+    (``BaseSearch._best_of_masses``). The last one ranked by score alone,
+    so a circle reported its lowest mass even when it was inadmissible
+    and another mass of the same circle was admissible: the surface the
+    search would have preferred was hidden inside the evaluation. Measured
+    on the bank (03-07 and the 02, 175 models): 34 such choices, all in
+    problem 059 with Spencer, none of which moves a critical surface.
+    """
+    return (not result.is_valid, not getattr(result, "admissible", True),
+            score(result))
+
+
 @dataclass
 class SearchResult:
     """Aggregate result of a surface-search run."""
@@ -475,9 +495,9 @@ class SearchResult:
         valid = [r for r in self.all_evaluations() if r.is_valid]
         if not valid:
             return None
-        ok = [r for r in valid if getattr(r, "admissible", True)]
-        pool = ok or valid
-        best = min(pool, key=self.score)
+        # The admissible ones first, and all of them if none is: the same
+        # key as ``top_n`` and the choice among masses (D374).
+        best = min(valid, key=lambda r: criticality_key(r, self.score))
         if self.objective != OBJECTIVE_FOS and math.isinf(self.score(best)):
             # Nothing has an answer under the active objective — every
             # surface failed to yield a Ky, say. Falling back to the factor
@@ -547,9 +567,8 @@ class SearchResult:
         ``results_query(rank=1)`` answered it. ``sorted`` is stable and
         ``min`` returns the first of equals, so a tie is broken the same way
         in both."""
-        def key(r):
-            return (not getattr(r, "admissible", True), self.score(r))
-        return sorted(self.valid(), key=key)[:n]
+        return sorted(self.valid(),
+                      key=lambda r: criticality_key(r, self.score))[:n]
 
 
 def all_evaluations_of(result) -> list:
@@ -1620,13 +1639,15 @@ class BaseSearch(ABC):
         return not _accepts_circle(self.focus_objects, cx, cy, r)
 
     def _best_of_masses(self, project: Project, candidates) -> Optional[LEMResult]:
-        """The lowest-factor mass among several DISJOINT candidates.
+        """The most critical mass among several DISJOINT candidates.
 
         A surface that crosses the ground more than twice does not define
         one failure mechanism but several separate ones, and the critical
         mechanism is the one with the lowest factor of safety. Choosing
         among them therefore belongs to the engine and not to the caller,
-        who has no way of knowing there was more than one.
+        who has no way of knowing there was more than one. v0.1.485 (D374):
+        "most critical" is ``critical``'s order (``criticality_key``), so an
+        admissible mass beats a lower inadmissible one.
 
         Shared by the two public doors — :meth:`evaluate_circle` and
         :meth:`evaluate_surface` — precisely so they cannot drift apart
@@ -1814,8 +1835,11 @@ class BaseSearch(ABC):
                     continue
                 if best is None:
                     best = res
-                elif res.is_valid and (not best.is_valid
-                                       or self.score(res) < self.score(best)):
+                elif res.is_valid and (criticality_key(res, self.score)
+                                       < criticality_key(best, self.score)):
+                    # v0.1.485 (D374) -- ``critical``'s order: an admissible
+                    # mass beats a lower inadmissible one. An invalid
+                    # one still never replaces what is there.
                     best = res
         if best is None and steep_refused:
             # v0.1.446 (D403) — said until now only in the run's note, so

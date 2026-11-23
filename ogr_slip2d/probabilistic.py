@@ -389,7 +389,8 @@ def _cannot_reevaluate(project, surface_dict) -> Optional[str]:
     deterministic mechanism: with Composite Surfaces on in both runs, a
     sample whose strength falls far enough answers for a DIFFERENT sliding
     mass of the same circle, because ``_best_of_masses`` keeps the lowest
-    factor and v0.1.131 (D36) dropped the endpoints on purpose. Measured
+    factor (the lowest admissible one since v0.1.485, D374) and v0.1.131
+    (D36) dropped the endpoints on purpose. Measured
     on a two-mass model, a probability of failure of 0.25 was made up
     entirely of samples belonging to the other mass. That is a defect of
     its own and it is reported, not covered here — a guard whose stated
@@ -867,7 +868,8 @@ class _MassSwitches:
 
     v0.1.238 (D89). D36 (v0.1.131) seeds every sample with the circle and
     no endpoints on purpose, so that each sample resolves its own mass, and
-    ``_best_of_masses`` keeps the lower factor — which is right. What was
+    ``_best_of_masses`` keeps the lower factor (the admissible one first
+    since v0.1.485, D374) — which is right. What was
     missing is saying so: on a circle with two masses, a sampled parameter
     that crosses the point where the critical mass changes makes those
     samples answer for the other one, and measured on the notched slope of
@@ -986,7 +988,8 @@ class _CaseSwitches:
 
     v0.1.251 (D85). With automatic case generation one mass becomes one
     surface per subset of the layers it touches, the bare mass included,
-    and ``_best_of_masses`` keeps the lowest factor — which is right: a
+    and ``_best_of_masses`` keeps the lowest factor (admissible first since
+    v0.1.485, D374) — which is right: a
     sample whose joint is strong enough answers for the surface shearing
     through the blocks, and that IS its critical mechanism. What was
     missing is saying so, D89's argument word for word: measured on two
