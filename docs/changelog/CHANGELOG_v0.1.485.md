@@ -177,3 +177,39 @@ punto fijo: margen −0,1195 en la pasada 48 y +0,4198 en la 1218. Con 0.1.485 s
   - instantánea `Evaluaciones/0.1.485` con `--forzar`.
 
   El banco está fuera de git: aquí solo la nota.
+
+## 7. D201 cerrada en el banco, sin versión, y nace D465 (2026-11-23)
+
+D201 nació en 0.1.210, al cerrar D172. En el círculo de Ej_2 piezométrico, la σ' propia de tres
+métodos se separaba de las columnas publicadas: 4,86 kPa en Spencer, 1,26 en GLE y 4,29 en
+Lowe-Karafiath, sin causa conocida. Con 0.1.485, Spencer y GLE dan lo mismo y Lowe-Karafiath da
+3,23. Medido con `_tools/hueco_sigma_d201.py` del 02 (`_auditoria/D201_hueco_sigma/`). Antes hubo
+que corregir la guarda de `censo_sigma_propia_d172.py`, que todavía exigía `ogr_core` dentro del
+árbol (la spec 010 lo sacó).
+
+- **La referencia para en tolerancia 0,005 y 50 iteraciones**, según su propio informe, y el
+  fixture del test de Ej_2 usa lo mismo. Ninguno de los tres huecos es del motor:
+  - **GLE es el λ donde paró la referencia.** Con el λ que publica (tan 36,2° = 0,7317), la rama
+    de fuerzas de OGR da su factor a 4e-5 (0,680367 frente a 0,680394) y el hueco baja de 1,26 a
+    0,26 kPa. OGR converge a λ = 0,7549, y su F queda a +0,39 % del publicado.
+  - **En Spencer, el 4,86 es la parada en la dovela 25.** Entre 0,005 y el cálculo convergido, su
+    σ' se mueve 5,40 kPa. La de la tabla publicada no cierra su propio equilibrio vertical por
+    4,58 kPa. Convergido, el hueco es de 0,89 kPa y el factor está a −0,25 % del publicado (a
+    0,005 estaba a +0,20 %; la ficha decía +0,10).
+  - **Lowe-Karafiath bajó de 4,29 a 3,23 con D222** (0.1.223, `THETA_AT_BOUNDARY`; con el
+    interruptor apagado sale otra vez 4,288). Hoy la inclinación de cada contacto coincide con la
+    publicada a 0,033° o menos del 2 al 21. Se separa en los contactos 23-25, junto a la
+    coronación (1,75° en el 24), y ahí vive el hueco. En esas dovelas la tabla publicada no cierra
+    su equilibrio vertical por hasta 13 kPa.
+- **Los márgenes.** El −120 de GLE y de Lowe-Karafiath pasa tanto a 0,005 como convergido, y las
+  columnas publicadas también son positivas en las dovelas que se prueban (mínimos de 1,14 y
+  0,12 kPa). El veredicto no depende del residuo.
+- **Decisión de la propietaria:** CIERRE DOCUMENTAL, y la inclinación de Lowe-Karafiath en los
+  contactos de la coronación sigue como **D465**, en P2, al final y sin versión. Sin cambio de
+  código; los factores validados de Ej_2 y su fixture no se tocan.
+- **`d201()`** en el `verificar_cierres.py` del 02, **CIERRE DOCUMENTAL**. Mide en vivo GLE al λ
+  publicado, Spencer convergido, Lowe-Karafiath con su θ y el −120. Hecho el ciclo de cierre:
+  - instantánea `Evaluaciones/0.1.485` del 02, y la de la raíz con `--forzar`;
+  - retirada la ficha, abierta D465 y actualizada la cadena de P2 y `PAQUETES`;
+  - prompts regenerados (D465 sale como FALTA: el generador no redacta);
+  - `auditoria_invariantes.py` con 0 ERROR en la raíz y en el 02.
