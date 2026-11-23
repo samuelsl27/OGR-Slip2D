@@ -139,3 +139,41 @@ de la raíz del banco, `_auditoria/D464_rejilla_f/`).
   Corps 1 (Bishop, 1,7686) y que las medidas archivadas dicen lo citado. Hecho el ciclo de cierre:
   instantánea `Evaluaciones/0.1.485` de la raíz con `--forzar`, y `auditoria_invariantes.py` con
   0 ERROR. El banco está fuera de git: aquí solo la nota.
+
+## 6. D193 cerrada en el banco, sin versión (2026-11-23)
+
+D193 nació en 0.1.209, al cerrar D158. La exención plana de D152 acepta la rama de FUERZAS sobre un
+plano sin esperar al empuje, porque ahí el factor no depende de él (Krahn 2003; EM 1110-2-1902,
+SC-7a). Pero la admisibilidad (`thrust_is_admissible`, el signo de ΣE interior) se lee sobre el
+empuje de esa pasada. En la cuña de `test_stall_pair_v1209` lo lee con el signo contrario al de su
+punto fijo: margen −0,1195 en la pasada 48 y +0,4198 en la 1218. Con 0.1.485 se reproduce bit a bit.
+
+- **El censo** (`_tools/exencion_plana_d193.py` de la raíz del banco,
+  `_auditoria/D193_exencion_plana/`). Se corrieron enteras 54 tareas: todas las de búsqueda no
+  circular de los manuales 02, 03, 06 y 07, el barrido de planos del 047 (el de `correr_47.py`, que
+  es quien escribe su `resultados.json`), la cuña como control positivo y dos controles circulares,
+  que dan 0 ramas planas. No se corrieron 156: 129 circulares, donde α cambia de dovela a dovela, y
+  27 sin Spencer ni GLE.
+  - de 8,8 millones de ramas, la exención dispara en **2500**, en el 047 y en tres búsquedas de
+    trayectoria (078_3a, 085 activo y 085 pasivo);
+  - **23** cambian de veredicto al asentar el empuje: 12 en el 047 y 11 en el 085, en los dos
+    sentidos;
+  - **355** no se asientan en 20 000 pasadas.
+- **El A/B** (el prototipo de la opción (b), sin tocar el motor: la rama aceptada conserva su factor
+  y lleva el empuje asentado):
+  - en las tres búsquedas, los `datos` de `ejecutar_caso` salen idénticos clave a clave;
+  - en el 047 no se mueve ningún factor, veredicto, mínimo ni crítica. Solo cambian los márgenes
+    de 70 planos que ya eran inadmisibles;
+  - la crítica inadmisible del 047 no es este mecanismo: sus 86 planos válidos salen por la reserva
+    e inadmisibles, con la exención y sin ella.
+- **Decisión de la propietaria: la (a).** Se declara con su denominador y el criterio pasa de «cero
+  fuera de la cuña» a «cero en lo publicado». Sin cambio de código.
+- **`d193()`** en el `verificar_cierres.py` de la raíz, **CIERRE DOCUMENTAL**. Comprueba en vivo
+  que la cuña sigue dando el veredicto contrario a su punto fijo con el mismo factor, y que el censo
+  archivado dice lo citado. Hecho el ciclo de cierre:
+  - retirada la ficha, podado `PAQUETES` y tachada la cadena de P2;
+  - prompts regenerados;
+  - `auditoria_invariantes.py` con 0 ERROR en la raíz y en el 02;
+  - instantánea `Evaluaciones/0.1.485` con `--forzar`.
+
+  El banco está fuera de git: aquí solo la nota.
