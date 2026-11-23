@@ -1473,9 +1473,9 @@ class CanvasView(QGraphicsView):
         """The picked vertex as a dot and, with ``cursor``, the face it would
         get, dashed, up to where the method cuts it (``vertex_face``).
 
-        Two PATH items, as every line of this canvas since D395 (a line or
-        rect item's ``setPen`` loses a reference to None on Python 3.11
-        with PySide6 6.12.0), made with their pens when the vertex is
+        Two PATH items (fewer items, fewer setter calls; D395 is excluded
+        in ``pyproject.toml`` since v0.1.483, a path item does not avoid
+        it), made with their pens when the vertex is
         picked or the scene redrawn; a move of the pointer only gives the
         ray its new path (the review of v0.1.469: the dot was made again,
         with its pen, on every move), on the ground the pick read once
@@ -3588,7 +3588,8 @@ class CanvasView(QGraphicsView):
                          context=None) -> None:
         """v0.1.465 (D357) -- the face angles given at the vertices of a
         user's polyline, as dotted rays of ``length`` from each vertex up
-        into the mass, all in ONE path item (one pen per surface, D395).
+        into the mass, all in ONE path item (one pen per surface; D395 is
+        handled in ``pyproject.toml``, not by the kind of item).
 
         v0.1.469 (the owner's decision) -- each ray reaches where the face
         leaves the ground, by the method's own rule (``vertex_face``): what
@@ -3669,14 +3670,15 @@ class CanvasView(QGraphicsView):
         # v0.1.427 (D357) -- the polylines, dashed in the same colour, as they
         # were given: their ends are put on the External Boundary when they
         # are analysed, not here, for the reason the circles are drawn whole.
-        # One path item per surface, not one line item per segment. D395
-        # measured, on Python 3.11 with PySide6 6.12.0, one reference to None
-        # lost per ``setPen`` of a line or rect item and none for a path
-        # item (the bench's ficha; the probe is ``tests/_d370_none.py`` at
-        # commit 739885e, deleted by 7d88eb1, of what was the branch
-        # dev/d370-shutdown and is now the tag archivo/dev-d370-shutdown,
-        # v0.1.477). v0.1.427 wrote here that the path item had not been
-        # measured, which was false; corrected in v0.1.428.
+        # One path item per surface, not one line item per segment. That
+        # does NOT avoid D395: v0.1.428 wrote here that a path item's
+        # ``setPen`` loses nothing on Python 3.11 with PySide6 6.12.0, but
+        # the probe of 739885e had aborted after its first two candidates on
+        # 3.11 and never measured it. Each candidate in its own process
+        # (v0.1.483, run 45127694244, tag archivo/dev-d395-medida): on Linux
+        # nearly every QGraphicsItem setter loses one, the path item's too.
+        # What protects the user is the exclusion of 6.12.0 below 3.12 in
+        # ``pyproject.toml`` (tests/test_pyside_none_refcount_v1483.py).
         # A stored polyline that is not a surface (a hand-edited file) is
         # drawn as given, so the user sees what the run refuses; one with
         # fewer than two points, or a coordinate that is not a finite

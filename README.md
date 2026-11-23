@@ -281,6 +281,11 @@ $env:QT_QPA_PLATFORM = "offscreen"
   pip fetches `ogr-core` from the tag `pyproject.toml` pins. On Windows
   nothing else is needed, Qt comes with PySide6; the system libraries Qt asks
   for on Linux are listed in `.github/workflows/tests.yml`.
+- **On Python 3.11, any PySide6 but 6.12.0** (`pyproject.toml` excludes it
+  there): on Linux its bindings take references from `None`, which 3.11 does
+  not make immortal yet, and the program aborts with `none_dealloc` after a
+  few dozen redraws of a computed model (D395, v0.1.483). An environment
+  that already has it: `pip install "PySide6!=6.12.0"`.
 - **The environment always has the core from the pinned tag**, never an
   OGR-Core tree in editable mode. The runner names the core it measures
   (`shared: ogr_core X.Y.Z …`) and refuses any other version. How the pin is

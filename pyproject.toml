@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ogr-slip2d"
-version = "0.1.482"
+version = "0.1.483"
 description = "OGR Slip2D — open-source slope stability and groundwater analysis (OpenGeoRock Suite)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -38,7 +38,16 @@ dependencies = [
     "ezdxf>=1.1",
     "h5py>=3.10",
     "matplotlib>=3.8",
-    "PySide6>=6.6",
+    # v0.1.483 (D395) -- not 6.12.0 on Python 3.11. On Linux its bindings
+    # take one reference from None on nearly every QGraphicsItem setter
+    # (setPen, setBrush, setPos, setZValue, setVisible, setLine...), and
+    # on 3.11 None is not immortal yet (PEP 683 is 3.12): the program
+    # aborts with "none_dealloc" after ~880 redraws of the demo, ~47 once
+    # it is computed. 6.11.3 and 6.10.3 lose nothing there, and on Windows
+    # none of the three does (run 45127694244, tag archivo/dev-d395-medida).
+    # macOS was not measured, so the exclusion is for every platform.
+    "PySide6>=6.6,!=6.12.0; python_version < '3.12'",
+    "PySide6>=6.6; python_version >= '3.12'",
     "qtawesome>=1.3",
     "typer>=0.9",
     "rich>=13.7",
