@@ -59,16 +59,26 @@ def _write_pickle(path: Path, data) -> None:
 def _write_progress(folder: Path, done: int, total: int) -> bool:
     """Report progress; False when this update had to be skipped.
 
-    Progress is advisory: an update that cannot be written (the parent
-    holding the file open for its poll) is dropped, never retried and never
-    raised — it used to propagate out of the progress callback and kill
-    the whole analysis (v0.1.198).
+    Progress is advisory: an intermediate update that cannot be written
+    (the parent holding the file open for its poll) is dropped, never
+    retried and never raised — it used to propagate out of the progress
+    callback and kill the whole analysis (v0.1.198).
+
+    The final update (``done >= total``) waits for the reader like the
+    status file does, and is still dropped without raising if the reader
+    never lets go (v0.1.482, D371).
     """
+    # v0.1.482 (D371) — with one try, a final update that met the parent's
+    # poll was lost for good: the job ended with its folder saying it was
+    # half way. Only the final one waits (up to _REPLACE_TRIES ×
+    # _REPLACE_WAIT_S, and only while the file is held); the intermediate
+    # ones keep the single try, so progress never slows the analysis.
+    tries = _REPLACE_TRIES if done >= total else 1
     try:
         _write_json(folder / "progress.json",
                     {"done": int(done), "total": int(total),
                      "fraction": (float(done) / total) if total else None},
-                    tries=1)
+                    tries=tries)
         return True
     except OSError:
         return False
