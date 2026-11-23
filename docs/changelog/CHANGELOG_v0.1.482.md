@@ -80,7 +80,18 @@ tenía `REPO_OGR = c:/Samuel/OGR_Suite/Slip2D/OGR-Slip2D`, y `generar_prompts.py
 que aquí no existen. El motor llegaba igual, por la instalación editable del `.venv`, pero
 `_tests_con` no encontraba ningún test: le pasaba a toda comprobación que lea archivos del
 repositorio. Por decisión de la propietaria (2026-11-23), las tres de la raíz deducen ahora el
-repositorio de su propia ruta, como `_auditoria/COMPUTO/bench/comun.py` (v0.1.480). Las
-herramientas sueltas de `02_…/_tools` siguen con rutas viejas, sin tocar; las de `Evaluaciones/`
-son instantáneas congeladas. Las rutas escritas en prosa dentro de los prompts largos tampoco se
-han tocado.
+repositorio de su propia ruta, como `_auditoria/COMPUTO/bench/comun.py` (v0.1.480).
+
+Después del commit de la versión, también por decisión de la propietaria: las 33 herramientas
+de `02_…/_tools` que escribían `c:/Samuel/OGR_Suite/Slip2D/OGR-Slip2D` (entre ellas
+`ruta_motor.py`, el sitio que el resto importa desde D187) la deducen igual, con
+`Path(__file__).resolve().parents[5] / "OGR-Slip2D"`. Las 37 compilan; `ruta_motor.REPO_MOTOR`
+resuelve a este repositorio, y `verificar_cierres.py D187` del 02 sigue en CUBIERTO POR CODIGO.
+No se han tocado `Evaluaciones/` (instantáneas congeladas), los scripts de investigación de
+`_auditoria/` (registros de lo que se midió entonces) ni las rutas escritas en prosa dentro de
+los prompts largos.
+
+Una consecuencia que conviene saber: `banco.py` mete `REPO_OGR` delante de `sys.path` si la
+cadena no está ya. Con la ruta vieja eso no hacía nada; ahora mete el árbol vivo, como hacía en
+el PC anterior. En un A/B contra un worktree, el árbol viejo hay que ponerlo después de importar
+el banco (como dice la memoria del buscador editable), igual que antes.
