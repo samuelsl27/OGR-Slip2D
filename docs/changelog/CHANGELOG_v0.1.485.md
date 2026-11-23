@@ -213,3 +213,51 @@ que corregir la guarda de `censo_sigma_propia_d172.py`, que todavía exigía `og
   - retirada la ficha, abierta D465 y actualizada la cadena de P2 y `PAQUETES`;
   - prompts regenerados (D465 sale como FALTA: el generador no redacta);
   - `auditoria_invariantes.py` con 0 ERROR en la raíz y en el 02.
+
+## 8. Los prompts largos que faltaban, y D234 cerrada sin versión (2026-11-24)
+
+`PROMPTS_RESOLUCION.md` sacaba 48 de sus 55 prompts como «FALTA EL PROMPT LARGO». Antes de
+escribir cada uno se volvió a medir su ficha en 0.1.485: una sonda con el motor o la herramienta
+del banco que le toca. 47 siguen vivas y tienen ya su largo, con la medida de hoy y un `dNNN()` de
+cierre que hoy falla. Varias fichas cambian al medirlas otra vez, y el prompt lo cuenta:
+
+- **Persisten solo en parte:**
+  - D138: la dispersión por semilla del 85 pasivo es hoy del 1,8 %, no del 9,5 %. Lo que sigue
+    vivo es que la comparativa publica los mínimos de las búsquedas aleatorias sin su dispersión.
+  - D441: la ayuda de la referencia sí barre una variable sin distribución. Lo que sigue vivo es
+    la variable sin rango, que desaparece sin nota.
+  - D448: el efecto es de +4,75 % a +8,13 %, no de +14 a +25 %, y no mueve nada publicado.
+- **Mecanismos que la ficha no conocía:**
+  - D254: la rama de momentos se acepta lejos de su punto fijo con la tolerancia 0,005; las dos
+    hipótesis de la ficha no se sostienen.
+  - D461: el salto sale de `_face_factor`, en la cara que separa cuñas con coeficientes distintos.
+  - D449: un vértice a menos de `weld_tol` gana a un segmento que está a distancia cero, y por eso
+    el resultado depende del orden en que se añaden los contactos.
+  - D434: los 231 círculos son la columna de centros x = 120, no una fila.
+- **El arreglo va a OGR-Core:** D235, D249, D431, D445, D455, el rótulo de D454 y parte de D429.
+
+**D234 ya no pasaba.** Nació en 0.1.231: el recolector cíclico corre en el `QThread` del cálculo y
+destruiría allí objetos Qt en ciclo. La resolvió `ogr_gui/gc_guard.py` (D310, 0.1.302) sin
+nombrarla. El guardián retiene lo que encuentra *cualquier* recolección que empiece fuera del hilo
+principal, no solo las de los hilos de un pool, y lo suelta `release()`, que la ventana llama
+desde un `QTimer`.
+
+Se re-midió en un `QThread` de verdad con `_tools/sonda_gc_qthread_d234.py` del 02:
+
+- con el guardián, el diálogo en ciclo no se destruye en la recolección del hilo, queda retenido
+  y se destruye tras `release()`;
+- sin él (el control), se destruye en la recolección del hilo.
+
+Decisión de la propietaria (2026-11-24): cerrarla. La comprobación es `d234()`, en el
+`verificar_cierres.py` del 02. Mide en vivo, en un subproceso, y su veredicto es **CUBIERTO POR
+TEST**: `tests/test_gc_guard_v1302.py`, que usa `threading.Thread`, más esta medida para el
+`QThread`.
+
+Ciclo de cierre hecho:
+
+- retirada la ficha y tachada en la cadena de P1;
+- podado `PAQUETES` y regenerados los prompts: 54 prompts, 54 largos y 0 FALTA;
+- `auditoria_invariantes.py` a 0 ERROR en la raíz y en el 02;
+- instantáneas `Evaluaciones/0.1.485` de los dos bancos con `--forzar`.
+
+Sin cambio de código.
