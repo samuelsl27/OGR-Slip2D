@@ -108,3 +108,34 @@ Vecinos: `python tests/_runner.py search admissib m_alpha disjoint mass`, 296 de
   - la instantánea, de nuevo con `--forzar`.
 - Los `resultados*.json` del 059 no se recalculan: no se mueve ninguna fila. En una corrida nueva,
   Spencer contaría 0 inadmisibles en lugar de 34.
+
+## 5. D464 cerrada en el banco, sin versión (2026-11-23)
+
+D464 nació en 0.1.484, de la sonda de D203. La rejilla de F de Corps 1, Corps 2 y Lowe-Karafiath
+termina en 5,0 sin extensión perezosa, y una raíz por encima sale como `no_force_bracket`. Se midió
+con 0.1.485 antes de tocar nada (`_tools/censo_rejilla_f_d464.py` y `_tools/plausibilidad_d464.py`
+de la raíz del banco, `_auditoria/D464_rejilla_f/`).
+
+- **El censo.** Con la rejilla extendida hasta 100 (solo cuando la de hoy no encuentra horquilla),
+  en los 14 modelos del banco con la familia:
+  - 38 551 superficies válidas más;
+  - **ningún mínimo movido;**
+  - **ningún círculo publicado movido.**
+- **Las raíces nuevas no siempre son plausibles.** Comparadas con Spencer (1967) sobre las mismas
+  dovelas:
+  - en los modelos ordinarios (027, 051, 056) coinciden, con razón mediana 1,00, pero valen más de 5
+    y no deciden nada;
+  - en el talud sumergido del Apéndice G a embalse lleno son espurias: 123 círculos, mediana 3,0
+    veces el factor de Spencer y hasta 9 veces; en 102 de ellos Spencer queda por debajo de 5, y el
+    método las declara admisibles;
+  - el testigo de D202 daría F1 = 9,77, donde Bishop y Spencer dan 1,85;
+  - en el 096, el mínimo de Corps 1 bajaría a 1,3881 en (69; 124,67; 98,75), donde Bishop y Spencer
+    dan 1,769: del lado inseguro.
+- **Decisión de la propietaria: no extender.** La reserva 5,0 sin convergir es la respuesta
+  honesta: la superficie sale inválida y dice por qué. Los testigos de D202 y D203 siguen valiendo.
+  Sin cambio de código.
+- **`d464()`** en el `verificar_cierres.py` de la raíz, **CIERRE DOCUMENTAL**. Comprueba que la
+  rejilla sigue terminando en 5,0 sin extensión, que en vivo ese círculo del 096 sigue inválido con
+  Corps 1 (Bishop, 1,7686) y que las medidas archivadas dicen lo citado. Hecho el ciclo de cierre:
+  instantánea `Evaluaciones/0.1.485` de la raíz con `--forzar`, y `auditoria_invariantes.py` con
+  0 ERROR. El banco está fuera de git: aquí solo la nota.
