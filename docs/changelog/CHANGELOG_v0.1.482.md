@@ -95,3 +95,27 @@ Una consecuencia que conviene saber: `banco.py` mete `REPO_OGR` delante de `sys.
 cadena no está ya. Con la ruta vieja eso no hacía nada; ahora mete el árbol vivo, como hacía en
 el PC anterior. En un A/B contra un worktree, el árbol viejo hay que ponerlo después de importar
 el banco (como dice la memoria del buscador editable), igual que antes.
+
+## 6. Fuera de git: D378 cerrada en el banco, sin versión
+
+La ficha D378 seguía abierta: la CI de 0.1.377 salía roja solo por `[LEAK] locale` en el primer
+archivo que crea una `QApplication` en Linux. Pero su criterio ya se cumplía, y desde dos versiones
+que no la nombraban. La entrada `locale` de la lista de fugas de la suite (regla
+`ADOPTED_WITH_THE_FIRST_APPLICATION`) llegó con ogr-core 0.2.1, que este programa fija desde 0.1.474.
+Esa versión ya confirmó la regla en la CI de Linux (run 44696129877, sin fugas en 3.11, 3.12 y 3.13).
+La CI está verde en los tres desde 0.1.476 (run 44805603906), y lo sigue estando en la última
+corrida terminada (45051126384, `99e40f9`). El test del detector es del núcleo y vive allí:
+`TestTheLocaleQtAdopts`, en `tests/test_leaks_v020.py` de OGR-Core. Aquí no hace falta otro.
+
+`d378()`, en el `verificar_cierres.py` de la raíz del banco, da **CUBIERTO POR TEST** (2026-11-23).
+Hace tres comprobaciones:
+
+- **En vivo.** En un intérprete nuevo, con la lista que usa de verdad esta suite (la del núcleo
+  más la de `tests/_runner.py`), adopta el locale del entorno. Con la aplicación creada en ese
+  archivo no hay fuga. Sin ella sí hay, y con otro locale también: un archivo que cambia el locale
+  por su cuenta sigue fallando.
+- **En los changelogs.** Busca las dos corridas en los de 0.1.474 y 0.1.476.
+- **En el núcleo.** Comprueba que la clase del test existe en la etiqueta que fija `pyproject.toml`.
+
+Contra un worktree de OGR-Core en `v0.2.0` da SIGUE ABIERTO, y también si la clase del test no
+existe. Ningún archivo de código ni de tests cambia, y ningún número se mueve.
