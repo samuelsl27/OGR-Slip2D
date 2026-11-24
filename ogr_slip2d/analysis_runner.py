@@ -215,6 +215,28 @@ def check_analysis_settings(project) -> list[str]:
     if why:
         problems.append(why)
 
+    # v0.1.491 (D429) -- a search or a sampling method this build does not
+    # know (a file of a newer version, or edited by hand). ``build_search``
+    # ran any of them as a Grid Search and the probabilistic analysis as
+    # Monte Carlo: another number, said nowhere. The lists are the core's
+    # enumerations, not a copy. The sampling method is asked only when the
+    # probabilistic analysis is on, which is the one run that reads it.
+    from ogr_core.project.settings import SearchMethod
+    _search = project.settings.search.search_method
+    _known = [m.value for m in SearchMethod]
+    if _search not in _known:
+        problems.append(SM.setting_note(
+            SM.SEARCH_UNKNOWN, method=format(_search, ""),
+            available=", ".join(_known)))
+    _st = project.settings.statistics
+    if getattr(_st, "probabilistic_analysis", False):
+        from ogr_core.statistics import SamplingMethod
+        _known = [m.value for m in SamplingMethod]
+        if _st.sampling_method not in _known:
+            problems.append(SM.setting_note(
+                SM.SAMPLING_UNKNOWN, method=format(_st.sampling_method, ""),
+                available=", ".join(_known)))
+
     # v0.1.202 — a grid built with a type (``value_type=``) that the
     # groundwater method contradicts: the method decides how the values
     # are read, and reading them one way while the caller meant the other
@@ -596,7 +618,8 @@ def _run_returns_circles(s_search) -> bool:
     try:
         SearchMethod(s_search.search_method)
     except (KeyError, ValueError):
-        return True            # an unknown id is the default Grid Search's
+        # an unknown id: refused by ``check_analysis_settings`` (D429)
+        return True
     if is_auto_refine_non_circular(s_search):
         return False
     return s_search.search_method not in _POLYLINE_ONLY_SEARCHES
@@ -1101,7 +1124,7 @@ def _surface_type_notes(s_search) -> list[str]:
     try:
         method = SearchMethod(s_search.search_method)
     except (KeyError, ValueError):
-        return []          # an unknown id is the default Grid Search's
+        return []  # an unknown id: refused by check_analysis_settings (D429)
     if method in s_search.methods_for_surface_type():
         return []
     return [_note(N.SURFACE_TYPE_MISMATCH,
@@ -2236,7 +2259,15 @@ def build_search(project, method_id: str, progress_cb: Optional[Callable] = None
             **common,
         )
 
-    # Default = Grid Search.
+    if search_method != "grid":
+        # v0.1.491 (D429) -- this was "Default = Grid Search": any other
+        # value, a misspelt one or one of a newer version, ran as a Grid
+        # Search without a word. ``check_analysis_settings`` refuses it
+        # with its code; a caller that did not ask it is refused here.
+        from ogr_core.project.settings import SearchMethod
+        raise ValueError(SM.setting_note(
+            SM.SEARCH_UNKNOWN, method=format(search_method, ""),
+            available=", ".join(m.value for m in SearchMethod)))
     from .search import GridSearch
     return GridSearch(
         grid_x=_grid_range(s_search.grid_x_min, s_search.grid_x_max),
@@ -2939,10 +2970,10 @@ def run_configured_statistics(project, method_ids=None, *,
     def prepare(clone):
         return prepare_analysis_project(clone)[0]
 
-    try:
-        sampling = SamplingMethod(st.sampling_method)
-    except ValueError:
-        sampling = SamplingMethod.MONTE_CARLO
+    # v0.1.491 (D429) -- an unknown one was run as Monte Carlo; it is
+    # refused above (``check_analysis_settings``), so this cannot fail
+    sampling = (SamplingMethod(st.sampling_method)
+                if st.probabilistic_analysis else SamplingMethod.MONTE_CARLO)
     seed = project.settings.analysis_seed()
     num_slices = project.settings.methods.num_slices
     if st.probabilistic_analysis:

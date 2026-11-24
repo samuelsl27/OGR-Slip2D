@@ -1008,6 +1008,16 @@ def optimize_technique_label(value) -> str:
     return _of(OPTIMIZE_TECHNIQUE, getattr(value, "value", value))
 
 
+#: v0.1.491 (D429) -- the sampling methods of the probabilistic analysis, as
+#: the Statistics page names them, by the stored value.
+SAMPLING_METHOD = {"monte_carlo": "Monte Carlo",
+                   "latin_hypercube": "Latin Hypercube"}
+
+
+def sampling_method_label(value) -> str:
+    return _of(SAMPLING_METHOD, getattr(value, "value", value))
+
+
 # ----------------------------------------------------------------------
 # v0.1.434 (D412) -- the identifiers the core's messages and the undo step
 # names carry, as the user reads them

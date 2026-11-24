@@ -6673,6 +6673,19 @@ _DICTS: dict[str, dict[str, str]] = {
             'que el desembalse no cambiaría ninguna resistencia. Marca '
             'Comportamiento no drenado en los materiales de baja '
             'permeabilidad.',
+        # v0.1.491 (D429)
+        "'{method}' is not a search method of this program, so the analysis "
+        'would run another search than the one the file asks for. Available: '
+        '{available}.':
+            '«{method}» no es un método de búsqueda de este programa, así que '
+            'el análisis haría otra búsqueda que la que pide el archivo. '
+            'Disponibles: {available}.',
+        "'{method}' is not a sampling method of this program, so the "
+        'probabilistic analysis would draw its samples another way than the '
+        'file asks for. Available: {available}.':
+            '«{method}» no es un método de muestreo de este programa, así que '
+            'el análisis probabilístico tomaría sus muestras de otra forma que '
+            'la que pide el archivo. Disponibles: {available}.',
         "'{method}' is not a rapid-drawdown procedure, so the analysis would "
         'ignore the drawdown entirely. Available: {available}.':
             '«{method}» no es un procedimiento de desembalse rápido, así que '

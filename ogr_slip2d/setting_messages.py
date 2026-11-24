@@ -35,6 +35,10 @@ DRAWDOWN_NEEDS_SURFACES = "setting.drawdown_needs_surfaces"
 DRAWDOWN_NO_UNDRAINED = "setting.drawdown_no_undrained"
 DRAWDOWN_LINE_ABOVE = "setting.drawdown_line_above"
 DRAWDOWN_GAP = "setting.drawdown_gap"
+# v0.1.491 (D429) -- a value of the file this build does not know, which the
+# engine used to run as another one (Grid Search, Monte Carlo)
+SEARCH_UNKNOWN = "setting.search_unknown"
+SAMPLING_UNKNOWN = "setting.sampling_unknown"
 
 #: The grid value types, as the sentence names them.
 GRID_TYPES = ("total_head", "pressure_head", "pore_pressure")
@@ -68,6 +72,18 @@ SETTING_NOTES = {s.code: s for s in (
                 # v0.1.433 (D411) -- the procedures by their names; the one
                 # that is not one is shown as it is
                 kinds=(("available", "drawdown_method_list"),)),
+    MessageSpec(SEARCH_UNKNOWN,
+                "'{method}' is not a search method of this program, so the "
+                "analysis would run another search than the one the file asks "
+                "for. Available: {available}.",
+                kinds=(("method", "search_method"),
+                       ("available", "search_method_list"))),
+    MessageSpec(SAMPLING_UNKNOWN,
+                "'{method}' is not a sampling method of this program, so the "
+                "probabilistic analysis would draw its samples another way "
+                "than the file asks for. Available: {available}.",
+                kinds=(("method", "sampling_method"),
+                       ("available", "sampling_method_list"))),
     MessageSpec(DRAWDOWN_NEEDS_SURFACES,
                 "Rapid drawdown defines both reservoir levels with water "
                 "surfaces, so it cannot run with groundwater method "

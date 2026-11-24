@@ -291,6 +291,24 @@ _V1349 = [{'cat': 'core',
              'which is the one place that applies the drawdown wrapper.',
   'args': {'drawdown': 'duncan_wright_wong', 'method': 'spencer'}}]
 
+#: v0.1.491 (D429) -- the codes born after 0.1.349, with the English they
+#: were born with: ``_V1349`` stays what that version wrote.
+_SINCE = [
+ {'cat': 'engine',
+  'code': 'setting.search_unknown',
+  'english': "'future_search' is not a search method of this program, so "
+             'the analysis would run another search than the one the file '
+             'asks for. Available: grid, slope.',
+  'args': {'method': 'future_search', 'available': 'grid, slope'}},
+ {'cat': 'engine',
+  'code': 'setting.sampling_unknown',
+  'english': "'future_sampling' is not a sampling method of this program, "
+             'so the probabilistic analysis would draw its samples another '
+             'way than the file asks for. Available: monte_carlo, '
+             'latin_hypercube.',
+  'args': {'method': 'future_sampling',
+           'available': 'monte_carlo, latin_hypercube'}}]
+
 
 def _cat(name):
     from ogr_core.project.messages import REFUSALS, RULES
@@ -347,12 +365,12 @@ def _wordless(t):
 class TestTheEnglishIsTheOldOne:
 
     def test_every_code_with_its_sample(self):
-        for case in _V1349:
+        for case in _V1349 + _SINCE:
             assert _message(case) == case["english"], case["code"]
 
     def test_the_samples_cover_every_code(self):
         seen = set()
-        for case in _V1349:
+        for case in _V1349 + _SINCE:
             seen.add(case["code"])
             seen.update(_nested_codes(case["args"]))
         every = set(_cat("core")) | set(_cat("engine"))
@@ -378,7 +396,7 @@ class TestEveryCodeSaysItselfInSpanish:
         before = current_language()
         set_language("es")
         try:
-            for case in _V1349:
+            for case in _V1349 + _SINCE:
                 said = note_text(_message(case))
                 assert said and said != case["english"], case["code"]
                 assert "{" not in said, (case["code"], said)

@@ -139,6 +139,15 @@ def _show(kind: str, value, project=None):
     if kind == "drawdown_method_list":
         return "; ".join(L.drawdown_procedure_label(m)
                          for m in str(value).split(", ") if m)
+    # v0.1.491 (D429) -- the searches and the samplings a refusal offers
+    if kind == "search_method_list":
+        return "; ".join(L.search_method_label(m)
+                         for m in str(value).split(", ") if m)
+    if kind == "sampling_method":
+        return L.sampling_method_label(value)
+    if kind == "sampling_method_list":
+        return "; ".join(L.sampling_method_label(m)
+                         for m in str(value).split(", ") if m)
     if kind == "technique_list":
         return "; ".join(L.optimize_technique_label(m)
                          for m in str(value).split(", ") if m)
