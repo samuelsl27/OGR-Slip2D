@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ogr-slip2d"
-version = "0.1.485"
+version = "0.1.486"
 description = "OGR Slip2D — open-source slope stability and groundwater analysis (OpenGeoRock Suite)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -31,7 +31,10 @@ dependencies = [
     # v0.1.475 -- v0.2.2: a run with --dev-core tells its tests
     # (OGR_DEV_CORE=1, dev_core_run()), so this suite can come out green
     # against the core of an OGR-Core PR.
-    "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.2",
+    # v0.1.486 -- v0.2.7: the DXF reader can keep arcs (keep_arcs, off by
+    # default) and reads a bulge over half a turn (|b| > 1) and the bulges of
+    # a 2-D POLYLINE right; nothing else this program uses changes.
+    "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.7",
     "numpy>=1.26",
     "scipy>=1.14",
     "shapely>=2.0",
