@@ -48,9 +48,8 @@ INVARIANTS, against references outside this code (AGENTS.md, rule 1)
    face, at the rows' rounding), the block of Sarma's settings (each
    setting changed moves its row: rule 7; the number of wedges asked for,
    apart from the wedges the surface has; its English row is OGR-Core's,
-   «Least Number of Wedges» up to 0.2.9 and «Number of Wedges Asked For»
-   from 0.2.10, exactly one of the two, and its Spanish «Número de cuñas
-   pedido» with either, since v0.1.488, D454) and
+   «Number of Wedges Asked For» since its 0.2.10, pinned in v0.1.489, and
+   its Spanish «Número de cuñas pedido», D454) and
    Kc, the least |q|, the force ratio, the wedges and the faces made
    vertical of the critical (one, on the fixture of
    ``test_sarma_method_v1464`` whose bisectors cross); without Sarma, none
@@ -192,25 +191,16 @@ def _sarma_report():
 
 
 #: OGR-Core's report row of the number of wedges asked for (D454): its
-#: old English up to 0.2.9, the new one from 0.2.10. Both keys are in
-#: ``ogr_gui.i18n`` until the pin reaches 0.2.10; then the old one goes.
+#: English since 0.2.10; up to 0.2.9 it was «Least Number of Wedges», which
+#: the engine never kept, and no row may say it now.
 _ASKED_OLD, _ASKED_NEW = "Least Number of Wedges", "Number of Wedges Asked For"
 
 
 def _asked_row(keys) -> str:
-    """The row of the wedges asked for among ``keys``: exactly one of the
-    two texts. A released core must print the one of its version; a core
-    under development (``X.Y.Z.devN``, ``--dev-core``) either, because the
-    rename lands in some ``0.2.10.devN`` and not in the first."""
-    import ogr_core
-    present = [k for k in (_ASKED_OLD, _ASKED_NEW) if k in keys]
-    assert len(present) == 1, present
-    version = ogr_core.__version__
-    if ".dev" not in version:
-        release = tuple(int(x) for x in version.split(".")[:3])
-        want = _ASKED_NEW if release >= (0, 2, 10) else _ASKED_OLD
-        assert present == [want], (version, present)
-    return present[0]
+    """The row of the wedges asked for among ``keys``: the new text, and
+    not the old one."""
+    assert _ASKED_NEW in keys and _ASKED_OLD not in keys, sorted(keys)
+    return _ASKED_NEW
 
 
 def _values_after(said, key) -> list:

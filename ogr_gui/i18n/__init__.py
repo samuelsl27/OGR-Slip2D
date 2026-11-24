@@ -617,10 +617,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'X right (kN)': 'X derecha (kN)',
         # v0.1.468 (D357) — Sarma's method in the PDF report
         'Number of Wedges': 'Número de cuñas',
-        # v0.1.488 (D454): the engine does not keep a least number. The
-        # English keys are OGR-Core's report row: the old one up to 0.2.9,
-        # the new one from 0.2.10; the old one goes when the pin gets there
-        'Least Number of Wedges': 'Número de cuñas pedido',
+        # v0.1.488 (D454): the engine does not keep a least number; the
+        # English key is OGR-Core's report row since its 0.2.10 (v0.1.489)
         'Number of Wedges Asked For': 'Número de cuñas pedido',
         'Face Angles': 'Ángulo de las caras',
         'Face Strength': 'Resistencia de las caras',

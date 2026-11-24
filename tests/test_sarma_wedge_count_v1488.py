@@ -32,9 +32,9 @@ THE INVARIANTS
     * No visible name of the setting says «least» or «mínimo»: the Methods
       page (label and tooltip, in English and Spanish) and the command line.
       The report's row is OGR-Core's (``_sarma_settings_rows``): its English
-      is «Least Number of Wedges» up to 0.2.9 and «Number of Wedges Asked
-      For» from 0.2.10; its Spanish, ours, is «Número de cuñas pedido» for
-      both until the pin reaches 0.2.10 and the old key goes.
+      is «Number of Wedges Asked For» since its 0.2.10 (pinned in v0.1.489;
+      «Least Number of Wedges» before), its Spanish, ours, «Número de cuñas
+      pedido»; the old key is gone from the translations.
 """
 import math
 import os
@@ -177,8 +177,9 @@ class TestTheNameSaysWhatItDoes:
         before = current_language()
         set_language("es")
         try:
-            es = {key: tr(key) for key in ("Least Number of Wedges",
-                                           "Number of Wedges Asked For")}
+            es = tr("Number of Wedges Asked For")
         finally:
             set_language(before)
-        assert set(es.values()) == {"Número de cuñas pedido"}, es
+        assert es == "Número de cuñas pedido", es
+        from ogr_gui.i18n import _DICTS
+        assert "Least Number of Wedges" not in _DICTS["es"]

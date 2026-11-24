@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ogr-slip2d"
-version = "0.1.488"
+version = "0.1.489"
 description = "OGR Slip2D — open-source slope stability and groundwater analysis (OpenGeoRock Suite)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -34,7 +34,10 @@ dependencies = [
     # v0.1.486 -- v0.2.7: the DXF reader can keep arcs (keep_arcs, off by
     # default) and reads a bulge over half a turn (|b| > 1) and the bulges of
     # a 2-D POLYLINE right; nothing else this program uses changes.
-    "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.7",
+    # v0.1.489 -- v0.2.10: Sarma's report row is «Number of Wedges Asked
+    # For» (D454); 0.2.8 reads DXF entities in their own coordinates (OCS)
+    # and 0.2.9 adds ogr_core.api, which this program does not use yet.
+    "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.10",
     "numpy>=1.26",
     "scipy>=1.14",
     "shapely>=2.0",
