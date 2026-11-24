@@ -48,8 +48,9 @@ INVARIANTS, against references outside this code (AGENTS.md, rule 1)
    face, at the rows' rounding), the block of Sarma's settings (each
    setting changed moves its row: rule 7; the number of wedges asked for,
    apart from the wedges the surface has; its English row is OGR-Core's,
-   «Least Number of Wedges» until a new core renames it, and its Spanish
-   «Número de cuñas pedido» since v0.1.488, D454) and
+   «Least Number of Wedges» up to 0.2.9 and «Number of Wedges Asked For»
+   from 0.2.10, exactly one of the two, and its Spanish «Número de cuñas
+   pedido» with either, since v0.1.488, D454) and
    Kc, the least |q|, the force ratio, the wedges and the faces made
    vertical of the critical (one, on the fixture of
    ``test_sarma_method_v1464`` whose bisectors cross); without Sarma, none
@@ -188,6 +189,28 @@ def _sarma_report():
         _CACHE["report"] = _report(p, {"bishop_simplified": _search(rb),
                                        "sarma": _search(r)})
     return _CACHE["report"]
+
+
+#: OGR-Core's report row of the number of wedges asked for (D454): its
+#: old English up to 0.2.9, the new one from 0.2.10. Both keys are in
+#: ``ogr_gui.i18n`` until the pin reaches 0.2.10; then the old one goes.
+_ASKED_OLD, _ASKED_NEW = "Least Number of Wedges", "Number of Wedges Asked For"
+
+
+def _asked_row(keys) -> str:
+    """The row of the wedges asked for among ``keys``: exactly one of the
+    two texts. A released core must print the one of its version; a core
+    under development (``X.Y.Z.devN``, ``--dev-core``) either, because the
+    rename lands in some ``0.2.10.devN`` and not in the first."""
+    import ogr_core
+    present = [k for k in (_ASKED_OLD, _ASKED_NEW) if k in keys]
+    assert len(present) == 1, present
+    version = ogr_core.__version__
+    if ".dev" not in version:
+        release = tuple(int(x) for x in version.split(".")[:3])
+        want = _ASKED_NEW if release >= (0, 2, 10) else _ASKED_OLD
+        assert present == [want], (version, present)
+    return present[0]
 
 
 def _values_after(said, key) -> list:
@@ -380,7 +403,8 @@ class TestTheReport:
         said = _sarma_report()
         p, _r = _sarma25()
         sa = p.settings.sarma
-        for key, value in (("Least Number of Wedges", str(sa.num_slices)),
+        asked = _asked_row({v for k, v in said if k == "p"})
+        for key, value in ((asked, str(sa.num_slices)),
                            ("Face Angles", "Bisector"),
                            ("Face Strength", "From the materials"),
                            ("Boundaries at Material Contacts",
@@ -408,7 +432,7 @@ class TestTheReport:
         sa.boundaries_at_materials = not sa.boundaries_at_materials
         sa.shear_sense = "kinematic"
         after = dict(_sarma_settings_rows(p))
-        assert after["Least Number of Wedges"] == 7
+        assert after[_asked_row(after)] == 7
         assert after["Tolerance"] == 1e-7 and after["Maximum Iterations"] == 77
         assert after["Face Angles"] == "Mean normal"
         assert after["Face Strength"] == "Given c and φ"
@@ -436,7 +460,8 @@ class TestTheReport:
         # has (``len(slices)``, not its faces), which are fewer here
         n = _p.settings.sarma.num_slices
         assert len(r.slices) < n, (len(r.slices), n)
-        assert _values_after(said, "Least Number of Wedges") == [str(n)]
+        asked = _asked_row({v for k, v in said if k == "p"})
+        assert _values_after(said, asked) == [str(n)]
         assert _values_after(said, "Number of Wedges") == [str(len(r.slices))]
         # Kc at F = 1 is a number here, not a dash
         assert re.fullmatch(r"-?\d+\.\d{4}", _fmt(d["sarma_kc"], 4))
@@ -463,7 +488,7 @@ class TestTheReport:
         said = _CACHE["bishop_report"]
         texts = {v for k, v in said if k == "p"}
         for key in ("Kc at F = 1", "Least |q| of the Faces",
-                    "Number of Wedges", "Least Number of Wedges",
+                    "Number of Wedges", _ASKED_OLD, _ASKED_NEW,
                     "Face Angles"):
             assert key not in texts, key
         assert not any(t.startswith("Faces of the Wedges") for t in texts)
