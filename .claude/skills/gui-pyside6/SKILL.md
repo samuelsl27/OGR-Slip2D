@@ -5,6 +5,12 @@ description: Reglas de la interfaz PySide6 del proyecto. Úsalo al crear o modif
 
 # Interfaz PySide6 en OGR Suite
 
+**Antes de diseñar o cambiar nada, lee la guía de interfaz:
+[`spec/constitution/guia-de-interfaz.md`](../../../spec/constitution/guia-de-interfaz.md).**
+Dice qué rasgos de Slip2D no se pierden, cómo se aplican aquí los principios
+D-1…D-14 de OGR-GUI y la lista de comprobación con la que cierra toda tarea
+de interfaz. Esta skill recoge las trampas técnicas; la guía, el diseño.
+
 ## Lo que rompe los tests sin avisar
 
 - **Diálogos modales**: `QMessageBox.information()` y `QDialog.exec()`
