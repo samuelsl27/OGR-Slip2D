@@ -4546,22 +4546,7 @@ _DICTS: dict[str, dict[str, str]] = {
             "cancelan, como los deja un tramo recto apenas doblado. El factor "
             "se queda, la raíz mayor; la siguiente raíz hacia abajo es "
             "{next:.4g}.",
-        # v0.1.471 (D357, D457)
-        "the optimiser of the faces refused {count} factor(s) of the reported "
-        "surface whose wedges had a larger root the sweep of the solver had "
-        "stepped over (D457): the factor kept is one it checked.":
-            "el optimizador de las caras rechazó {count} factor(es) de la "
-            "superficie del resultado cuyas cuñas tenían una raíz mayor que el "
-            "barrido del solver había saltado (D457): el factor que queda es "
-            "uno comprobado.",
-        "the optimiser of the faces had nowhere to start: the factor of each of "
-        "the {count} policy(ies) with one had a larger root the sweep of the "
-        "solver had stepped over (D457). The surface keeps the ordinary factor "
-        "of the method.":
-            "el optimizador de las caras no tuvo de dónde arrancar: el factor de "
-            "cada una de las {count} política(s) que lo daban tenía una raíz mayor "
-            "que el barrido del solver había saltado (D457). La superficie conserva "
-            "el factor ordinario del método.",
+        # v0.1.471 (D357)
         "the optimised faces would have made the search's objective "
         "({objective}) worse on the reported surface, {kept:.4g} -> "
         "{optimised:.4g}: they minimise the factor of safety. The surface keeps "

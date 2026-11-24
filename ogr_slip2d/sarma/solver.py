@@ -59,9 +59,13 @@ kinematic one, besides its poles. The factor is the LARGEST root, the
 least reduction of the strength that brings the mass to limit
 equilibrium: it is the rule the three published cases follow. It is
 searched on H(F) = (N − kh·D − Eₙ₊₁)·Q, with Q the least common
-denominator of Kc, which has no poles, by a descending sweep and Brent's
+denominator of Kc, which has no poles, by a descending search and Brent's
 method (Brent 1973). A march on Kc from F = 1 jumps the published 0.434 of
 the saturated problem 4, 1.4 % above a pole at 0.4288, and lands on 0.1467.
+The search is not a sweep of fixed step since v0.1.487 (D457): with many
+wedges the roots come closer than any step (every 1.3 % on a circle with
+100), and two inside one step hide the largest. H times a positive factor
+is a polynomial in 1/F, and its roots are told apart on it (:func:`_nodes`).
 
 Q is NOT the product of every qᵢ. When qₖ and Ẽⱼ (J > K) are the same
 function of F, which happens when bases K and J have the same α and tan φ
@@ -111,6 +115,11 @@ References:
         J. Geotech. Eng. Div. ASCE 105(GT12), 1511–1524. NOT consulted.
     Brent, R. P. (1973). Algorithms for Minimization without Derivatives.
         Prentice-Hall, ch. 4.
+    Good, I. J. (1961). The colleague matrix, a Chebyshev analogue of the
+        companion matrix. Quart. J. Math. 12(1), 61–68.
+    Trefethen, L. N. (2013). Approximation Theory and Approximation
+        Practice. SIAM, ch. 2 (Chebyshev points and interpolants) and 18
+        (polynomial roots and colleague matrices).
 """
 from __future__ import annotations
 
@@ -119,6 +128,8 @@ from dataclasses import dataclass, field, replace
 from typing import Callable, NamedTuple, Optional, Sequence
 
 import numpy as np
+from numpy.polynomial import chebyshev
+from scipy.fft import dct
 from scipy.optimize import brentq
 
 from ogr_slip2d import messages as msg
@@ -139,20 +150,15 @@ SHEAR_SENSES = (FIXED, KINEMATIC)
 #: inside one step leave no change of sign. Measured in v0.1.461: on
 #: problem 5 the largest root (1.089) is ×1.38 above the next (0.788), on
 #: problem 4 ×3.3 dry and ×2.96 saturated; 1.05 leaves the narrowest of
-#: them 6.6 steps.
+#: them 6.6 steps. v0.1.487 (D457): that measure missed the circles with
+#: many wedges, where the roots come every 1 + 1.3/n; below ``_F_MAX`` the
+#: step now serves only ``ROOT_ENUMERATOR = "sweep"`` (the A/B against the
+#: solver of v0.1.461 to v0.1.486), the trial factors being :func:`_nodes`.
 _F_TOP = 1.0e6
 _F_MAX = 100.0
 _F_MIN = 0.01
 _COARSE_RATIO = 10.0
 _SWEEP_RATIO = 1.05
-#: v0.1.471 (D357, D457) -- the step of :func:`larger_root_above`, the guard
-#: the optimiser of the face angles puts on each factor it accepts: the
-#: census of D452 (42 753 surfaces) swept every H with it. A minimiser walks
-#: toward where the 1.05 sweep hides a pair of roots (D457: it reports a
-#: smaller root there), so its accepted factors are checked one by one; the
-#: sweep of ``solve`` itself does not change.
-FINE_SWEEP_RATIO = 1.002
-
 #: A face whose direction differs from an adjacent base by less than this
 #: (|cos(α + δ)|, the sine of the angle between them) is parallel to it.
 _PARALLEL = 1e-12
@@ -769,29 +775,27 @@ def _near_kc_pole(fr: _Frame, F: float) -> Optional[float]:
 
 def _lower_root(fr: _Frame, kh: float, below: float, tolerance: float,
                 max_iterations: int):
-    """The next root of H under ``below``, down the sweep, by Brent:
-    ``(F, iterations, lower end)``, or None when there is none or Brent does
-    not converge (v0.1.470)."""
-    grid = [x for x in _sweep() if x < below * (1.0 - 1e-15)]
-    h_prev, F_prev = _H(fr, 1.0 / below, kh), below
+    """The next root of H under ``below``, down the trial factors of
+    :func:`_nodes`, by Brent: ``(F, iterations, lower end)``, or None when
+    there is none or Brent does not converge (v0.1.470; v0.1.487, D457: the
+    nodes that tell close roots apart, so the note of D452 no longer skips
+    one)."""
+    h_prev = _H(fr, 1.0 / below, kh)
     if h_prev == 0.0:
-        if not grid:
-            return None
-        F_prev = grid.pop(0)
-        h_prev = _H(fr, 1.0 / F_prev, kh)
-    for x in grid:
-        h = _H(fr, 1.0 / x, kh)
-        if h == 0.0:
-            return x, 0, x
-        if (h > 0.0) != (h_prev > 0.0):
-            root, r = brentq(lambda y: _H(fr, 1.0 / y, kh), x, F_prev,
-                             xtol=tolerance, maxiter=int(max_iterations),
-                             full_output=True, disp=False)
-            if not r.converged:
-                return None
-            return float(root), int(r.iterations), x
-        h_prev, F_prev = h, x
-    return None
+        below = below * (1.0 - 1e-9)
+        h_prev = _H(fr, 1.0 / below, kh)
+    found = _first_change(fr, kh, below, h_prev, _SCALAR)
+    if found is None:
+        return None
+    x, F_prev = found
+    if _H(fr, 1.0 / x, kh) == 0.0:
+        return x, 0, x
+    root, r = brentq(lambda y: _H(fr, 1.0 / y, kh), x, F_prev,
+                     xtol=tolerance, maxiter=int(max_iterations),
+                     full_output=True, disp=False)
+    if not r.converged:
+        return None
+    return float(root), int(r.iterations), x
 
 
 def near_pair(bases: Sequence[Base], faces: Sequence[Face], F: float, *,
@@ -808,8 +812,9 @@ def near_pair(bases: Sequence[Base], faces: Sequence[Face], F: float, *,
     straight stretch barely bent leaves them, and the next root down the
     one the unbent surface has. Information, not a rule: the factor stays
     the largest root (module docstring). The next root is the next change
-    of sign of H down the sweep, refined by Brent with the same tolerance;
-    one the sweep's step hides is not found."""
+    of sign of H below F, down the trial factors of :func:`_nodes` (which
+    tell close roots apart since v0.1.487, D457: before, one the sweep's
+    step hid was not found), refined by Brent with the same tolerance."""
     fr = _frame(bases, faces, slide_sign, head_thrust)
     if _parallel_face(fr) is not None:
         return None
@@ -818,10 +823,11 @@ def near_pair(bases: Sequence[Base], faces: Sequence[Face], F: float, *,
     d = _near_kc_pole(fr, F)
     if d is None:
         return None
-    lower = [x for x in _sweep() if x < F]
-    if not lower:
+    # below the root F itself, by more than Brent left it from the true one
+    start = F * (1.0 - 1e-6) - 2.0 * tolerance
+    if not start > _F_MIN:
         return d, None
-    nxt = _lower_root(fr, kh, lower[0], tolerance, max_iterations)
+    nxt = _lower_root(fr, kh, start, tolerance, max_iterations)
     return d, (None if nxt is None else nxt[0])
 
 
@@ -843,53 +849,160 @@ def _sweep(ratio: Optional[float] = None) -> list:
     return out
 
 
-def larger_root_above(bases: Sequence[Base], faces: Sequence[Face],
-                      F: float, *, kh: float = 0.0, slide_sign: int = 1,
-                      shear_sense: str = FIXED,
-                      head_thrust: float = 0.0) -> Optional[float]:
-    """A factor above ``F`` where H changes sign, swept down from F = ∞ with
-    the step ``FINE_SWEEP_RATIO``, or None (v0.1.471, D357, D457): ``F``,
-    the factor :func:`solve` gave these wedges, is then not their largest
-    root, because the 1.05 sweep stepped over a pair of roots above it.
+#: v0.1.487 (D457) -- how the roots of H are looked for below F = ``_F_MAX``:
+#: ``"polynomial"`` (:func:`_nodes`, the default) or ``"sweep"`` (the plain
+#: descending sweep of ratio ``_SWEEP_RATIO``, the solver of v0.1.461 to
+#: v0.1.486, kept for the A/B and for the test that it moves the number).
+ROOT_ENUMERATOR = "polynomial"
+#: The intervals of g = 1/F the polynomial is interpolated on, by ratio.
+_POLY_RATIO = 2.0
+#: Where H overflows on an interval (many wedges at a small F), the
+#: interval is swept with this ratio instead (the owner's decision,
+#: 2026-11-24).
+_POLY_FALLBACK_RATIO = 1.005
 
-    The guard of the optimiser of the face angles (``optimize_angles``):
-    a minimiser is drawn to exactly those wedges, where the factor reported
-    is too small. The answer is the lower end of the first step down the
-    fine sweep whose sign differs from the one above it, at least
-    ``1 + 1e-6`` times ``F``: a root that close is ``F`` itself, refined.
-    A pair of roots closer than the fine step is not seen either."""
-    fr = _frame(bases, faces, slide_sign, head_thrust)
-    if _parallel_face(fr) is not None:
-        return None
-    if shear_sense == KINEMATIC:
-        fr = _with_senses(fr, kinematic_senses(fr)[1])
-    floor = float(F) * (1.0 + 1e-6)
-    grid = np.asarray([x for x in _sweep(FINE_SWEEP_RATIO) if x > floor])
-    if not len(grid):
-        return None
-    h_prev = _H(fr, 0.0, kh)
-    hs = np.asarray(_H(fr, 1.0 / grid, kh, _ARRAY), dtype=float)
-    for x, h in zip(grid, hs):
-        if h == 0.0 or (h > 0.0) != (h_prev > 0.0):
-            return float(x)
-        h_prev = h
+
+def _root_weights(fr: _Frame, g):
+    """∏ √(1 + tan²φᵢ g²) over the wedges, one of each cancelled pair left
+    out: the factor that turns H into a polynomial in g (:func:`_nodes`)."""
+    skip = set(fr.pairs.values())
+    w = np.ones_like(g)
+    for i in range(len(fr.alpha)):
+        if i not in skip:
+            w = w * np.sqrt(1.0 + (fr.tan_phi[i] * g) ** 2)
+    return w
+
+
+def _cheb(v, m: int):
+    """The Chebyshev coefficients of the degree-``m`` interpolant of the
+    values ``v`` at the Chebyshev-Lobatto points cos(πk/m), k = 0…m (a
+    type-I discrete cosine transform)."""
+    c = dct(v, type=1) / m
+    c[0] /= 2.0
+    c[-1] /= 2.0
+    return c
+
+
+def _no_root(c) -> bool:
+    """No zero in [−1, 1]: |Tₖ| ≤ 1 there, so |c₀| > Σ|cₖ| leaves the sum
+    without one. The margin covers the rounding of the coefficients."""
+    big = float(np.max(np.abs(c)))
+    return abs(c[0]) > np.sum(np.abs(c[1:])) * (1.0 + 1e-9) + 1e-12 * big
+
+
+def _pieces(a: float, b: float, m: int, h, w) -> list:
+    """The places in (a, b] of g where H is to be sampled so that, between
+    two consecutive ones, it has at most one root, as ``(g, H or None)``:
+    ``b`` and, where needed, the roots' places and the points between
+    them (:func:`_nodes`). ``h`` are the values of H at the Lobatto points of
+    [a, b] (``h[0]`` at b) and ``w`` those of the polynomial."""
+    if not np.all(np.isfinite(w)):
+        n = int(math.ceil(math.log(b / a) / math.log(_POLY_FALLBACK_RATIO)))
+        return [(p, None) for p in np.geomspace(a, b, n + 1)[1:]]
+    c = _cheb(w, m)
+    if _no_root(c) or _no_root(chebyshev.chebder(c)):
+        # no root, or a monotone polynomial: one at most, which the signs
+        # at the two ends show
+        return [(b, float(h[0]))]
+    roots = chebyshev.chebroots(c / np.max(np.abs(c)))
+    est = sorted(a + (b - a) * (z.real + 1.0) / 2.0 for z in roots
+                 if abs(z.imag) < 0.05 and -1.0 <= z.real <= 1.0)
+    out = []
+    for i, gr in enumerate(est):
+        out += [gr * (1.0 - 1e-7), gr * (1.0 + 1e-7)]
+        if i:
+            out.append(0.5 * (gr + est[i - 1]))
+    return ([(p, None) for p in sorted(set(out)) if a < p < b]
+            + [(b, float(h[0]))])
+
+
+def _nodes(fr: _Frame, kh: float):
+    """The trial factors of the descending search, F high to low, in chunks
+    of ``(F, H or None)`` (H where the array arithmetic already gave it), so
+    the search stops at its first change of sign without the rest being
+    computed: the coarse steps above ``_F_MAX``, then, below it, places of
+    g = 1/F between which H has at most one root (v0.1.487, D457).
+
+    H·∏√(1 + tan²φᵢ g²), with one factor per wedge and one of each cancelled
+    pair left out, is a POLYNOMIAL in g of degree at most 2(n − pairs):
+    every term of the recurrence carries exactly one factor of each wedge
+    (Aᵢ or Pᵢ of its own, qₖ of those before it, Ẽⱼ of those after), and
+    multiplied by its wedge's root, q, Ẽ and A are quadratic in g and P
+    linear (cos(atan(tan φ g)) = 1/√(1 + tan²φ g²)); the two wedges of a
+    cancelled pair have the same tan φ, so the one left out is the same
+    whichever drops its factor. Kc = kh can then have at most that many
+    roots, and they can be told apart however close: on each interval of g
+    of ratio ``_POLY_RATIO`` the polynomial is interpolated exactly at its
+    Chebyshev-Lobatto points (Trefethen 2013, ch. 2); an interval whose
+    coefficients show no root, or whose derivative's show none (monotone,
+    one root at most), needs only its end; one that is neither gives the
+    places of its roots, the real eigenvalues of the colleague matrix (Good 1961; Trefethen 2013,
+    ch. 18), around and between which H itself is sampled. The sign of H
+    is always read from H, never from the interpolant: an estimate wrong
+    by a little adds a sample, not a root. A sweep of ratio 1.05 (v0.1.461
+    to v0.1.486) missed the largest root when two lay inside one step: on a
+    circle with 100 wedges the roots come every 1.3 %, and a fixed step of
+    any ratio misses them with enough wedges (D457, the bench's
+    ``_auditoria/P9_D457``)."""
+    coarse = [x for x in _sweep() if x > _F_MAX * (1.0 + 1e-12)] + [_F_MAX]
+    if ROOT_ENUMERATOR != "polynomial":
+        yield [(x, None) for x in coarse]
+        yield [(x, None) for x in _sweep() if x < _F_MAX * (1.0 - 1e-12)]
+        return
+    m = 2 * (len(fr.alpha) - len(fr.pairs)) + 2
+    x = np.cos(np.pi * np.arange(m + 1) / m)
+    edges = [1.0 / _F_MAX]
+    while edges[-1] < (1.0 / _F_MIN) * (1.0 - 1e-12):
+        edges.append(min(edges[-1] * _POLY_RATIO, 1.0 / _F_MIN))
+    spans = list(zip(edges[:-1], edges[1:]))
+    nc = len(coarse)
+    g = np.concatenate([1.0 / np.asarray(coarse)]
+                       + [a + (b - a) * (x + 1.0) / 2.0 for a, b in spans])
+    with np.errstate(over="ignore", invalid="ignore"):
+        h = np.asarray(_H(fr, g, kh, _ARRAY), dtype=float)
+        yield [(F, float(v)) for F, v in zip(coarse, h[:nc])]
+        h, g = h[nc:], g[nc:]
+        w = h * _root_weights(fr, g)
+        for k, (a, b) in enumerate(spans):
+            s = slice(k * (m + 1), (k + 1) * (m + 1))
+            yield [(1.0 / p, v) for p, v in
+                   _pieces(a, b, m, h[s], w[s])]
+
+
+def _first_change(fr: _Frame, kh: float, F_hi: float, h_hi: float,
+                  ops: "_Ops"):
+    """(lo, hi): the first change of sign of H below ``F_hi``, where H is
+    ``h_hi`` (F_hi = ∞ for the factor), down the trial factors of
+    :func:`_nodes`; or None. With ``_SCALAR`` every H is computed again in
+    that arithmetic."""
+    h_prev, F_prev = h_hi, F_hi
+    for chunk in _nodes(fr, kh):
+        chunk = [(F, v) for F, v in chunk if F < F_hi * (1.0 - 1e-15)]
+        if not chunk:
+            continue
+        if ops is _SCALAR:
+            hs = [_H(fr, 1.0 / F, kh) for F, _v in chunk]
+        else:
+            hs = [v for _F, v in chunk]
+            todo = [i for i, v in enumerate(hs) if v is None]
+            if todo:
+                with np.errstate(over="ignore", invalid="ignore"):
+                    got = np.asarray(_H(fr, 1.0 / np.asarray(
+                        [chunk[i][0] for i in todo]), kh, ops)).tolist()
+                for i, v in zip(todo, got):
+                    hs[i] = v
+        for (F, _v), h in zip(chunk, hs):
+            if h == 0.0 or (h > 0.0) != (h_prev > 0.0):
+                return F, F_prev
+            h_prev, F_prev = h, F
     return None
 
 
 def _bracket(fr: _Frame, kh: float, h_inf: float, ops: _Ops):
-    """(lo, hi): the first change of sign of H down the sweep, from F = ∞
-    (``hi`` is ∞ when it is between ∞ and the top), or None."""
-    grid = _sweep()
-    if ops is _SCALAR:
-        hs = [_H(fr, 1.0 / F, kh) for F in grid]
-    else:
-        hs = np.asarray(_H(fr, 1.0 / np.asarray(grid), kh, ops)).tolist()
-    h_prev, F_prev = h_inf, math.inf
-    for F, h in zip(grid, hs):
-        if h == 0.0 or (h > 0.0) != (h_prev > 0.0):
-            return F, F_prev
-        h_prev, F_prev = h, F
-    return None
+    """(lo, hi): the first change of sign of H down the trial factors of
+    :func:`_nodes`, from F = ∞ (``hi`` is ∞ when it is between ∞ and the
+    top), or None."""
+    return _first_change(fr, kh, math.inf, h_inf, ops)
 
 
 def solve(bases: Sequence[Base], faces: Sequence[Face], *, kh: float = 0.0,

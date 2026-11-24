@@ -171,7 +171,6 @@ def lem_summary(res, *, with_slices: bool = False) -> Optional[dict]:
                                          # v0.1.471 (D357)
                                          "sarma_start_fos",
                                          "sarma_angle_trials",
-                                         "sarma_sweep_misses",
                                          "sarma_angle_jumps")
               if k in details and isinstance(details[k], (int, float))
               and not isinstance(details[k], bool)}

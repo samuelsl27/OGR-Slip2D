@@ -1642,25 +1642,19 @@ def sarma_notes(result, search=None) -> list:
             if distance is not None and nxt is not None:
                 out.append(_mnote(MN.SARMA_NEAR_PAIR, factor=result.fos,
                                   distance=100.0 * distance, next=nxt))
-    # v0.1.471 (D357, D457) -- factors the optimiser of the faces refused
-    # because the solver's sweep had stepped over a larger root
-    misses = int(details.get("sarma_sweep_misses") or 0)
-    if misses and details.get("sarma_angle_mode"):
-        out.append(_mnote(MN.SARMA_SWEEP_MISS, count=misses))
-    # v0.1.471 (the review) -- no start for the optimiser; a critical surface
-    # it would have made worse under the search's objective; a fold
-    if details.get("sarma_angle_no_start"):
-        out.append(_mnote(MN.SARMA_ANGLES_NO_START,
-                          count=int(details["sarma_angle_no_start"])))
+    # v0.1.471 (the review) -- a critical surface the optimiser would have
+    # made worse under the search's objective; a fold. (The notes of the
+    # guard of D457, factors refused and no start, went with it in
+    # v0.1.487.)
     kept = details.get("sarma_angle_kept")
     if kept:
         out.append(_mnote(MN.SARMA_ANGLES_KEPT, objective=kept["objective"],
                           kept=kept["kept"], optimised=kept["optimised"]))
     if details.get("sarma_fold_faces"):
-        from ogr_slip2d.sarma.optimize_angles import JUMP_STEP
+        from ogr_slip2d.sarma.optimize_angles import FOLD_STEP
         pulled = sum(1 for x in (details.get("sarma_face_effective")
                                  or [])[1:-1] if x is not None and x < -1e-9)
-        out.append(_mnote(MN.SARMA_ANGLES_FOLD, step=JUMP_STEP,
+        out.append(_mnote(MN.SARMA_ANGLES_FOLD, step=FOLD_STEP,
                           count=pulled))
     # v0.1.465 (D357) -- per-vertex data that did not reach the surface
     unused = getattr(getattr(result, "slices", None), "wedge_fields",

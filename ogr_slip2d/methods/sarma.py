@@ -240,22 +240,6 @@ class SarmaNonVertical(LEMMethod):
             out.angle_policy = self.optimize_angles or OPTIMIZED_MODES[0]
         return out
 
-    def larger_root_above(self, project: Project, result) -> Optional[float]:
-        """v0.1.471 (D457) -- a factor above ``result.fos`` where the H of
-        its wedges changes sign (``solver.larger_root_above``), or None: the
-        guard the optimiser of the angles asks of each factor it keeps. The
-        wedges are read as :meth:`compute_fos` reads them."""
-        slices = getattr(result, "slices", None)
-        if not isinstance(slices, _wedges.Wedges) or result.fos is None:
-            return None
-        kh = project.seismic.kh if project.seismic.enabled else 0.0
-        kv = project.seismic.kv if project.seismic.enabled else 0.0
-        s_in = _wedges.to_solver(slices, kh, kv)
-        return _solver.larger_root_above(
-            s_in.bases, s_in.faces, result.fos, kh=kh,
-            slide_sign=s_in.slide_sign, shear_sense=self.shear_sense,
-            head_thrust=s_in.head_thrust)
-
     def _refused(self, surface, slices, code, **args):
         return LEMResult(fos=None, converged=False, iterations=0,
                          method_id=self.METHOD_ID, surface=surface,

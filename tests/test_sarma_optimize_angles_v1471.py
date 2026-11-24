@@ -56,16 +56,18 @@ THE RULES (each measured before it was written; the module docstring)
       constructor names) that no pushed move of the last step improves.
     * The continuity: a jump of the factor across a move is refused.
       Judged exactly on a synthetic factor with a step in it.
-    * The guard of D457: a factor whose wedges have a larger root is
-      refused, the start's too (the adversarial review: problem 5 with
-      γw = 9.81 started from the bisector's 0.5957 under its larger root
-      0.6096). Judged exactly on a synthetic guard, on that case, and on a
-      circle with Ru 0.7 (roots and poles interleaved, D452) against the
-      independent Kc of ``test_sarma_solver_v1461`` (``_kc_direct``).
+    * The guard of D457 (v0.1.471 to v0.1.486): a factor whose wedges had a
+      larger root was refused. v0.1.487 (D457): ``solve`` no longer steps
+      over one, and the guard went (the owner's decision); what is left
+      here is that the factor kept on a circle of close roots (Ru 0.7) is
+      the largest root of its wedges by the independent Kc of
+      ``test_sarma_solver_v1461`` (``_kc_direct``).
     * The fold (the review): where the largest root meets the next and
       both vanish, the search stopped wherever its last step left it, and
       the factor depended on the step (−1.3 % with a step eight times
-      finer). The edge is now halved to 0.001°: the saturated problem 4
+      finer). The edge is now halved (to 0.001° in v0.1.471, to
+      ``FOLD_STEP`` = 1e-7° since v0.1.487, D457, where F goes as the
+      square root of the distance to a true fold): the saturated problem 4
       gives the same edge with two wedges and with ten, and with a last
       step eight times finer, and the run says it is a fold.
     * Under an objective other than F (Ky), a critical surface the faces
@@ -75,7 +77,7 @@ THE RULES (each measured before it was written; the module docstring)
 COST
     About 18 s together on this machine (2026-11-17), shared through two
     caches: figure 1.3 optimised (about 1 s, bounded at 400 wedges built)
-    for the reference, once more with «all surfaces», the guard's circle
+    for the reference, once more with «all surfaces», the circle of close roots
     with its judge, problem 4 saturated with ten wedges (a published case,
     about 3 s) and problem 5 with γw = 9.81. No other test above about 2 s.
 """
@@ -327,7 +329,8 @@ class TestTheInterfaceOfHoekIsReached:
     the interface Hoek gives (F 0.4347, published 0.434) and beyond. Without
     the push a move alone crosses them and the search stops at 0.585.
     With it, the search goes down to a fold, the edge past which the
-    largest root and the next vanish (0.2037, every face in tension
+    largest root and the next vanish (0.19955 since v0.1.487, 0.2037 when
+    the solver's sweep lost the pair before it met; every face in tension
     there; near Spencer's 0.209 on this surface by coincidence, the review
     of 0.1.471). About 3 s: a published case."""
 
@@ -429,7 +432,7 @@ class _Fake:
     """Wedges and results a synthetic factor answers for: a slope, and
     one interior face at (30, 2) whose angle sets F."""
 
-    def __init__(self, factor, larger=None):
+    def __init__(self, factor):
         from ogr_core.materials import Material, MohrCoulomb
         from ogr_core.project import Project
         from ogr_slip2d.sarma.wedges import WedgeFace
@@ -439,7 +442,7 @@ class _Fake:
         self.p.materials = [Material(name="soil", unit_weight=18.0,
                                      strength=MohrCoulomb(cohesion=1.0,
                                                           friction_angle=30.0))]
-        self.factor, self.larger = factor, larger
+        self.factor = factor
         self.WedgeFace = WedgeFace
         self.calls = 0
 
@@ -466,7 +469,6 @@ class _Fake:
     def run(self):
         from ogr_slip2d.sarma.optimize_angles import optimize
         return optimize(self.p, build=self.build, evaluate=self.evaluate,
-                        larger_root=(self.larger or (lambda r: None)),
                         gain=1e-9)
 
 
@@ -490,28 +492,10 @@ class TestTheRulesExactly:
         assert out.jumps == 0
         assert abs(out.result.theta - 40.0) < 0.3125
 
-    def test_the_guard_refuses_a_factor_with_a_larger_root(self):
-        """Below 70° every factor «has a larger root»: the search keeps the
-        best one above, and counts the ones it refused."""
-        fake = _Fake(lambda th: 1.0 + (th - 40.0) ** 2 / 1000.0,
-                     larger=lambda r: 2.0 if r.theta < 70.0 else None)
-        out = fake.run()
-        assert out.sweep_misses >= 1
-        assert 70.0 <= out.result.theta < 70.0 + 0.3125 + 1e-9
-
     def test_no_policy_no_optimum(self):
         fake = _Fake(lambda th: 1.0)
         fake.evaluate = lambda w: None
         assert fake.run() is None
-
-    def test_a_start_the_guard_refuses_is_no_start(self):
-        """Every policy's factor with a larger root: no start, and the
-        three refused are said."""
-        fake = _Fake(lambda th: 1.0 + (th - 40.0) ** 2 / 1000.0,
-                     larger=lambda r: 2.0)
-        out = fake.run()
-        assert out is not None and out.result is None
-        assert out.no_start == 3
 
 
 # ======================================================================
@@ -581,65 +565,23 @@ class TestTheRulesOnRealWedges:
                 F = search.method.compute_fos(pp, base.surface, w).fos
                 assert F is None or F >= best - 2 * tol, (x, d, F, best)
 
-    def test_the_guard_on_the_start(self):
-        """Problem 5 with γw = 9.81 and no faces of the table, ten wedges:
-        the bisector's factor (0.5957) has a larger root; the start is
-        another policy, and the factor kept is the largest root of its
-        wedges (the review of 0.1.471)."""
-        from ogr_slip2d.analysis_runner import build_search
-        from ogr_core.project import prepare_analysis_project
-        p, s, _a, _st = W63._problem5(9.81)
-        bis = _door(p, s, "bisector", 10, tolerance=1e-6)
-        # the start is what is judged here, the moves' guard on the circle
-        # below: without steps it is the start alone (the whole search on
-        # this case of poles, 14 s)
-        from ogr_slip2d.sarma import optimize_angles as OA
-        kept = OA.STEPS
-        OA.STEPS = ()
-        try:
-            p, s, _a, _st = W63._problem5(9.81)
-            r = _door(p, s, "optimized_global", 10, tolerance=1e-6)
-        finally:
-            OA.STEPS = kept
-        pp, _rep = prepare_analysis_project(p)
-        method = build_search(pp, "sarma").method
-        assert method.larger_root_above(pp, bis) is not None
-        assert r.details["sarma_start_policy"] != "bisector"
-        assert method.larger_root_above(pp, r) is None
-        assert r.fos > bis.fos
+    def test_the_factor_kept_on_a_circle_of_close_roots(self):
+        """Ru 0.7 (D452's circle, roots and poles interleaved), 8 wedges: the
+        factor kept is the largest root of its wedges by an independent Kc
+        (``_kc_direct``). Until v0.1.486 the guard of D457 refused factors
+        here; v0.1.487 has no guard, and the solver gives the largest root.
 
-    def test_no_start_keeps_the_ordinary_factor_and_says_it(self):
-        """With a guard that refuses every factor (injected, restored),
-        neither mode optimises: the door gives the method's ordinary factor
-        with the count of the policies refused, which the run says."""
-        from ogr_slip2d.analysis_runner import sarma_notes
-        from ogr_slip2d.methods.sarma import SarmaNonVertical
-        kept = SarmaNonVertical.larger_root_above
-        SarmaNonVertical.larger_root_above = lambda self, p, r: 99.0
-        try:
-            out = {mode: _door(_problem1(), _surface(_FIG12), mode, 3)
-                   for mode in ("optimized_global", "optimized_all")}
-        finally:
-            SarmaNonVertical.larger_root_above = kept
-        bisector = _p1("fig12")
-        for mode, r in out.items():
-            assert r.fos == bisector.fos, (mode, r.fos)
-            assert r.details["sarma_angle_no_start"] == 3, mode
-            assert "sarma_angle_mode" not in r.details
-            codes = [getattr(n, "code", None) for n in sarma_notes(r)]
-            assert "method.sarma_angles_no_start" in codes, codes
-
-    def test_the_guard_on_a_circle_of_close_roots(self):
-        """Ru 0.7 (D452's circle, roots and poles interleaved), 8 wedges:
-        the guard refuses factors, and the one kept is the largest root of
-        its wedges by an independent Kc (``_kc_direct``)."""
+        The search ends on a fold here (the largest root and the next meet:
+        0.51808, two faces on the edge), so the two roots lie within the
+        solver's tolerance of the factor and Kc − kh need not change sign
+        across ±1e-5 of it (measured: it does not; it does within 1e-6)."""
         p, s = _circle(0.7, 8)
         r = _door(p, s, "optimized_global", 8)
-        assert r.details["sarma_sweep_misses"] >= 1
+        assert "sarma_sweep_misses" not in r.details
+        assert r.details["sarma_fold_faces"] >= 1
         judge = _judge_of(r)
         # a root to the solver's tolerance (1e-6 on F about 0.5)
-        lo, hi = judge.h(r.fos * (1 - 1e-5)), judge.h(r.fos * (1 + 1e-5))
-        assert (lo > 0.0) != (hi > 0.0), (lo, hi)
+        assert judge.changes_near(r.fos, 1e-5) >= 1, r.fos
         assert _roots_above(judge, r.fos, 50.0) == [], r.fos
 
 
@@ -855,37 +797,15 @@ class TestItIsSaid:
         assert d["sarma_start_policy"] == "bisector"
         assert d["sarma_angle_trials"] > 0
 
-    def test_the_note_of_the_guard_in_spanish(self):
-        from ogr_slip2d.analysis_runner import sarma_notes
-        from types import SimpleNamespace
-        notes = sarma_notes(SimpleNamespace(
-            details={"sarma_sweep_misses": 3,
-                     "sarma_angle_mode": "optimized_global"},
-            fos=1.0, slices=()))
-        assert any(getattr(n, "code", None) == "method.sarma_sweep_miss"
-                   for n in notes)
-        from ogr_gui.i18n import current_language, set_language, tr
-        from ogr_slip2d.method_note_messages import METHOD_NOTES
-        en = METHOD_NOTES["method.sarma_sweep_miss"].english
-        before = current_language()
-        set_language("es")
-        try:
-            es = tr(en)
-        finally:
-            set_language(before)
-        assert es != en and "D457" in es and "barrido" in es
-
     def test_the_notes_of_the_review(self):
         from ogr_slip2d.analysis_runner import sarma_notes
         from types import SimpleNamespace
         notes = sarma_notes(SimpleNamespace(details={
-            "sarma_angle_no_start": 2,
             "sarma_angle_kept": {"objective": "ky", "kept": 0.1,
                                  "optimised": 0.11},
             "sarma_fold_faces": 1, "sarma_angle_mode": "optimized_global",
             "sarma_face_effective": [0.0, -5.0, 3.0, 0.0]},
             fos=1.0, slices=()))
         by = {getattr(n, "code", None): n for n in notes}
-        assert by["method.sarma_angles_no_start"].args["count"] == 2
         assert by["method.sarma_angles_kept"].args["objective"] == "ky"
         assert by["method.sarma_angles_fold"].args["count"] == 1

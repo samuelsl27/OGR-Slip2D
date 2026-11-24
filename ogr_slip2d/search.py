@@ -1817,8 +1817,7 @@ class BaseSearch(ABC):
                     # on its optimised faces; when no policy gives a factor
                     # the optimiser has nothing to start from, and the
                     # surface goes the ordinary way (its refusal, counted)
-                    res, opt = self._all_angles_optimised(project, trial,
-                                                          slices)
+                    res = self._all_angles_optimised(project, trial, slices)
                     if res is None:
                         wedges = self._wedge_trial(project, trial, slices)
                         # The method's own refusal of the surface (its
@@ -1828,7 +1827,6 @@ class BaseSearch(ABC):
                         res = (self._analyse(project, trial, wedges)
                                if wedges is not None
                                else self._wedge_refusal(trial, slices))
-                        self._no_start(res, opt)
                 else:
                     res = self._analyse(project, trial, slices)
                 if res is None:
@@ -1882,7 +1880,6 @@ class BaseSearch(ABC):
             return r if self._is_admissible(r) else None
 
         return optimize(project, build=build, evaluate=evaluate,
-                        larger_root=lambda r: m.larger_root_above(project, r),
                         gain=float(m.tolerance), progress=progress)
 
     def _angles_mode(self):
@@ -1892,27 +1889,17 @@ class BaseSearch(ABC):
             return None
         return getattr(self.method, "optimize_angles", None)
 
-    @staticmethod
-    def _no_start(res, opt) -> None:
-        """Say on ``res`` that the optimiser had no start: every policy's
-        factor had a larger root (D457), and ``res`` keeps the method's
-        ordinary one (the owner's decision of 2026-11-17)."""
-        if res is not None and opt is not None and opt.result is None:
-            res.details = dict(res.details or {})
-            res.details["sarma_angle_no_start"] = int(opt.no_start)
-
     def _all_angles_optimised(self, project: Project, trial, slices):
-        """With «all surfaces» (``optimized_all``), ``(result, optimum)``:
-        the result of ``trial`` on its optimised faces, or None when the
-        mode is another, there is no face to move, or no policy gives a
-        valid factor, or no checked one (then the optimum says so)."""
+        """With «all surfaces» (``optimized_all``), the result of ``trial``
+        on its optimised faces, or None when the mode is another, there is
+        no face to move, or no policy gives a valid factor."""
         from .sarma.angles import OPTIMIZED_ALL
         if self._angles_mode() != OPTIMIZED_ALL:
-            return None, None
+            return None
         opt = self._angle_optimum(project, trial, slices)
-        if opt is None or opt.result is None:
-            return None, opt
-        return self._optimised_result(project, trial, opt, OPTIMIZED_ALL), opt
+        if opt is None:
+            return None
+        return self._optimised_result(project, trial, opt, OPTIMIZED_ALL)
 
     def _optimised_result(self, project: Project, surface, opt, mode):
         """The result of the optimised wedges, analysed as any surface
@@ -1938,7 +1925,7 @@ class BaseSearch(ABC):
         computed again on its optimised faces: a NEW result (Interpret
         caches on the object). None, ``res`` kept, when the mode is
         another, ``res`` is not a valid result on wedges, there is no face
-        to move or no start (said on ``res``), or the new result would rank
+        to move or no start, or the new result would rank
         after it under an objective other than F, Ky say: the faces
         minimise F and Ky can rise with them (the review of 0.1.471 measured
         0.09979 to 0.10064, and the critical surface moved to another); said
@@ -1957,9 +1944,6 @@ class BaseSearch(ABC):
         opt = self._angle_optimum(project, res.surface, res.slices.vertical,
                                   progress)
         if opt is None:
-            return None
-        if opt.result is None:
-            self._no_start(res, opt)
             return None
         new = self._optimised_result(project, res.surface, opt,
                                      OPTIMIZED_GLOBAL)

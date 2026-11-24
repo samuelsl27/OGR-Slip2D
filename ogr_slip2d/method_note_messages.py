@@ -50,8 +50,6 @@ SARMA_BAD_SETTING = "method.sarma_bad_setting"
 # v0.1.465
 SARMA_VERTEX_DATA_UNUSED = "method.sarma_vertex_data_unused"
 # v0.1.471
-SARMA_SWEEP_MISS = "method.sarma_sweep_miss"
-SARMA_ANGLES_NO_START = "method.sarma_angles_no_start"
 SARMA_ANGLES_KEPT = "method.sarma_angles_kept"
 SARMA_ANGLES_FOLD = "method.sarma_angles_fold"
 
@@ -291,16 +289,6 @@ METHOD_NOTES = {s.code: s for s in (
                 "it may be the half of a root and a pole that almost cancel, "
                 "as a straight stretch barely bent leaves them. The factor is "
                 "kept, the largest root; the next root down is {next:.4g}."),
-    MessageSpec(SARMA_SWEEP_MISS,
-                "the optimiser of the faces refused {count} factor(s) of the "
-                "reported surface whose wedges had a larger root the sweep of "
-                "the solver had stepped over (D457): the factor kept is one it "
-                "checked."),
-    MessageSpec(SARMA_ANGLES_NO_START,
-                "the optimiser of the faces had nowhere to start: the factor of each of "
-                "the {count} policy(ies) with one had a larger root the sweep of the "
-                "solver had stepped over (D457). The surface keeps the ordinary factor "
-                "of the method."),
     MessageSpec(SARMA_ANGLES_KEPT,
                 "the optimised faces would have made the search's objective "
                 "({objective}) worse on the reported surface, {kept:.4g} -> "

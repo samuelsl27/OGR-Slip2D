@@ -68,26 +68,35 @@ THREE RULES THE MEASURE ASKED FOR
       review: the saturated problem 4 with two wedges 0.20804 at 0.3125°,
       0.20530 at 0.039°; with ten, −2.9 %). After the steps, a last move
       that finds no factor or a jump is halved toward that edge, keeping
-      each half that lowers the factor, to ``JUMP_STEP``, and the result
+      each half that lowers the factor, to ``FOLD_STEP``, and the result
       says it lies on a fold (``fold_faces``; the run's note, with the
       faces in tension there: on that problem all of them, where Hoek's
       interface has E′ > 0). The factor is kept (the owner's decision).
+      v0.1.487 (D457): with the solver no longer losing the pair of roots
+      before they meet, the edge is a true fold, where F(θ) goes as the
+      square root of the distance to it: halved to 0.001° the saturated
+      problem 4 gave 0.20001 with ten wedges and 0.20004 with two, and the
+      edge kept falling with a finer halving (0.19969 at 1e-4°, 0.19956 at
+      1e-5°). Halved to ``FOLD_STEP`` (1e-7°) both give 0.19955, to 2e-6
+      (the owner's decision: refine the edge). Until v0.1.486 the edge was
+      where the sweep of 1.05 lost the pair, 0.2037, a smooth condition
+      that 0.001° resolved.
 
     What the rules give: problem 1 of the bank, digitised from the
     reference's figures, puts the face at its kink within 2° of the drawn
     one, with the drawn faces optimal here to 0.1 %; the dry problem 4
     reaches its brute-force minimum, 1.5° from Hoek's interface. The
-    saturated problem 4 ends on a fold near 0.205, close to Spencer's 0.209
+    saturated problem 4 ends on a fold at 0.1996, near Spencer's 0.209
     on the same surface, which is a coincidence of that case and not a
     property: its faces are all in tension there.
 
-THE GUARD OF D457
-    The sweep of ``solver.solve`` steps by 1.05, and a pair of roots inside
-    one step hides the largest (D457, open): the factor reported there is
-    too small, which is exactly where a minimiser goes. The start and each
-    factor the search keeps are checked with ``solver.larger_root_above``,
-    the census's step of 1.002, and refused when a larger root shows (the
-    owner's decision: the guard lives here, ``solve`` does not change).
+THE GUARD OF D457 (v0.1.471 to v0.1.486)
+    The sweep of ``solver.solve`` stepped by 1.05 and a pair of roots inside
+    one step hid the largest, exactly where a minimiser goes; each factor
+    kept was checked with a finer sweep and refused when a larger root
+    showed. ``solve`` no longer steps over one (v0.1.487, D457), and the
+    guard, which could then refuse nothing, went with it (the owner's
+    decision, rule 7).
 
 Author: Samuel Sáez López (UPCT)
 
@@ -118,8 +127,12 @@ STEPS = (10.0, 5.0, 2.5, 1.25, 0.625, 0.3125)
 #: for a jump.
 JUMP = 0.01
 #: A jump still there when the move is shorter than this [degrees] is a
-#: change of branch; and the precision of the edge of a fold.
+#: change of branch.
 JUMP_STEP = 1e-3
+#: v0.1.487 (D457) -- the precision of the edge of a fold [degrees]: F goes
+#: as the square root of the distance to it, so the edge needs a finer
+#: halving than a jump does (see the module, «The fold»).
+FOLD_STEP = 1e-7
 #: The bound on the passes at one step: each kept move lowers the factor
 #: by more than the tolerance, so it ends anyway; this bounds a
 #: pathological surface's cost (the review measured 14 passes at 0.625° on
@@ -134,9 +147,7 @@ _NO_FACTOR = "no factor"
 
 @dataclass
 class AngleOptimum:
-    """What :func:`optimize` found. With ``result`` None, the optimiser had
-    no start: ``no_start`` policies gave a valid factor, and each of them
-    had a larger root (D457)."""
+    """What :func:`optimize` found."""
 
     #: The wedges with the optimised faces (``angle_policy`` not yet set:
     #: the caller names its mode).
@@ -148,14 +159,10 @@ class AngleOptimum:
     start_fos: Optional[float]
     #: The wedges built (each one a trial, the continuity's included).
     trials: int = 0
-    #: Factors refused because a larger root showed (D457).
-    sweep_misses: int = 0
     #: Moves refused as a change of branch.
     jumps: int = 0
-    #: The faces left on the edge of a fold (``JUMP_STEP`` from it).
+    #: The faces left on the edge of a fold (``FOLD_STEP`` from it).
     fold_faces: list = field(default_factory=list)
-    #: Policies with a valid factor the guard refused, when none was left.
-    no_start: int = 0
 
     def details(self, mode: str) -> dict:
         """What the result says of it (``LEMResult.details``)."""
@@ -163,13 +170,11 @@ class AngleOptimum:
                 "sarma_start_policy": self.start_policy,
                 "sarma_start_fos": self.start_fos,
                 "sarma_angle_trials": self.trials,
-                "sarma_sweep_misses": self.sweep_misses,
                 "sarma_angle_jumps": self.jumps,
                 "sarma_fold_faces": len(self.fold_faces)}
 
 
-def optimize(project, *, build: Callable, evaluate: Callable,
-             larger_root: Callable, gain: float,
+def optimize(project, *, build: Callable, evaluate: Callable, gain: float,
              progress: Optional[Callable] = None) -> Optional[AngleOptimum]:
     """The faces that make the factor of one surface least (see the module).
 
@@ -180,15 +185,12 @@ def optimize(project, *, build: Callable, evaluate: Callable,
             the surface's wedges (``SarmaNonVertical.wedges_for``), or None.
         evaluate: ``evaluate(wedges)``, their solution when it is valid and
             admissible, else None.
-        larger_root: ``larger_root(result)``, a factor above the result's
-            where H changes sign (``solver.larger_root_above``), or None.
         gain: the least drop of the factor that counts as one (the method's
             tolerance on F).
         progress: ``progress(done, total)`` after each step, or None.
 
     Returns:
-        An :class:`AngleOptimum` (with ``result`` None when every policy's
-        factor failed the guard), or None when no policy gives a valid,
+        An :class:`AngleOptimum`, or None when no policy gives a valid,
         admissible factor or there is no face to move: the caller keeps what
         it had.
     """
@@ -201,22 +203,14 @@ def optimize(project, *, build: Callable, evaluate: Callable,
         return build(**kw)
 
     best = None
-    refused = 0
     for policy in _angles.POLICIES:
         w = built(policy=policy)
         r = evaluate(w) if w is not None else None
         if r is None:
             continue
-        if larger_root(r) is not None:
-            refused += 1
-            continue
         if best is None or r.fos < best[2].fos:
             best = (policy, w, r)
     if best is None:
-        if refused:
-            return AngleOptimum(wedges=None, result=None, start_policy=None,
-                                start_fos=None, trials=trials,
-                                sweep_misses=refused, no_start=refused)
         return None
     start_policy, w0, r0 = best
     faces = w0.faces
@@ -298,7 +292,7 @@ def optimize(project, *, build: Callable, evaluate: Callable,
     if w_best is None:
         return None
     out = AngleOptimum(wedges=w_best, result=r_best, start_policy=start_policy,
-                       start_fos=r0.fos, sweep_misses=refused)
+                       start_fos=r0.fos)
 
     def moved(k, value):
         th, p = list(theta), list(pos)
@@ -344,9 +338,6 @@ def optimize(project, *, build: Callable, evaluate: Callable,
             w, r = solve(th)
             if w is None:
                 return "no"
-        if larger_root(r) is not None:
-            out.sweep_misses += 1
-            return "no"
         if not continuous(k, theta[k], value, r_best.fos, r.fos):
             if count:
                 out.jumps += 1
@@ -377,7 +368,7 @@ def optimize(project, *, build: Callable, evaluate: Callable,
                 if attempt(k, theta[k] + sign * last, False) != "edge":
                     continue
                 a, b, at_edge = theta[k], theta[k] + sign * last, True
-                while abs(b - a) >= JUMP_STEP:
+                while abs(b - a) >= FOLD_STEP:
                     m = 0.5 * (a + b)
                     status = attempt(k, m, False)
                     if status == "kept":
@@ -393,5 +384,5 @@ def optimize(project, *, build: Callable, evaluate: Callable,
     return out
 
 
-__all__ = ["AngleOptimum", "JUMP", "JUMP_STEP", "MAX_PASSES", "STEPS",
-           "optimize"]
+__all__ = ["AngleOptimum", "FOLD_STEP", "JUMP", "JUMP_STEP", "MAX_PASSES",
+           "STEPS", "optimize"]
