@@ -36,9 +36,11 @@ class TestAgentsFile:
     def test_exists_and_is_substantial(self):
         text = _read("AGENTS.md")
         assert len(text) > 4000
-        # The guidance says a rules file should stay under 500 lines to
-        # avoid becoming noise the agent skims past.
-        assert len(text.splitlines()) < 500
+        # A rules file must stay short enough not to become noise the
+        # agent skims past. The ceiling was 500 lines until 2026-11-24,
+        # when the file reached 499 and the owner raised it to 600 to make
+        # room for the interface guide (spec/constitution/guia-de-interfaz.md).
+        assert len(text.splitlines()) <= 600
 
     def test_states_all_seven_rules(self):
         text = _read("AGENTS.md")

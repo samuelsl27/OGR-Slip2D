@@ -248,6 +248,10 @@ opción, añade también el test que demuestra que **mueve el número**.
 
 - **Antes de una tarea no trivial, propón un plan y espera mi OK.** Usa
   plan mode.
+- **Antes de diseñar o revisar una ventana, diálogo, menú, acción, leyenda o
+  mensaje**, la guía de interfaz: `spec/constitution/guia-de-interfaz.md`
+  (la identidad de Slip2D que no se pierde y la base común de OGR-GUI,
+  D-1…D-14). Toda tarea de interfaz cierra con su lista de comprobación.
 - **Una tarea a la vez.** Al terminar, dime qué cambiaste y qué probaste.
 - **Si no estás seguro al 80 %, pregunta. No inventes** — sobre todo en
   fórmulas geotécnicas: una ecuación plausible pero incorrecta es el peor
