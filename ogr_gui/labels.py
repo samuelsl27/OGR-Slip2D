@@ -638,6 +638,10 @@ ENUM_NAMES = {
     "AnnotationKind": "the kind of annotation",
     "BlockObjectKind": "the kind of block search object",
     "PolylinePointMode": "an end of a block search polyline",
+    # D429 (ogr-core 0.2.11) -- the two readers that put a default in place
+    # of a value they did not know, now read through ``read_enum``
+    "PermeabilityModel": "the permeability model",
+    "AccelerationUnit": "the acceleration unit of a seismic record",
 }
 
 

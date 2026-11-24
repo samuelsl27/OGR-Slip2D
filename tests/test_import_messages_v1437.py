@@ -504,6 +504,10 @@ _ENUMS = {
 }
 #: the three of ``_ENUMS`` that are not an enumeration read by ``read_enum``
 _NOT_READ_ENUM = {"BoundaryType", "SupportType", "StrengthModel"}
+#: D429 (ogr-core 0.2.11) -- the two its readers took with a default, named
+#: in the window for the core that reads them by ``read_enum``; that they
+#: are read is ``test_every_enumeration_a_reader_calls_says_its_code``'s
+_D429_ENUMS = {"PermeabilityModel", "AccelerationUnit"}
 
 _BASE: dict = {}
 
@@ -801,9 +805,10 @@ class TestEachCodeSaysItInSpanish:
         ``ENUM_NAMES`` is the table, read here apart from it."""
         from ogr_gui.i18n import _DICTS
         from ogr_gui.labels import ENUM_NAMES
-        names = {k.split("(")[0] for k in _ENUMS} - _NOT_READ_ENUM
+        names = ({k.split("(")[0] for k in _ENUMS} - _NOT_READ_ENUM
+                 | _D429_ENUMS)
         assert names == set(ENUM_NAMES), names ^ set(ENUM_NAMES)
-        assert len(names) == 20
+        assert len(names) == 22
         for english in ENUM_NAMES.values():
             assert _DICTS["es"].get(english, english) != english, english
 
@@ -1081,12 +1086,31 @@ _NOT_A_NOTE = ()
 #: the packages whose readers the enumeration census reads
 _PACKAGES = ("ogr_core", "ogr_slip2d")
 #: readers that put a default in place of a value they do not know, said
-#: nowhere: left to D429 (the owner's decision in the review of 0.1.437)
-_TOLERANT = {
+#: nowhere: none since ogr-core 0.2.11 (D429), where the two the census
+#: found read through ``read_enum``.
+_TOLERANT = set()
+#: the two of ogr-core <= 0.2.10, accepted only from such a core until the
+#: pin reaches 0.2.11; then this goes (the way of D454, b02a2d5)
+_TOLERANT_UP_TO_0210 = {
     ("ogr_core/hydraulic/hydraulic_properties.py", "_model_from_dict",
      "PermeabilityModel"),
     ("ogr_core/loads/seismic_record.py", "from_dict", "AccelerationUnit"),
 }
+
+
+def _tolerated(tolerant) -> set:
+    """The readers a core may still tolerate: none from 0.2.11, the two of
+    :data:`_TOLERANT_UP_TO_0210` from a released core before it; a core
+    under development (``--dev-core``) either, as long as it is one of the
+    two sets. Returns the set that applies."""
+    import ogr_core
+    assert tolerant in (_TOLERANT, _TOLERANT_UP_TO_0210), tolerant
+    version = ogr_core.__version__
+    if ".dev" not in version:
+        release = tuple(int(x) for x in version.split(".")[:3])
+        want = _TOLERANT if release >= (0, 2, 11) else _TOLERANT_UP_TO_0210
+        assert tolerant == want, (version, tolerant ^ want)
+    return tolerant
 
 
 def _sentences(src, skip=()):
@@ -1244,12 +1268,15 @@ class TestTheCensuses:
                 else:
                     coded.append((rel, fn, cls))
         assert bare == [], bare
-        assert tolerant == _TOLERANT, tolerant ^ _TOLERANT
+        tolerated = _tolerated(tolerant)
         assert coded == [("ogr_core/geometry/boundary.py", "from_dict",
                           "BoundaryType")], coded
         # every enumeration read through ``read_enum`` has its name in the
         # window, and every name of the table is read somewhere
-        assert read == set(ENUM_NAMES), read ^ set(ENUM_NAMES)
+        # (the enumerations of a reader still tolerant are named for the
+        # core that reads them by ``read_enum``: D429)
+        assert read | {cls for _r, _f, cls in tolerated} == set(ENUM_NAMES), (
+            read ^ set(ENUM_NAMES))
 
     def test_the_censuses_see_their_cases(self):
         """On sources of their own: each finds what it is for."""

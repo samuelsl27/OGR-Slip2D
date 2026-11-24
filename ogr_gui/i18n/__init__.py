@@ -1007,6 +1007,9 @@ _DICTS: dict[str, dict[str, str]] = {
         'the kind of focus object': 'el tipo de objeto de foco',
         'the soil type of the Simple permeability model':
             'el tipo de suelo del modelo de permeabilidad Simple',
+        'the permeability model': 'el modelo de permeabilidad',
+        'the acceleration unit of a seismic record':
+            'la unidad de aceleración de un registro sísmico',
         'the type of a seepage boundary condition':
             'el tipo de una condición de contorno de la filtración',
         'the value type of the pore pressure grid':
@@ -1052,6 +1055,15 @@ _DICTS: dict[str, dict[str, str]] = {
         "not {found}.":
             'El elemento {n} de la sección «{section}» del archivo tiene que '
             'ser un objeto, no {found}.',
+        # D429 (ogr-core 0.2.11): a value no reader knows, and a field of an
+        # item of another type; the field and the section by their keys
+        "Unknown value of '{field}': '{value}'. Known: {known}":
+            'Valor desconocido de «{field}»: «{value}». Los que conoce: '
+            '{known}',
+        "The field '{field}' of item {n} of the section '{section}' of the "
+        "file must be {expected}, not {found}.":
+            'El campo «{field}» del elemento {n} de la sección «{section}» del '
+            'archivo tiene que ser {expected}, no {found}.',
         'a list': 'una lista',
         'an object': 'un objeto',
         'a list or null': 'una lista o null',

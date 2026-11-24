@@ -488,8 +488,32 @@ def _capture() -> dict:
 #: The cases whose answer does not move, and the ones that do, with the
 #: sentence each says now (the owner's decision: a section of another type
 #: gets the new sentence also where 0.1.437 already wrapped Python's).
-_UNCHANGED = ("vertice_str", "json_roto", "no_utf8", "material_sin_nombre",
-              "contorno_tipo", "peso_cadena")
+_UNCHANGED_0437 = ("vertice_str", "json_roto", "no_utf8",
+                   "material_sin_nombre", "contorno_tipo", "peso_cadena")
+#: D429 (ogr-core 0.2.11): a unit weight "x" is refused at opening, with
+#: this sentence; up to 0.2.10 it opened (and failed when computed)
+_PESO_CADENA = ("The field 'unit_weight' of item 1 of the section "
+                "'materials' of the file must be a number, not a string.")
+
+
+def _core_refuses_d429() -> bool:
+    """Whether the imported core refuses a field of another type (D429):
+    a released core from 0.2.11 must, one before must not; a core under
+    development (``--dev-core``) may be either. Goes with the pin."""
+    import ogr_core
+    import ogr_core.file_messages as fm
+    has = hasattr(fm, "FIELD_TYPE")
+    version = ogr_core.__version__
+    if ".dev" not in version:
+        release = tuple(int(x) for x in version.split(".")[:3])
+        assert has == (release >= (0, 2, 11)), (version, has)
+    return has
+
+
+def _unchanged() -> tuple:
+    if _core_refuses_d429():
+        return tuple(k for k in _UNCHANGED_0437 if k != "peso_cadena")
+    return _UNCHANGED_0437
 _ROOT_IS = "The file does not hold a project: it is %s, not an object."
 _SECTION = "The section '%s' of the file must be %s, not %s."
 _ITEM = "Item 1 of the section '%s' of the file must be an object, not %s."
@@ -585,10 +609,17 @@ class TestTheAgentReadsARefusal:
         assert loose == {}, loose
         opens = sorted(k.split(" ", 1)[1] for k, v in now.items()
                        if v[0] == "OPENS" and k.startswith("project_open"))
-        # a value of another type inside a section is D429; a BOM is read
-        assert opens == ["con_bom", "peso_cadena"], opens
+        # a value of another type inside a section is D429 (refused from
+        # ogr-core 0.2.11); a BOM is read
+        want = ["con_bom"] + ([] if _core_refuses_d429() else ["peso_cadena"])
+        assert opens == want, opens
+        if _core_refuses_d429():
+            for op in ("project_open", "properties_import"):
+                kind, text = now[op + " peso_cadena"]
+                assert kind == "InvalidArgument", (op, kind)
+                assert text.endswith("ValueError: " + _PESO_CADENA), text
         # every case the test names is one of the CASES
-        named = {*_NOW, *_INSIDE, "carpeta", *_UNCHANGED, "con_bom"}
+        named = {*_NOW, *_INSIDE, "carpeta", *_UNCHANGED_0437, "con_bom"}
         assert named == {k for k, _h in CASES}, named ^ {k for k, _h in CASES}
 
     def test_the_two_operations_say_the_same(self):
@@ -604,7 +635,7 @@ class TestTheAgentReadsARefusal:
         now = _capture()
         assert sorted(_V1437) == sorted(now), sorted(set(_V1437) ^ set(now))
         assert len(_V1437) == 2 * len(CASES) == 64
-        for key in _UNCHANGED:
+        for key in _unchanged():
             name = "project_open " + key
             assert now[name] == _V1437[name], (name, now[name], _V1437[name])
             name = "properties_import " + key
