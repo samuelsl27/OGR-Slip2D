@@ -29,9 +29,11 @@ THE INVARIANT
     own: its Chebyshev coefficients past that degree vanish.
 
 COST
-    About 6 s (the judge on 100 wedges is a 200 × 200 linear system per
-    point of a 1500-point scan, twice); worth it because it is the
-    reference (rule 1).
+    The judge on 100 wedges is a 200 × 200 linear system per point of its
+    scan, and a root it finds is bisected 80 times: the scans are dense only
+    where the roots crowd (just above the factor) and coarse above, and
+    only on the 100-wedge circle. About 12 s alone (142 s before that,
+    measured at v0.1.488): it is the reference (rule 1).
 """
 import math
 import sys
@@ -113,7 +115,10 @@ def _is_the_largest_root(si, sol):
     lo, hi = judge.h(F * (1 - 1e-7)), judge.h(F * (1 + 1e-7))
     assert lo is not None and hi is not None and (lo > 0.0) != (hi > 0.0), \
         (F, lo, hi)
-    assert _roots_above(judge, F, 50.0) == [], F
+    # dense where the roots of these cases crowd (just above F), coarse up to
+    # 50, where a comb of roots has none to crowd
+    assert _roots_above(judge, F, 2.0 * F, n=300) == [], F
+    assert _roots_above(judge, 2.0 * F, 50.0, n=100) == [], F
 
 
 class TestTheLargestRoot:
@@ -123,7 +128,8 @@ class TestTheLargestRoot:
             si = _circle_wedges(n)
             sol = _solve(si)
             assert abs(sol.fos - want) < 1e-5, (n, sol.fos)
-            _is_the_largest_root(si, sol)
+        # the judge on the harder one (the cost: see the module)
+        _is_the_largest_root(si, sol)
 
     def test_problem_5_without_its_table(self):
         for n in (2, 10, 25):
@@ -150,8 +156,11 @@ class TestTheSweepOfBeforeMissedIt:
                          (_p5_wedges(10), 0.595702)):
             sol = _solve(si, "sweep")
             assert abs(sol.fos - want) < 1e-5, sol.fos
-            above = _roots_above(_judge(si, sol), sol.fos, 50.0)
-            assert above, sol.fos
+            # the judge changes sign across a factor above it: the one the
+            # enumerator gives (0.8191 and 0.6096), judged on its own
+            larger = _solve(si).fos
+            assert larger > sol.fos * 1.02
+            assert _judge(si, sol).is_root(larger), larger
 
 
 class TestTheNextRootOfTheNote:

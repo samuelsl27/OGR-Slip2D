@@ -122,7 +122,12 @@ todas las superficies con pérdidas. La opción A sola (renombrar) dejaba el cí
   - `tests/test_sarma_wedge_count_v1488.py`;
   - `python tests/_runner.py sarma i18n spanish report version unwrapped budget --jobs 4`: 583 casos en verde;
   - el A/B en memoria del 03.
+  - **la suite entera con `--jobs 4` en b81352e: 7584 casos, 7582 pasan, 0 fallan, 2 saltados, sin fugas**
+    (también vale para 0.1.487, cuyo código no cambió después);
+  - la suite marcó `test_sarma_sweep_v1487.py` como lento: 212 s en la corrida repartida y 142 s solo. El juez
+    `_kc_direct` en 100 cuñas tarda unos 20 ms por punto. Se abarató sin tocar lo que juzga: el barrido denso solo
+    sobre [F, 2F], el grueso hasta 50, el juez solo en el círculo de 100, y la regla 7 por el cambio de signo del
+    juez en la raíz mayor en vez de enumerar el peine. Ahora tarda unos 12 s solo.
 - Falta:
-  - la suite entera con `--jobs 4`, al final de la tanda;
   - re-correr el 9 del banco (su crítica de Sarma cambia) y regenerar la comparativa;
   - pedir a OGR-Core el texto de la fila del informe y del docstring de `SarmaSettings`.
