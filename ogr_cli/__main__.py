@@ -97,6 +97,34 @@ METHOD_ALIASES = {
 }
 
 
+def _open_project(project: Path) -> Project:
+    """The project of ``project``, or a one-line refusal and exit code 1.
+
+    v0.1.490 (D430) -- ``info`` and ``compute`` read with a bare
+    ``Project.load``, so a folder named ``x.ogr``, a file whose root is a
+    list or a cut JSON ended in a 52-63 line traceback. The reasons are
+    ``ogr_api.ops.project.load_ogr``'s (D422), the reader the agent and
+    the window already use: one list of what counts as "not a readable
+    .ogr", not a second copy here that would drift from it. The code stays
+    1, as for ``File not found`` (the owner's decision): both mean the
+    file could not be opened.
+    """
+    if not project.exists():
+        console.print(f"[red]File not found:[/red] {escape(str(project))}")
+        raise typer.Exit(1)
+    from ogr_api.errors import InvalidArgument
+    from ogr_api.ops.project import load_ogr
+    try:
+        return load_ogr(project.resolve())
+    except InvalidArgument as exc:
+        # the message without the agent's ``[E_INVALID_ARGUMENT]`` prefix,
+        # and on ONE line: rich wraps at the console width (80 in a pipe),
+        # and a reason cut in three is what a script cannot grep
+        console.print(f"[red]Cannot open project:[/red] {escape(exc.message)}",
+                      soft_wrap=True)
+        raise typer.Exit(1) from None
+
+
 def _resolve_method(name: str) -> Optional[str]:
     """The registered method id ``name`` refers to, or None."""
     key = name.strip().lower().replace("-", "_").replace(" ", "_")
@@ -110,10 +138,7 @@ def info(
     project: Path = typer.Argument(..., help="Path to the .ogr project file"),
 ):
     """Show a summary of the project."""
-    if not project.exists():
-        console.print(f"[red]File not found:[/red] {escape(str(project))}")
-        raise typer.Exit(1)
-    p = Project.load(project)
+    p = _open_project(project)
 
     tbl = Table(title=f"OGR Project — {escape(p.name)}")
     tbl.add_column("Field", style="cyan", no_wrap=True)
@@ -184,10 +209,7 @@ def compute(
     with no options reproduces what the graphical interface would do.
     Passing an option overrides that one setting and nothing else.
     """
-    if not project.exists():
-        console.print(f"[red]File not found:[/red] {escape(str(project))}")
-        raise typer.Exit(1)
-    p = Project.load(project)
+    p = _open_project(project)
 
     # v0.1.77 — overrides are written onto the loaded project, which is an
     # in-memory copy; nothing is saved back, so the user's file is never
