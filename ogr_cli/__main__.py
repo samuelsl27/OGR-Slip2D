@@ -159,8 +159,10 @@ def compute(
     slices: Optional[int] = typer.Option(
         None, help="Number of slices per surface [project setting]"),
     sarma_slices: Optional[int] = typer.Option(
-        None, help="Least number of wedges of Sarma's method "
-                   "[project setting]"),
+        None, help="Number of wedges asked for in Sarma's method: a "
+                   "surface can have more (vertices, contacts, water-table "
+                   "cuts) or fewer (divisions dropped on a straight stretch "
+                   "of one Mohr-Coulomb material) [project setting]"),
     nx: Optional[int] = typer.Option(
         None, help="Grid divisions along X [project setting]"),
     ny: Optional[int] = typer.Option(

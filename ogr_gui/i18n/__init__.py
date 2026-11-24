@@ -617,7 +617,9 @@ _DICTS: dict[str, dict[str, str]] = {
         'X right (kN)': 'X derecha (kN)',
         # v0.1.468 (D357) — Sarma's method in the PDF report
         'Number of Wedges': 'Número de cuñas',
-        'Least Number of Wedges': 'Número mínimo de cuñas',
+        # v0.1.488 (D454): the engine does not keep a least number; the
+        # English key is OGR-Core's report row until a new core renames it
+        'Least Number of Wedges': 'Número de cuñas pedido',
         'Face Angles': 'Ángulo de las caras',
         'Face Strength': 'Resistencia de las caras',
         'Face Cohesion': 'Cohesión de las caras',
@@ -4337,10 +4339,11 @@ _DICTS: dict[str, dict[str, str]] = {
             'Sarma (dovelas no verticales): no. Acota el factor de seguridad y lo cierra por el método de Brent, que no tiene iteración que extrapolar.',
         'Sarma (non-vertical slices)':
             'Sarma (dovelas no verticales)',
-        'Least number of wedges:':
-            'Número mínimo de cuñas:',
-        'The least number of wedges. The boundaries are the vertices of the surface, its crossings with the water table and with the material contacts, and divisions up to this number. On a straight stretch of one Mohr-Coulomb material more wedges do not change the factor of safety: the wedges of a straight base add up to the one they split. On a circle, whose bases are chords, and where the strength of a base depends on its stress, they do.':
-            'El número mínimo de cuñas. Las fronteras son los vértices de la superficie, sus cruces con el nivel freático y con los contactos de material, y divisiones hasta este número. En un tramo recto de un solo material de Mohr-Coulomb, más cuñas no cambian el factor de seguridad: las cuñas de una base recta suman la que parten. En un círculo, cuyas bases son cuerdas, y donde la resistencia de una base depende de su tensión, sí.',
+        # v0.1.488 (D454): not a least number; what the engine is asked for
+        'Number of wedges asked for:':
+            'Número de cuñas pedido:',
+        'The number of wedges asked for. The boundaries are the vertices of the surface, its crossings with the water table and with the material contacts, and uniform divisions up to this number, so a surface can have more wedges than asked. A division whose face would cross a neighbour or not reach the ground is dropped on a straight stretch of one Mohr-Coulomb material, so a surface can also have fewer: there more wedges do not change the factor of safety (the wedges of a straight base add up to the one they split). Elsewhere, on the chords of a circle say, that face is made vertical and the count is kept. On a circle, whose bases are chords, and where the strength of a base depends on its stress, more wedges do change the factor.':
+            'El número de cuñas pedido. Las fronteras son los vértices de la superficie, sus cruces con el nivel freático y con los contactos de material, y divisiones uniformes hasta este número, así que una superficie puede tener más cuñas que las pedidas. Una división cuya cara se cruzaría con una vecina o no llegaría al terreno se quita en un tramo recto de un solo material de Mohr-Coulomb, así que una superficie también puede tener menos: ahí más cuñas no cambian el factor de seguridad (las cuñas de una base recta suman la que parten). En otro sitio, en las cuerdas de un círculo por ejemplo, esa cara se pone vertical y el número se conserva. En un círculo, cuyas bases son cuerdas, y donde la resistencia de una base depende de su tensión, más cuñas sí cambian el factor.',
         'Tolerance on F:':
             'Tolerancia en F:',
         "Tolerance of the root of Kc(F) = kh on the factor of safety. The global tolerance does not reach Sarma's method.":
@@ -4351,8 +4354,8 @@ _DICTS: dict[str, dict[str, str]] = {
             'Iteraciones de la raíz de Kc(F) = kh; pasadas, no hay factor. El máximo global no llega al método de Sarma.',
         'Face angles:':
             'Ángulo de las caras:',
-        "The angle of the faces no vertex gives one. Bisector: the bisector of the two bases that meet; mean normal: their normals weighted by the lengths of the bases; vertical: the vertical methods' slices. A face that would cross a neighbour or not reach the ground is dropped with its boundary where it is a uniform division, and made vertical at a vertex, a contact or a water-table cut.":
-            'El ángulo de las caras que ningún vértice da. Bisectriz: la bisectriz de las dos bases que se encuentran; normal media: sus normales ponderadas por la longitud de las bases; vertical: las dovelas de los métodos verticales. Una cara que se cruzaría con una vecina o no llegaría al terreno se quita con su frontera si es una división uniforme, y se pone vertical en un vértice, un contacto o un corte del nivel freático.',
+        "The angle of the faces no vertex gives one. Bisector: the bisector of the two bases that meet; mean normal: their normals weighted by the lengths of the bases; vertical: the vertical methods' slices. A face that would cross a neighbour or not reach the ground is dropped with its boundary where it is a uniform division on a straight stretch of one Mohr-Coulomb material, and made vertical elsewhere: at a vertex, a contact, a water-table cut or on the chords of a circle.":
+            'El ángulo de las caras que ningún vértice da. Bisectriz: la bisectriz de las dos bases que se encuentran; normal media: sus normales ponderadas por la longitud de las bases; vertical: las dovelas de los métodos verticales. Una cara que se cruzaría con una vecina o no llegaría al terreno se quita con su frontera si es una división uniforme en un tramo recto de un solo material de Mohr-Coulomb, y se pone vertical en otro sitio: en un vértice, un contacto, un corte del nivel freático o en las cuerdas de un círculo.',
         'Bisector':
             'Bisectriz',
         'Mean normal':

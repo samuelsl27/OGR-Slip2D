@@ -129,6 +129,16 @@ VERTICALIZED = "verticalized"
 #: never dropped nor made vertical.
 OPTIMIZED = "optimized"
 
+#: v0.1.488 (D454) -- two bases closer in angle than this [rad] are one
+#: straight stretch for :func:`build_wedges`: a uniform division between them
+#: may be dropped (the rounding of a polyline cut by a division is ~1e-12;
+#: the chords of a circle with 1000 wedges differ by ~1e-3).
+_COLLINEAR = 1e-9
+#: v0.1.488 (D454) -- drop a crossing uniform division only on a straight
+#: stretch of one Mohr-Coulomb material (True), or wherever it is uniform,
+#: as v0.1.464 to v0.1.487 did (False: kept for the A/B and its test).
+DROP_ONLY_ON_STRAIGHT = True
+
 #: Where the strength of a face comes from when no vertex gives it one.
 MATERIALS = "materials"
 NO_STRENGTH = "none"
@@ -529,7 +539,8 @@ def boundaries_on(project, surface, x_l: float, x_r: float, num_wedges: int,
     """The abscissas of the wedge boundaries on ``surface`` over
     ``[x_l, x_r]`` (see the module): its vertices, its crossings with the
     water table and, if ``at_materials``, with the material contacts, and
-    uniform divisions up to ``num_wedges``, a minimum.
+    uniform divisions up to ``num_wedges``, the number asked for (more
+    when the mandatory boundaries alone pass it).
 
     With ``at_materials`` they are the slicer's own cuts for
     ``num_slices = num_wedges`` (``slicer._slice_boundaries``, by the same
@@ -560,7 +571,7 @@ def _mandatory(project, surface, x_l, x_r, at_materials) -> list:
     """The interior boundaries :func:`boundaries_on` must keep: the
     vertices of the surface and its crossings with the water table and the
     contacts. The others are uniform divisions, there only to make up the
-    least number (v0.1.464)."""
+    number asked for (v0.1.464)."""
     xs = boundaries_on(project, surface, x_l, x_r, 1, at_materials)
     return xs[1:-1]
 
@@ -689,7 +700,9 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
         surface: the slip surface ``vertical`` was sliced from (resolved in
             place by that slicing).
         vertical: ``slice_surface(project, surface, ...)``, not None.
-        num_wedges: the least number of wedges.
+        num_wedges: the number of wedges asked for: the surface can have
+            more (mandatory boundaries) or, on a straight stretch of one
+            Mohr-Coulomb material, fewer (v0.1.488, D454).
         angles: the policy of the faces nobody gives an angle
             (``angles.POLICIES``).
         vertex_angles: ``{(x, y): θ in degrees}`` for the faces rising from
@@ -768,10 +781,20 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
     # * dropped with its boundary when it is a uniform division: two wedges
     #   on one straight base of one material add up to the wedge they split
     #   (``TestFacesOnAStraightStretch`` of v1463), so the factor does not
-    #   move, and the count stays a minimum the divisions try to meet;
+    #   move, and the count is a number the divisions try to meet;
     # * made vertical, ONE of the pair (the further from vertical), at a
     #   vertex, a contact or a water-table cut, which two vertical faces
     #   never cross (the surface is single-valued in x).
+    #
+    # v0.1.488 (D454, the owner's decision of 2026-11-24): a uniform
+    # division is dropped only where the two bases it parts are one straight
+    # stretch of one Mohr-Coulomb material (``droppable``), which is what
+    # the identity above needs. Elsewhere, the chords of a circle or of an
+    # arc, its face is made vertical like one at a vertex. Dropping there
+    # changed the SURFACE: the cascade took a circle of the bank's 002 asked
+    # for 25 wedges down to 2 chords, F 2.21 with the bisector against 4.19
+    # with 25 vertical faces and 4.37 by Spencer, on the unsafe side
+    # (``_auditoria/P9_D454/censo_cunas_d454.py``).
     #
     # Making every crossing face vertical, as the first version did,
     # chained: a vertical face at a concave vertex crosses the next normal
@@ -794,6 +817,19 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
         V.append((cols[-1].base_x_right, cols[-1].base_y_right))
         alpha = [c.base_angle for c in cols]
         lengths = [c.base_length for c in cols]
+
+        def droppable(k):
+            """Boundary ``k`` is a uniform division between two bases on one
+            straight stretch of one Mohr-Coulomb material (v0.1.488, D454)."""
+            if not plain(xs[k]):
+                return False
+            if not DROP_ONLY_ON_STRAIGHT:
+                return True
+            a, b = cols[k - 1], cols[k]
+            return (abs(alpha[k - 1] - alpha[k]) <= _COLLINEAR
+                    and a.material is b.material
+                    and isinstance(getattr(a.material, "strength", None),
+                                   MohrCoulomb))
 
         # The faces: angle, top, position of the top along the ground.
         interior = {k: V[k] for k in range(1, n)}
@@ -830,7 +866,7 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
                 top = ray_ground_exit(ground, V[k][0], V[k][1], theta,
                                       grid_tol)
             if top is None and sources[-1] not in ("vertex", OPTIMIZED):
-                if plain(xs[k]):
+                if droppable(k):
                     drop = k
                     break
                 theta, sources[-1] = 0.5 * math.pi, VERTICALIZED
@@ -855,7 +891,7 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
             policy = [j for j in (k, k + 1)
                       if sources[j] not in ("end", "vertex", VERTICALIZED,
                                             OPTIMIZED)]
-            plains = [j for j in policy if plain(xs[j])]
+            plains = [j for j in policy if droppable(j)]
             if plains:
                 drop = plains[-1]
                 break

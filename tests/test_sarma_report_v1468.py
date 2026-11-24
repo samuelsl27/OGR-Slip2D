@@ -46,8 +46,10 @@ INVARIANTS, against references outside this code (AGENTS.md, rule 1)
    v1447``), on problem 4 with the 25 wedges of the settings, of which the
    surface keeps fewer: with Sarma it writes the face table (one row per
    face, at the rows' rounding), the block of Sarma's settings (each
-   setting changed moves its row: rule 7; the least number of wedges by
-   the Methods page's name, apart from the wedges the surface has) and
+   setting changed moves its row: rule 7; the number of wedges asked for,
+   apart from the wedges the surface has; its English row is OGR-Core's,
+   «Least Number of Wedges» until a new core renames it, and its Spanish
+   «Número de cuñas pedido» since v0.1.488, D454) and
    Kc, the least |q|, the force ratio, the wedges and the faces made
    vertical of the critical (one, on the fixture of
    ``test_sarma_method_v1464`` whose bisectors cross); without Sarma, none
@@ -638,7 +640,7 @@ class TestTheSpanish:
             message = note_text("Wedge and face data exported to %s and %s")
         finally:
             set_language(before)
-        assert keys[:3] == ["Número mínimo de cuñas", "Ángulo de las caras",
+        assert keys[:3] == ["Número de cuñas pedido", "Ángulo de las caras",
                             "Resistencia de las caras"], keys
         assert "Número de cuñas" in keys[3:], keys
         for k in ("Fronteras en los contactos de material",

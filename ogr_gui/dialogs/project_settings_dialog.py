@@ -485,8 +485,8 @@ class _MethodsPage(QWidget):
         self.spn_sarma_n = QSpinBox()
         self.spn_sarma_n.setRange(1, 500)
         self.spn_sarma_n.setValue(sa.num_slices)
-        self.spn_sarma_n.setToolTip(tr('The least number of wedges. The boundaries are the vertices of the surface, its crossings with the water table and with the material contacts, and divisions up to this number. On a straight stretch of one Mohr-Coulomb material more wedges do not change the factor of safety: the wedges of a straight base add up to the one they split. On a circle, whose bases are chords, and where the strength of a base depends on its stress, they do.'))
-        form.addRow(tr('Least number of wedges:'), self.spn_sarma_n)
+        self.spn_sarma_n.setToolTip(tr('The number of wedges asked for. The boundaries are the vertices of the surface, its crossings with the water table and with the material contacts, and uniform divisions up to this number, so a surface can have more wedges than asked. A division whose face would cross a neighbour or not reach the ground is dropped on a straight stretch of one Mohr-Coulomb material, so a surface can also have fewer: there more wedges do not change the factor of safety (the wedges of a straight base add up to the one they split). Elsewhere, on the chords of a circle say, that face is made vertical and the count is kept. On a circle, whose bases are chords, and where the strength of a base depends on its stress, more wedges do change the factor.'))
+        form.addRow(tr('Number of wedges asked for:'), self.spn_sarma_n)
         self.dsp_sarma_tol = QDoubleSpinBox()
         self.dsp_sarma_tol.setDecimals(8)
         self.dsp_sarma_tol.setRange(1e-8, 1.0)
@@ -510,7 +510,7 @@ class _MethodsPage(QWidget):
             self.cbo_sarma_angles.addItem(label, value)
         self.cbo_sarma_angles.setCurrentIndex(
             max(0, self.cbo_sarma_angles.findData(sa.slice_angles)))
-        self.cbo_sarma_angles.setToolTip(tr("The angle of the faces no vertex gives one. Bisector: the bisector of the two bases that meet; mean normal: their normals weighted by the lengths of the bases; vertical: the vertical methods' slices. A face that would cross a neighbour or not reach the ground is dropped with its boundary where it is a uniform division, and made vertical at a vertex, a contact or a water-table cut.") + "\n" + tr("Optimised: the angles that make the factor least, from the best of the three, by steps of 10° down to 0.3125° (a step counts when it lowers the factor by more than the tolerance on F); the faces given at vertices stay. Global minimum: every surface with the bisector, then the critical one optimised; all surfaces: every surface optimised, much slower (from seconds to a minute a surface with 25 wedges)."))
+        self.cbo_sarma_angles.setToolTip(tr("The angle of the faces no vertex gives one. Bisector: the bisector of the two bases that meet; mean normal: their normals weighted by the lengths of the bases; vertical: the vertical methods' slices. A face that would cross a neighbour or not reach the ground is dropped with its boundary where it is a uniform division on a straight stretch of one Mohr-Coulomb material, and made vertical elsewhere: at a vertex, a contact, a water-table cut or on the chords of a circle.") + "\n" + tr("Optimised: the angles that make the factor least, from the best of the three, by steps of 10° down to 0.3125° (a step counts when it lowers the factor by more than the tolerance on F); the faces given at vertices stay. Global minimum: every surface with the bisector, then the critical one optimised; all surfaces: every surface optimised, much slower (from seconds to a minute a surface with 25 wedges)."))
         form.addRow(tr('Face angles:'), self.cbo_sarma_angles)
         self.cbo_sarma_strength = QComboBox()
         for label, value in ((tr('From the materials'), "materials"),
