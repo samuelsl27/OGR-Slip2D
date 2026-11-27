@@ -57,7 +57,7 @@ nueva de `results_get`.
   Ningún diálogo modal en el camino que corre el test.
 - Lienzo: lo que se marca se dibuja, y lo que se desmarca vuelve a la imagen de antes, bit a bit
   (regla 7).
-- Gemela en OGR-GUI (`ogr_ui`): sin comprobar. Hay que avisar a esa sesión.
+- Gemela en OGR-GUI (`ogr_ui`): comprobada por esa sesión el 2026-11-27, todo en orden.
 
 ## 3. Tests
 
