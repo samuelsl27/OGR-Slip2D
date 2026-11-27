@@ -55,8 +55,11 @@ recomendación, deshabilitarlo con su porqué, porque la pregunta quedó sin res
     siempre. El estado se recalcula al cambiar de campo.
 - `ogr_gui/interpret_window.py`: abre el diálogo con `quantity=self._run_quantity()`, y su ajuste
   usa `fit_percentile_for` solo en el campo del factor.
-- `ogr_gui/i18n/__init__.py`: el castellano del *tooltip*. Nombra el botón como lo rotula Qt en
-  castellano: «Restaurar los valores predeterminados».
+- `ogr_gui/i18n/__init__.py`: el castellano del *tooltip*, en los términos del programa: «cálculo»
+  y no «corrida» (`test_texts_details_v1418`), y «por defecto» y no «predeterminado»
+  (`test_voice_and_terms_v1325`). Por eso no cita el rótulo que Qt da al botón («Restaurar los
+  valores predeterminados»), sino «el botón de restaurar los valores por defecto». Los dos tests
+  lo cazaron en la primera suite entera de esta versión.
 - **gemela en ogr_ui:** `contours` (`fit_percentile_for`). En `ogr_ui` esto ya está resuelto con
   `ContourField.fit_percentile` y `start`, y la casilla no toca los intervalos. Hay que avisar en
   OGR-GUI.
@@ -89,3 +92,8 @@ recomendación, deshabilitarlo con su porqué, porque la pregunta quedó sin res
   propone y no por la firma: fallan 6 de 8 (pasan la premisa y el control de factores).
 - Áreas `contour`, `interpret`, `legend`, `i18n`, `translation`, `dialogs_fit`, `terms_spanish` y
   `seismic`: 460 en verde.
+
+## 4. Suite
+
+- La primera suite entera dio 2 fallos, los dos del castellano del *tooltip* (§1). Corregido y
+  repetida: ver el commit que la cierra.

@@ -3167,7 +3167,7 @@ _DICTS: dict[str, dict[str, str]] = {
             "Centro ({0:.2f}, {1:.2f}) — {2} = {3:.3f}",
         # v0.1.502 -- the 0 to 6 button of Contour Options on a seismic run
         "0 to 6 is the range of a factor of safety, and this run reports a critical seismic coefficient or a Newmark displacement. Restore Defaults gives the scale of what it reports.":
-            "De 0 a 6 es el rango de un factor de seguridad, y esta corrida informa de un coeficiente sísmico crítico o de un desplazamiento de Newmark. «Restaurar los valores predeterminados» da la escala de lo que informa.",
+            "De 0 a 6 es el rango de un factor de seguridad, y este cálculo informa de un coeficiente sísmico crítico o de un desplazamiento de Newmark. El botón de restaurar los valores por defecto da la escala de lo que informa.",
         "Centre ({0:.2f}, {1:.2f}) — FoS = {2:.3f}":
             "Centro ({0:.2f}, {1:.2f}) — FS = {2:.3f}",
         "Close Boundary": "Cerrar contorno",
