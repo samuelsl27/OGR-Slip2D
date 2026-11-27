@@ -1865,7 +1865,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Direction:': 'Sentido:',
         'Scale record by a factor of:': 'Escalar el registro por un factor de:',
         'Multiplies the accelerations of the record. Leave it at 1 to use the record as it was measured.': 'Multiplica las aceleraciones del registro. Déjalo en 1 para usar el registro tal como se midió.',
-        'With either option on, the critical surface reported is the one with the LOWEST Ky, which is not in general the one with the lowest factor of safety. Records are defined under Loading.': 'Con cualquiera de las dos opciones activa, la superficie crítica que se informa es la de Ky MÁS BAJO, que en general no es la de factor de seguridad más bajo. Los registros se definen en Cargas.',
+        'With either option on, the critical surface reported is the one with the LOWEST Ky, which is not in general the one with the lowest factor of safety; with Newmark and upslope displacement allowed, it is the one with the largest net displacement. Records are defined under Loading.': 'Con cualquiera de las dos opciones activa, la superficie crítica que se informa es la de Ky MÁS BAJO, que en general no es la de factor de seguridad más bajo; con Newmark y el desplazamiento talud arriba permitido, es la de mayor desplazamiento neto. Los registros se definen en Cargas.',
         'Critical seismic coefficient': 'Coeficiente sísmico crítico',
         'Newmark displacement': 'Desplazamiento de Newmark',
         'Ky:': 'Ky:',

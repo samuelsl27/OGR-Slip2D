@@ -2436,6 +2436,12 @@ def run_analysis(project, method_ids=None,
                 store = SliceStore()
             search.slice_store = store
         results[mid] = search.run(project)
+        # v0.1.499 (D437) — the seismic lines are computed HERE, before any
+        # note reads ``critical``: with upslope sliding they decide which
+        # surface the run publishes (the largest net displacement), and the
+        # notes below are about that surface. Said where they always were,
+        # further down, so the order of the warnings does not change.
+        seismic_lines = _seismic_notes(project, mid, results[mid])
         # v0.1.100 — a surface that daylights near-vertically has a factor
         # of safety that moves with the slice count. Said once per method,
         # on the surface the run actually reports.
@@ -2520,15 +2526,16 @@ def run_analysis(project, method_ids=None,
             if line not in warnings:
                 warnings.append(line)
         # v0.1.127 — the seismic modes have their own things to say, and
-        # the Newmark displacement is attached here rather than inside the
-        # search. It is attached AFTER because the search does not need it:
-        # the displacement of a rigid block never increases with the
-        # critical acceleration, so the surface that moves the most is the
-        # one with the lowest Ky, which is what the search already
-        # minimised. Integrating a record inside the loop would have bought
-        # a different ordering of the same surfaces at the price of one
-        # pass over the record per trial.
-        for line in _seismic_notes(project, mid, results[mid]):
+        # the Newmark displacement is attached after the search rather than
+        # inside it (above, since v0.1.499). The search does not need it:
+        # the displacement of a rigid block sliding one way never increases
+        # with the critical acceleration, so the surface that moves the most
+        # is the one with the lowest Ky, which is what the search already
+        # minimised. With upslope sliding that premise fails (D437), and the
+        # run publishes the largest net displacement among the surfaces the
+        # same search found: integrating a record inside the loop would cost
+        # one pass over the record per trial and change the population.
+        for line in seismic_lines:
             if line not in warnings:
                 warnings.append(line)
 
@@ -2773,6 +2780,15 @@ def _seismic_lines(project, method_id: str, evaluations, *,
     at = len(lines)
     if cfg.newmark:
         _newmark_lines(project, method_id, cfg, valid, _has_ky, lines)
+        # v0.1.499 (D437) -- with upslope sliding the displacement is a net
+        # one, and a higher Ky can move more: the run publishes the surface
+        # that moves the most (``SearchResult.net_newmark``). Only when some
+        # surface got a displacement, so a run without a usable record keeps
+        # the lowest Ky, which is what it reports then.
+        if (result is not None and cfg.allow_upslope
+                and any("newmark_displacement" in (r.details or {})
+                        for r in valid)):
+            result.net_newmark = True
     note = _static_unstable_note(cfg, valid, one_surface, result)
     if note is not None:
         lines.insert(at, method_note(method_id, note))

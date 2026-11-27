@@ -1158,11 +1158,14 @@ class _SeismicPage(QWidget):
             "use the record as it was measured."))
         form.addRow(tr("Scale record by a factor of:"), self.sp_scale)
 
+        # v0.1.499 (D437) -- and with upslope sliding allowed, the one that
+        # moves the most: the net displacement does not fall with the Ky
         note = QLabel(tr(
             "With either option on, the critical surface reported is the "
             "one with the LOWEST Ky, which is not in general the one with "
-            "the lowest factor of safety. Records are defined under "
-            "Loading."))
+            "the lowest factor of safety; with Newmark and upslope "
+            "displacement allowed, it is the one with the largest net "
+            "displacement. Records are defined under Loading."))
         note.setWordWrap(True)
         form.addRow("", note)
 

@@ -319,9 +319,19 @@ def _optimize_argument(value):
 # returned before, and that is the test.
 #
 # There is no third objective. The Newmark mode also minimises Ky, because
-# the displacement of a rigid block is non-increasing in the critical
-# acceleration — so the surface that moves the most IS the one with the
-# lowest Ky, and integrating a record inside the search would buy nothing.
+# the displacement of a rigid block that slides one way only is
+# non-increasing in the critical acceleration (Newmark 1965) — so the surface
+# that moves the most IS the one with the lowest Ky, and integrating a record
+# inside the search would buy nothing.
+#
+# v0.1.499 (D437) — that premise holds only without upslope sliding. With
+# ``allow_upslope`` the displacement is a NET one, downslope less upslope,
+# and a higher Ky can move more: on the demo slope with c = 12 kPa and a
+# 0.3 g sinusoid, 4 of 152 surfaces moved more than the lowest Ky's 0.236 cm,
+# the most 1.269 cm at Ky 0.1543. The search still steers on Ky (the owner's
+# decision: the population does not change), and the surface PUBLISHED is
+# chosen afterwards by the largest net displacement (``newmark_net_key``,
+# ``SearchResult.net_newmark``), which is what the reference highlights.
 OBJECTIVE_FOS = "fos"
 OBJECTIVE_KY = "ky"
 
@@ -341,6 +351,26 @@ def surface_score(result, objective: str = OBJECTIVE_FOS) -> float:
             return math.inf
         return float(ky)
     return result.fos
+
+
+def newmark_net_key(result, score) -> tuple:
+    """:func:`criticality_key` of a Newmark run with upslope sliding allowed
+    (v0.1.499, D437): valid before invalid, admissible before inadmissible,
+    then the LARGEST net displacement, and between two that move the same,
+    the lower ``score`` (the Ky). A surface without a displacement ranks
+    after every one with it.
+
+    The displacement is the one ``_seismic_lines`` attaches after the search
+    (``details["newmark_displacement"]``, Newmark 1965 integrated both ways),
+    so this key is only meaningful once it is there; ``SearchResult`` asks it
+    only when ``net_newmark`` says so."""
+    moved = (result.details or {}).get("newmark_displacement")
+    if moved is None or not math.isfinite(moved):
+        neg = math.inf
+    else:
+        neg = -float(moved)
+    return (not result.is_valid, not getattr(result, "admissible", True),
+            neg, score(result))
 
 
 def criticality_key(result, score) -> tuple:
@@ -434,6 +464,14 @@ class SearchResult:
     # that predates the seismic modes and for every run with them off,
     # which is why nothing downstream had to learn a new name.
     objective: str = OBJECTIVE_FOS
+    # v0.1.499 (D437) — a Newmark run with upslope sliding allowed: its
+    # critical surface is the one with the largest net displacement
+    # (``newmark_net_key``), not the lowest Ky the search minimised. Set by
+    # the run after it attaches the displacements (``_seismic_lines``), and
+    # only when some surface got one; False everywhere else, so every other
+    # run chooses as it always did. ``objective`` stays "ky": that is what
+    # the search minimised, and what every reader of it compares against.
+    net_newmark: bool = False
     # v0.1.121 — lines the run needs to say once, not once per surface.
     # Weak-layer case generation is the first user: when a surface is cut by
     # more layers than the case limit allows, the set of cases is truncated,
@@ -492,6 +530,15 @@ class SearchResult:
         """This run's objective, evaluated on one of its surfaces."""
         return surface_score(result, self.objective)
 
+    def rank_key(self, result) -> tuple:
+        """The order in which this run's surfaces compete to be published:
+        :func:`criticality_key`, or :func:`newmark_net_key` on a Newmark run
+        with upslope sliding (v0.1.499, D437). ``critical`` and ``top_n``
+        ask it, so ``top_n(1)[0] is critical`` still holds (D361)."""
+        if getattr(self, "net_newmark", False):
+            return newmark_net_key(result, self.score)
+        return criticality_key(result, self.score)
+
     def all_evaluations(self) -> list[LEMResult]:
         """Every surface this run analysed: the search's and the user's.
 
@@ -526,13 +573,16 @@ class SearchResult:
         The reference is explicit that specific surfaces and a search can be
         defined for the same analysis, and that the global minimum is the
         lowest of ALL surfaces analysed.
+
+        v0.1.499 (D437) — in the order of ``rank_key``: on a Newmark run with
+        upslope sliding allowed, the largest net displacement.
         """
         valid = [r for r in self.all_evaluations() if r.is_valid]
         if not valid:
             return None
         # The admissible ones first, and all of them if none is: the same
         # key as ``top_n`` and the choice among masses (D374).
-        best = min(valid, key=lambda r: criticality_key(r, self.score))
+        best = min(valid, key=self.rank_key)
         if self.objective != OBJECTIVE_FOS and math.isinf(self.score(best)):
             # Nothing has an answer under the active objective — every
             # surface failed to yield a Ky, say. Falling back to the factor
@@ -602,8 +652,7 @@ class SearchResult:
         ``results_query(rank=1)`` answered it. ``sorted`` is stable and
         ``min`` returns the first of equals, so a tie is broken the same way
         in both."""
-        return sorted(self.valid(),
-                      key=lambda r: criticality_key(r, self.score))[:n]
+        return sorted(self.valid(), key=self.rank_key)[:n]
 
 
 def all_evaluations_of(result) -> list:

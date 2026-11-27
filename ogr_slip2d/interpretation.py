@@ -571,7 +571,9 @@ def critical_per_centre(search_result, caption=None) -> list:
     Newmark run the displacement is taken as it is, and not as the one of
     the centre's lowest Ky: the two are the same surface for a rigid block
     (its displacement does not grow with its Ky; Newmark 1965), but not with
-    upslope sliding allowed, where the displacement is a net one (D437).
+    upslope sliding allowed, where the displacement is a net one and the run
+    publishes the surface that moves the most (D437, v0.1.499): so the star
+    of the critical centre is on the largest displacement there too.
     ``minimum_per_centre`` itself does not change: Minimum Surfaces and the
     API's view read it (D438). ``caption`` as in :func:`reported_value`:
     asked once here, never per surface."""
