@@ -52,7 +52,11 @@ def _project(case):
     from test_newmark_user_surfaces_v1429 import _STRONG_C, _plane_project
     p = _plane_project(cohesion=_STRONG_C if case == "strong" else 0.0)
     if case in ("no_record", "kh"):
-        p.seismic_records = []
+        # v0.1.497 (D440) -- through the program's rule, which clears the
+        # choice: emptying the list by hand left ``record_id`` pointing at a
+        # record no longer there, which is D440's case and has its own note
+        from ogr_core.project.rules import set_seismic_records
+        set_seismic_records(p, [])
     if case == "kh":
         p.seismic.enabled, p.seismic.kh = True, 0.10
     if case == "static":

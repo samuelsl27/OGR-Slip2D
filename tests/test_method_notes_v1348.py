@@ -317,6 +317,14 @@ _V1347 = [{'code': 'method.sarma_near_pole',
              'seismic record is selected, so no displacement was computed.',
   'args': {},
   'prefix': 'bishop_simplified'},
+ # v0.1.497 (D440) -- new in that version: its English as it was written
+ {'code': 'method.newmark_record_missing',
+  'english': "bishop_simplified: Newmark displacements were requested with "
+             "the seismic record 'nope', and the project has no record with "
+             "that id, so no displacement was computed. Choose one of the "
+             "project's records.",
+  'args': {'record_id': 'nope'},
+  'prefix': 'bishop_simplified'},
  {'code': 'method.newmark_unusable',
   'english': "bishop_simplified: the seismic record 'El Centro 1940' cannot "
              'be integrated (it needs at least two samples and a positive '

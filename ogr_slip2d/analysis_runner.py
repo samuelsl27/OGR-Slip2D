@@ -2766,12 +2766,20 @@ def _seismic_lines(project, method_id: str, evaluations, *,
     if not cfg.newmark:
         return lines
 
-    record = None
     rid = (cfg.record_id or "").strip()
-    if rid:
-        record = project.seismic_record_by_id(rid)
-    if record is None:
+    if not rid:
         lines.append(method_note(method_id, _mnote(MN.NEWMARK_NO_RECORD)))
+        return lines
+    record = project.seismic_record_by_id(rid)
+    if record is None:
+        # v0.1.497 (D440) -- a record IS chosen and the project has none with
+        # its id (a hand-edited .ogr: deleting one in the window or with
+        # ``seismic_record_delete`` clears the choice, ``set_seismic_records``,
+        # and ``settings_set`` refuses an id it does not know). This said «no
+        # seismic record is selected», which sent the reader to a selection
+        # that was there.
+        lines.append(method_note(method_id, _mnote(
+            MN.NEWMARK_RECORD_MISSING, record_id=rid)))
         return lines
     if not record.is_usable():
         # v0.1.436 (D415) -- with its id: «Record» is a name the program

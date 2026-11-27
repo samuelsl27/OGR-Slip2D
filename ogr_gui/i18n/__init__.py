@@ -5727,6 +5727,13 @@ _DICTS: dict[str, dict[str, str]] = {
             'Se pidieron desplazamientos de Newmark pero no hay ningún '
             'registro sísmico elegido, así que no se calculó ningún '
             'desplazamiento.',
+        "Newmark displacements were requested with the seismic record "
+        "'{record_id}', and the project has no record with that id, so no "
+        "displacement was computed. Choose one of the project's records.":
+            'Se pidieron desplazamientos de Newmark con el registro sísmico '
+            '«{record_id}», y el proyecto no tiene ningún registro con ese '
+            'identificador, así que no se calculó ningún desplazamiento. '
+            'Elige uno de los registros del proyecto.',
         "'{polarity}' is not a polarity this program knows, so the maximum "
         'of the two was used.':
             '«{polarity}» no es una polaridad que este programa conozca, así '

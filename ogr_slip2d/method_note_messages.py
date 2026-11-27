@@ -85,6 +85,9 @@ SEISMIC_NO_KY = "method.seismic_no_ky"
 #: (``evaluate_surfaces``): there is no ranking there to be excluded from
 SEISMIC_NO_KY_GIVEN = "method.seismic_no_ky_given"
 NEWMARK_NO_RECORD = "method.newmark_no_record"
+#: v0.1.497 (D440) -- a record IS chosen, and the project has none with
+#: that id: said apart from «none is selected», which it is not
+NEWMARK_RECORD_MISSING = "method.newmark_record_missing"
 NEWMARK_UNUSABLE = "method.newmark_unusable"
 NEWMARK_POLARITY = "method.newmark_polarity"
 
@@ -430,6 +433,11 @@ METHOD_NOTES = {s.code: s for s in (
     MessageSpec(NEWMARK_NO_RECORD,
                 "Newmark displacements were requested but no seismic record "
                 "is selected, so no displacement was computed."),
+    MessageSpec(NEWMARK_RECORD_MISSING,
+                "Newmark displacements were requested with the seismic "
+                "record '{record_id}', and the project has no record with "
+                "that id, so no displacement was computed. Choose one of "
+                "the project's records."),
     MessageSpec(NEWMARK_UNUSABLE,
                 "the seismic record '{name}' cannot be integrated (it needs at "
                 "least two samples and a positive time interval), so no "
