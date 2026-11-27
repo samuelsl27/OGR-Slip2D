@@ -375,7 +375,11 @@ def results_query(ws, result_id: str, view: str,
     mark them: ``surface.user_defined`` is true, and ``raw_data`` has a
     seventh column. The CENSUS (``error_codes``, ``invalid_summary``, the
     ``filter`` by code) is of the search alone: it describes the population
-    the counters count."""
+    the counters count.
+
+    v0.1.500 (D438) -- ``minimum_per_centre`` of a Ky or Newmark run lists
+    the surface of each centre under the run's number (the lowest Ky, the
+    largest displacement), in the run's order, with ``ranked_by``."""
     views = _SEARCH_VIEWS + _STAT_VIEWS
     if view not in views:
         raise unknown("view", view, views)
@@ -474,6 +478,24 @@ def _search_view(ws, sr, view, point_xy, tolerance, bins, rank, fos_min,
                 "surfaces": [{**_row(sr, r), "distance": round(d, 6)}
                              for d, r in hits[:n]]}
     if view == "minimum_per_centre":
+        # v0.1.500 (D438) -- on a Ky or Newmark run, the surface of each
+        # centre under what the run reports (``critical_per_centre``: the
+        # lowest Ky, the largest displacement), in the order the run ranks
+        # its surfaces (``rank_key``), so the first row is the critical
+        # surface; and ``ranked_by`` says by which number. The view read the
+        # lowest factor of each centre and ordered by it: on the demo slope
+        # with c = 20 kPa its first row was (34, 29), fos 1.5287, while the
+        # critical surface, the lowest Ky (0.2941), is at (40, 45). A run of
+        # factors gives what it always gave.
+        from ogr_slip2d.reported import KY, NEWMARK, reported_caption
+        caption = reported_caption(sr)
+        if caption in (KY, NEWMARK):
+            rows = sorted(it.critical_per_centre(sr, caption),
+                          key=sr.rank_key)
+            return {"count": len(rows),
+                    "ranked_by": ("ky" if caption == KY
+                                  else "newmark_displacement"),
+                    "surfaces": [_row(sr, r) for r in rows[:n]]}
         rows = sorted(it.minimum_per_centre(sr), key=lambda r: r.fos)
         return {"count": len(rows),
                 "surfaces": [_row(sr, r) for r in rows[:n]]}

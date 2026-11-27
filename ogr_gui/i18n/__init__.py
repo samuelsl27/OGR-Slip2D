@@ -3160,6 +3160,11 @@ _DICTS: dict[str, dict[str, str]] = {
             "<br><i>Fuerza en el punto medio:</i> {0:.1f} kN/m<br><i>Fuerza "
             "en el pie:</i> {1:.1f} kN/m",
         "Active: <b>{0}</b>": "Activo: <b>{0}</b>",
+        # v0.1.500 (D438) -- the centre map of a Ky or Newmark run
+        "Centre ({0:.2f}, {1:.2f}) — Ky = {2:.4f}":
+            "Centro ({0:.2f}, {1:.2f}) — Ky = {2:.4f}",
+        "Centre ({0:.2f}, {1:.2f}) — {2} = {3:.3f}":
+            "Centro ({0:.2f}, {1:.2f}) — {2} = {3:.3f}",
         "Centre ({0:.2f}, {1:.2f}) — FoS = {2:.3f}":
             "Centro ({0:.2f}, {1:.2f}) — FS = {2:.3f}",
         "Close Boundary": "Cerrar contorno",

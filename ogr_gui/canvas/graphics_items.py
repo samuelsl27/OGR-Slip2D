@@ -672,6 +672,7 @@ class SlipSurfaceItem(QGraphicsPathItem):
         parent: QGraphicsItem | None = None,
         colour_fn=None,
         is_query: bool = False,
+        colour_value=None,
     ) -> None:
         super().__init__(parent)
         self.surface_dict = surface_dict
@@ -805,7 +806,11 @@ class SlipSurfaceItem(QGraphicsPathItem):
             pen.setStyle(Qt.PenStyle.DashLine)
         elif colour_fn is not None:
             try:
-                colour = QColor(colour_fn(fos))
+                # v0.1.500 (D438) -- on a Ky or Newmark run the colour is
+                # the run's number (``colour_value``), the one the scale and
+                # the centre map are drawn in; the factor otherwise
+                colour = QColor(colour_fn(
+                    fos if colour_value is None else colour_value))
             except Exception:  # noqa: BLE001
                 colour = QColor(0, 150, 0, 120)
             pen = QPen(colour, 1.2)

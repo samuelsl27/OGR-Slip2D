@@ -1028,8 +1028,16 @@ class CanvasView(QGraphicsView):
         if search_result is None:
             return
 
+        # v0.1.500 (D438) -- what the run reports, asked once for the whole
+        # picture: the centre map, Minimum Surfaces and the colour of every
+        # line are drawn in it (the Ky, the Newmark displacement, or the
+        # factor), and asking it per surface walks ``critical`` each time
+        from ogr_slip2d.reported import KY, NEWMARK, reported_caption
+        caption = reported_caption(search_result)
+        seismic = caption in (KY, NEWMARK)
+
         # FoS heat-map of the centres grid, as the reference draws it
-        self._draw_fos_heatmap(scene, search_result)
+        self._draw_fos_heatmap(scene, search_result, caption)
 
         critical_id = None
         if search_result.critical:
@@ -1053,7 +1061,7 @@ class CanvasView(QGraphicsView):
         elif surface_mode == "all":
             surfaces = list(search_result.valid())
         else:  # "minimum" (default)
-            surfaces = self._minimum_per_centre(search_result)
+            surfaces = self._minimum_per_centre(search_result, caption)
 
         if surface_mode in ("minimum", "all"):
             surfaces = self._apply_fos_filter(surfaces, fos_filter,
@@ -1071,7 +1079,23 @@ class CanvasView(QGraphicsView):
 
         # Highest factor of safety first, so the lowest are drawn LAST and
         # remain visible under everything else.
-        surfaces = sorted(surfaces, key=lambda r: -r.fos)
+        # v0.1.500 (D438) -- on a seismic run, in the run's order: the most
+        # critical (the lowest Ky, the largest displacement) drawn last
+        value_of = {}
+        if seismic:
+            from ogr_gui.reported_quantity import centre_value
+            project = getattr(self, "project", None)
+            for r in surfaces:
+                value_of[id(r)] = centre_value(project, search_result, r,
+                                               caption)
+            sign = -1.0 if caption == KY else 1.0
+
+            def _order(r):
+                v = value_of.get(id(r))
+                return (-math.inf if v is None else sign * v)
+            surfaces = sorted(surfaces, key=_order)
+        else:
+            surfaces = sorted(surfaces, key=lambda r: -r.fos)
         self.last_surface_count = len(surfaces)
 
         faint = (surface_mode == "all")
@@ -1094,6 +1118,7 @@ class CanvasView(QGraphicsView):
                 is_hover=is_hov,
                 is_query=is_qry,
                 colour_fn=colour_fn,
+                colour_value=value_of.get(id(r)),
             )
             # In "all" mode the cloud is context, so it is drawn thin and
             # translucent — but it keeps its FoS colour, which is the
@@ -1184,8 +1209,14 @@ class CanvasView(QGraphicsView):
         self.last_surface_count = drawn
 
     @staticmethod
-    def _minimum_per_centre(search_result) -> list:
+    def _minimum_per_centre(search_result, caption=None) -> list:
         """The lowest-FoS surface at each slip-centre grid point.
+
+        v0.1.500 (D438) -- or, on a Ky or Newmark run, the surface of each
+        centre under what the run reports
+        (``interpretation.critical_per_centre``: the lowest Ky, the largest
+        displacement), as the report's figure draws it since D423. On a run
+        of factors it is ``minimum_per_centre``, bit for bit.
 
         Non-circular results have no centres grid, so they fall back to
         every valid surface — which is what the reference does too: the
@@ -1194,8 +1225,8 @@ class CanvasView(QGraphicsView):
         """
         # v0.1.201 — ``interpretation.minimum_per_centre``, which the agent
         # asks too.
-        from ogr_slip2d.interpretation import minimum_per_centre
-        return minimum_per_centre(search_result)
+        from ogr_slip2d.interpretation import critical_per_centre
+        return critical_per_centre(search_result, caption)
 
     @staticmethod
     def _apply_fos_filter(surfaces: list, fos_filter, critical_id) -> list:
@@ -1224,8 +1255,15 @@ class CanvasView(QGraphicsView):
     # ==================================================================
     # v0.1.8 — FoS heatmap on the search grid
     # ==================================================================
-    def _draw_fos_heatmap(self, scene, search_result) -> None:
+    def _draw_fos_heatmap(self, scene, search_result, caption=None) -> None:
         """Draw a coloured grid showing min-FoS per grid centre.
+
+        v0.1.500 (D438) -- on a Ky or Newmark run, the run's number of each
+        centre instead (``critical_per_centre`` and ``centre_value``: the
+        lowest Ky, the largest displacement in the project's unit), in the
+        colours of the window's scale for that number. The fixed bands below
+        are of a factor and mean nothing for a Ky: without the window's
+        colour function (contours off) a seismic map is not painted.
 
         Colour scheme, as the reference draws it:
             FoS ≤ 1.0   → red
@@ -1241,11 +1279,31 @@ class CanvasView(QGraphicsView):
         if not valid:
             return
 
+        from ogr_slip2d.reported import KY, NEWMARK, reported_caption
+        if caption is None:
+            caption = reported_caption(search_result)
+        seismic = caption in (KY, NEWMARK)
+        fn = getattr(self, "_contour_colour_fn", None)
+        if seismic and fn is None:
+            return
+
         # Group by (round(xc, 3), round(yc, 3)) → keep min FoS
         from collections import defaultdict
         bucket: dict[tuple[float, float], float] = defaultdict(
             lambda: float("inf")
         )
+        if seismic:
+            from ogr_gui.reported_quantity import centre_value
+            from ogr_slip2d.interpretation import (critical_per_centre,
+                                                   slip_centre)
+            project = getattr(self, "project", None)
+            for r in critical_per_centre(search_result, caption):
+                centre = slip_centre(r.surface.to_dict())
+                value = centre_value(project, search_result, r, caption)
+                if centre is None or value is None:
+                    continue
+                bucket[(round(centre[0], 3), round(centre[1], 3))] = value
+            valid = ()
         for r in valid:
             sd = r.surface.to_dict()
             cx = sd.get("centre_x") or sd.get("center_x")
@@ -1293,7 +1351,18 @@ class CanvasView(QGraphicsView):
             rect.setPen(no_pen)
             rect.setBrush(QBrush(color))
             rect.setZValue(0.5)  # behind the slip surface lines
-            rect.setToolTip(tr('Centre ({0:.2f}, {1:.2f}) — FoS = {2:.3f}').format(xc, yc, fos))
+            if caption == KY:
+                tip = tr('Centre ({0:.2f}, {1:.2f}) — Ky = {2:.4f}').format(
+                    xc, yc, fos)
+            elif caption == NEWMARK:
+                from ogr_gui.reported_quantity import centre_scale_title
+                tip = tr('Centre ({0:.2f}, {1:.2f}) — {2} = {3:.3f}').format(
+                    xc, yc, centre_scale_title(
+                        getattr(self, "project", None), caption), fos)
+            else:
+                tip = tr('Centre ({0:.2f}, {1:.2f}) — FoS = {2:.3f}').format(
+                    xc, yc, fos)
+            rect.setToolTip(tip)
             scene.addItem(rect)
             self._result_items.append(rect)
 

@@ -162,3 +162,37 @@ def statistics_factor_lines(factor_report=None) -> list:
     lines += [n if isinstance(n, str) else str(n)
               for n in (getattr(factor_report, "notes", None) or [])]
     return lines
+
+
+def centre_value(project, search_result, r, caption=None):
+    """The number a picture of the run paints for surface ``r``
+    (v0.1.500, D438): its Ky on a Ky run, its Newmark displacement in the
+    project's small length (``displacement_in_units``, the unit Interpret
+    prints the headline in) on a Newmark run, and its factor otherwise.
+    None when the surface has no such number.
+
+    ``caption``, the run's (``reported_caption``), when the caller has it:
+    asking it reads ``critical``, which walks every surface of the run, so it
+    is asked once per picture and not once per surface (the trap of D423)."""
+    from ogr_slip2d.interpretation import reported_value
+    from ogr_slip2d.reported import NEWMARK, displacement_in_units
+
+    value = reported_value(search_result, r, caption)
+    if value is not None and caption == NEWMARK:
+        return displacement_in_units(project, value)[0]
+    return value
+
+
+def centre_scale_title(project, caption) -> str:
+    """The title of the colour scale of a seismic run's picture
+    (v0.1.500, D438): «Critical seismic coefficient», or «Newmark
+    displacement» with its unit. Empty for a run of factors, whose title
+    the caller already has (the factor, or the over-design factor)."""
+    from ogr_slip2d.reported import KY, NEWMARK, displacement_in_units
+
+    if caption == KY:
+        return tr("Critical seismic coefficient")
+    if caption == NEWMARK:
+        unit = displacement_in_units(project, 0.0)[1]
+        return "%s [%s]" % (tr("Newmark displacement"), unit)
+    return ""

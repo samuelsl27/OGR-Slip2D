@@ -900,7 +900,11 @@ class InterpretWindow(QMainWindow):
         # v0.1.50 (phase I2) — contour settings drive both the canvas
         # colours and the legend, so the two are one source of truth.
         from ogr_gui.contours import ContourSettings
-        self.contours = ContourSettings.for_field("fos")
+        # v0.1.500 (D438) -- by what the run reports: a Ky or a Newmark
+        # displacement is not drawn on the fixed scale of a factor
+        self._contours_for = self._run_quantity()
+        self._contours_edited = False
+        self.contours = ContourSettings.for_reported(self._contours_for)
         self._build_legend_dock()
         self._build_status_indicators()
         self._refresh_legend()
@@ -955,6 +959,29 @@ class InterpretWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self.legend_dock = dock
 
+    def _run_quantity(self) -> str:
+        """``"ky"``, ``"newmark"`` or ``"fos"``: what the active result
+        reports (``reported_caption``; an over-design factor is a factor
+        here, drawn on the factor's scale). v0.1.500 (D438)."""
+        from ogr_slip2d.reported import KY, NEWMARK, reported_caption
+        res = getattr(self, "search_result", None)
+        caption = reported_caption(res) if res is not None else "fos"
+        return caption if caption in (KY, NEWMARK) else "fos"
+
+    def _follow_run_quantity(self) -> None:
+        """A method switch to a result that reports another quantity takes
+        that quantity's starting scale, unless the user set one in the
+        contour options (v0.1.500, D438)."""
+        from ogr_gui.contours import ContourSettings
+        kind = self._run_quantity()
+        if kind != getattr(self, "_contours_for", kind) and not getattr(
+                self, "_contours_edited", False):
+            field = self.contours.field
+            self.contours = ContourSettings.for_reported(kind)
+            if field != "fos":
+                self.contours = ContourSettings.for_field(field)
+        self._contours_for = kind
+
     def current_field_values(self) -> list:
         """The scalar values behind the active contour field.
 
@@ -970,8 +997,20 @@ class InterpretWindow(QMainWindow):
         field = self.contours.field
         if field == "fos":
             res = self.search_result
+            if res is None:
+                return []
+            # v0.1.500 (D438) -- on a Ky or Newmark run, the run's number of
+            # each surface (the Ky, the displacement in the project's unit),
+            # which the centre map and the lines are painted in
+            kind = self._run_quantity()
+            if kind != "fos":
+                from ogr_gui.reported_quantity import centre_value
+                values = (centre_value(self.project, res, e, kind)
+                          for e in getattr(res, "evaluations", [])
+                          if e.is_valid)
+                return [v for v in values if v is not None]
             return [e.fos for e in getattr(res, "evaluations", [])
-                    if e.is_valid] if res else []
+                    if e.is_valid]
         seepage = getattr(self.project, "seepage_result", None)
         if seepage is None:
             return []
@@ -991,12 +1030,24 @@ class InterpretWindow(QMainWindow):
         values = self.current_field_values()
         if not values:
             return
+        kind = self._run_quantity()
         if self.contours.auto_range:
-            self.contours.fit_to(values)
+            # v0.1.500 (D438) -- a displacement's critical end is its TOP,
+            # which the percentile that trims a deep-seated factor would cut
+            self.contours.fit_to(
+                values, **({"percentile": 1.0} if kind == "newmark" else {}))
         res = self.search_result
         crit = (res.critical.fos
                 if (self.contours.field == "fos" and res
                     and res.critical) else None)
+        seismic_title = ""
+        if self.contours.field == "fos" and kind != "fos":
+            from ogr_gui.reported_quantity import (centre_scale_title,
+                                                   centre_value)
+            seismic_title = centre_scale_title(self.project, kind)
+            crit = (centre_value(self.project, res, res.critical, kind)
+                    if res is not None and res.critical is not None
+                    else None)
         from ogr_gui.contours import SCALAR_FIELDS, ContourMode as _CMode
         # v0.1.82 — a banded plot gets a banded legend, with the boundary
         # labels the settings compute (so the top one reads "6.000+").
@@ -1006,10 +1057,11 @@ class InterpretWindow(QMainWindow):
             self.contours.vmin, self.contours.vmax,
             self.contours.colour_for,
             # v0.1.435 (D413) -- the factor by its name under a standard
-            title=(tr("Over-design factor")
-                   if self.contours.field == "fos" and self._factored_view()
-                   else tr(SCALAR_FIELDS.get(self.contours.field,
-                                             self.contours.field))),
+            title=(seismic_title or (
+                tr("Over-design factor")
+                if self.contours.field == "fos" and self._factored_view()
+                else tr(SCALAR_FIELDS.get(self.contours.field,
+                                          self.contours.field)))),
             steps=self.contours.intervals,
             decimals=self.contours.decimals,
             scientific=self.contours.scientific, mark=crit,
@@ -1037,6 +1089,8 @@ class InterpretWindow(QMainWindow):
         if not dlg.exec():
             return
         self.contours = dlg.settings
+        # v0.1.500 (D438) -- the user's scale is kept across a method switch
+        self._contours_edited = True
         self._refresh_legend()
         if hasattr(self.canvas, "refresh_scene"):
             self.canvas.refresh_scene()
@@ -1533,6 +1587,7 @@ class InterpretWindow(QMainWindow):
         result = self.results_by_method[mid]
         self._current_method_id = mid
         self.search_result = result
+        self._follow_run_quantity()
         self._refresh_canvas_with_highlights()
         self.summary_dock.show_result(result, self.project,
                                       self.factor_report)

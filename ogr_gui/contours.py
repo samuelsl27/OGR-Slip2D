@@ -248,6 +248,25 @@ class ContourSettings:
                    auto_range=True, decimals=2)
 
     @classmethod
+    def for_reported(cls, caption: str) -> "ContourSettings":
+        """The starting scale of the factor field of a run, by what the run
+        reports (v0.1.500, D438): the factor's fixed legend
+        (:meth:`for_field`), or, for a critical seismic coefficient
+        (``"ky"``) or a Newmark displacement (``"newmark"``), an automatic
+        range in eight bands from red to blue, red at the critical end: the
+        lowest Ky, and the largest displacement (``reverse``). The fixed
+        0-6 bands of a factor put every Ky of a slope, 0.1 to 0.4, in the
+        first one. The same choice as the report's figure (D423: the
+        reversed colour map of a displacement)."""
+        if caption == "ky":
+            return cls(field="fos", palette="Hot to cold", intervals=8,
+                       auto_range=True, decimals=4)
+        if caption == "newmark":
+            return cls(field="fos", palette="Hot to cold", intervals=8,
+                       auto_range=True, decimals=3, reverse=True)
+        return cls.for_field("fos")
+
+    @classmethod
     def from_dict(cls, d: dict) -> "ContourSettings":
         return cls(
             mode=ContourMode(d.get("mode", "filled")),
