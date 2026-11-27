@@ -317,6 +317,48 @@ _V1347 = [{'code': 'method.sarma_near_pole',
              'seismic record is selected, so no displacement was computed.',
   'args': {},
   'prefix': 'bishop_simplified'},
+ # v0.1.498 (D439) -- new in that version: its English as it was written
+ {'code': 'method.seismic_static_unstable',
+  'english': 'bishop_simplified: 12 of 40 surfaces already have a factor of '
+             'safety at or below the Ky target of 1 without an earthquake (kh '
+             '= 0), so their critical seismic coefficient is 0: that Ky, and '
+             'any Newmark displacement integrated from it, are not those of a '
+             'slope that stands.',
+  'args': {'n': 12, 'valid': 40, 'target': 1.0},
+  'prefix': 'bishop_simplified'},
+ {'code': 'method.seismic_static_unstable',
+  'english': 'bishop_simplified: 1 of 40 surfaces already has a factor of '
+             'safety at or below the Ky target of 1 without an earthquake (kh '
+             '= 0), so its critical seismic coefficient is 0: that Ky, and '
+             'any Newmark displacement integrated from it, are not those of a '
+             'slope that stands.',
+  'args': {'n': 1, 'valid': 40, 'target': 1.0},
+  'prefix': 'bishop_simplified'},
+ {'code': 'method.seismic_static_unstable_critical',
+  'english': 'bishop_simplified: 12 of 40 surfaces, the critical one among '
+             'them (a factor of 0.8084 at kh = 0), already have a factor of '
+             'safety at or below the Ky target of 1 without an earthquake, so '
+             'their critical seismic coefficient is 0: that Ky, and any '
+             'Newmark displacement integrated from it, are not those of a '
+             'slope that stands.',
+  'args': {'n': 12, 'valid': 40, 'fos': 0.808357, 'target': 1.0},
+  'prefix': 'bishop_simplified'},
+ {'code': 'method.seismic_static_unstable_critical',
+  'english': 'bishop_simplified: 1 of 1 surfaces, the critical one (a factor '
+             'of 0.8084 at kh = 0), already has a factor of safety at or '
+             'below the Ky target of 1 without an earthquake, so its critical '
+             'seismic coefficient is 0: that Ky, and any Newmark displacement '
+             'integrated from it, are not those of a slope that stands.',
+  'args': {'n': 1, 'valid': 1, 'fos': 0.808357, 'target': 1.0},
+  'prefix': 'bishop_simplified'},
+ {'code': 'method.seismic_static_unstable_given',
+  'english': 'bishop_simplified: the surface already has a factor of safety '
+             'of 0.8084 at kh = 0, at or below the Ky target of 1, so its '
+             'critical seismic coefficient is 0: that Ky, and any Newmark '
+             'displacement integrated from it, are not those of a slope that '
+             'stands.',
+  'args': {'fos': 0.808357, 'target': 1.0},
+  'prefix': 'bishop_simplified'},
  # v0.1.497 (D440) -- new in that version: its English as it was written
  {'code': 'method.newmark_record_missing',
   'english': "bishop_simplified: Newmark displacements were requested with "

@@ -84,6 +84,14 @@ SEISMIC_NO_KY = "method.seismic_no_ky"
 #: v0.1.451 (D406) -- the same fact about the one surface a door was given
 #: (``evaluate_surfaces``): there is no ranking there to be excluded from
 SEISMIC_NO_KY_GIVEN = "method.seismic_no_ky_given"
+#: v0.1.498 (D439) -- surfaces whose factor at kh = 0 is already at or below
+#: the Ky target, so their Ky is 0 (the reference's answer, not a failure)
+#: and a displacement integrated from it is of a block that does not stand.
+#: Three sentences: the run's count, the same when the critical surface is
+#: one of them (with its factor), and the one surface a door was given.
+SEISMIC_STATIC_UNSTABLE = "method.seismic_static_unstable"
+SEISMIC_STATIC_UNSTABLE_CRITICAL = "method.seismic_static_unstable_critical"
+SEISMIC_STATIC_UNSTABLE_GIVEN = "method.seismic_static_unstable_given"
 NEWMARK_NO_RECORD = "method.newmark_no_record"
 #: v0.1.497 (D440) -- a record IS chosen, and the project has none with
 #: that id: said apart from «none is selected», which it is not
@@ -139,6 +147,14 @@ _RECOVERED_TAIL = (" put back after being set aside for an inter-slice thrust "
                    "in net tension: the crossing lay among them, so the factor "
                    "reported is a solved root rather than the closest sampled "
                    "inclination.")
+#: v0.1.498 (D439) -- the end of the three sentences about a surface that
+#: does not stand without an earthquake
+_STATIC_TAIL = ("so their critical seismic coefficient is 0: that Ky, and "
+                "any Newmark displacement integrated from it, are not those "
+                "of a slope that stands.")
+_STATIC_TAIL_ONE = ("so its critical seismic coefficient is 0: that Ky, and "
+                    "any Newmark displacement integrated from it, are not "
+                    "those of a slope that stands.")
 _ZERO_TAIL = ("): the effective normal stress the strength envelope was read "
               "at was negative, and the envelope has no strength at zero "
               "stress. The factor of safety counts no resistance on ")
@@ -430,6 +446,28 @@ METHOD_NOTES = {s.code: s for s in (
                 "the surface has no critical seismic coefficient below "
                 "{k_max:g}: no coefficient up to it brings its factor of "
                 "safety down to the target, so it has no Ky."),
+    MessageSpec(SEISMIC_STATIC_UNSTABLE,
+                "{n} of {valid} surfaces already have a factor of safety at "
+                "or below the Ky target of {target:g} without an earthquake "
+                "(kh = 0), " + _STATIC_TAIL,
+                one="{n} of {valid} surfaces already has a factor of safety "
+                    "at or below the Ky target of {target:g} without an "
+                    "earthquake (kh = 0), " + _STATIC_TAIL_ONE,
+                count="n"),
+    MessageSpec(SEISMIC_STATIC_UNSTABLE_CRITICAL,
+                "{n} of {valid} surfaces, the critical one among them (a "
+                "factor of {fos:.4f} at kh = 0), already have a factor of "
+                "safety at or below the Ky target of {target:g} without an "
+                "earthquake, " + _STATIC_TAIL,
+                one="{n} of {valid} surfaces, the critical one (a factor of "
+                    "{fos:.4f} at kh = 0), already has a factor of safety at "
+                    "or below the Ky target of {target:g} without an "
+                    "earthquake, " + _STATIC_TAIL_ONE,
+                count="n"),
+    MessageSpec(SEISMIC_STATIC_UNSTABLE_GIVEN,
+                "the surface already has a factor of safety of {fos:.4f} at "
+                "kh = 0, at or below the Ky target of {target:g}, "
+                + _STATIC_TAIL_ONE),
     MessageSpec(NEWMARK_NO_RECORD,
                 "Newmark displacements were requested but no seismic record "
                 "is selected, so no displacement was computed."),

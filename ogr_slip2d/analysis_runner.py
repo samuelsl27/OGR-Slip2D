@@ -2706,11 +2706,12 @@ def _seismic_notes(project, method_id: str, result) -> list:
         # before the list: a run without the modes pays nothing for them
         return []
     from .search import all_evaluations_of
-    return _seismic_lines(project, method_id, all_evaluations_of(result))
+    return _seismic_lines(project, method_id, all_evaluations_of(result),
+                          result=result)
 
 
 def _seismic_lines(project, method_id: str, evaluations, *,
-                   one_surface: bool = False) -> list:
+                   one_surface: bool = False, result=None) -> list:
     """The Newmark displacements of ``evaluations`` and the lines the run has
     to say about them -- :func:`_seismic_notes`'s rule, for any list of
     evaluated surfaces (v0.1.451, D406).
@@ -2728,6 +2729,10 @@ def _seismic_lines(project, method_id: str, evaluations, *,
     is (``SEISMIC_NO_KY_GIVEN``), since there is no ranking for it to be
     excluded from, and «1 of 1 surfaces have» is the run's sentence about a
     population (review of 0.1.451).
+
+    ``result``, the run's ``SearchResult`` when the run asks: the critical
+    surface the static-instability note names is the one it publishes, read
+    after the displacements are attached (v0.1.498, D439).
     """
     cfg = getattr(project.settings, "seismic", None)
     if cfg is None or not cfg.needs_ky:
@@ -2762,14 +2767,57 @@ def _seismic_lines(project, method_id: str, evaluations, *,
         lines.append(method_note(method_id, _mnote(
             MN.SEISMIC_NO_KY, unanswered=unanswered, valid=len(valid),
             k_max=DEFAULT_K_MAX)))
+    # v0.1.498 (D439) -- said here, after the surfaces without a Ky, and
+    # built at the end: the critical surface it may name is the one the
+    # run publishes once the displacements are attached
+    at = len(lines)
+    if cfg.newmark:
+        _newmark_lines(project, method_id, cfg, valid, _has_ky, lines)
+    note = _static_unstable_note(cfg, valid, one_surface, result)
+    if note is not None:
+        lines.insert(at, method_note(method_id, note))
+    return lines
 
-    if not cfg.newmark:
-        return lines
 
+def _static_unstable_note(cfg, valid, one_surface, result):
+    """The note about the surfaces whose factor at kh = 0 is already at or
+    below the Ky target, or None (v0.1.498, D439).
+
+    Their Ky is 0, which is what ``critical_coefficient_from`` documents
+    and the reference reports, and it is not changed here; but nothing said
+    so, and a Newmark run integrated the record with ky = 0 -- a block
+    that does not stand without an earthquake -- and published metres of
+    displacement (22.04 m on the plane of v1429 with c and tan phi divided
+    by 2.5, F(0) = 0.808, measured with 0.1.485 and 0.1.496).
+
+    The surfaces are told apart by the rule that gave them Ky = 0: a
+    factor at kh = 0 at or below the target (``yield_acceleration``).
+    """
+    target = float(cfg.ky_target_fos)
+    unstable = [r for r in valid
+                if (r.details or {}).get("ky") == 0.0
+                and r.fos is not None and r.fos <= target]
+    if not unstable:
+        return None
+    if one_surface:
+        return _mnote(MN.SEISMIC_STATIC_UNSTABLE_GIVEN,
+                      fos=unstable[0].fos, target=target)
+    crit = getattr(result, "critical", None) if result is not None else None
+    if crit is not None and any(r is crit for r in unstable):
+        return _mnote(MN.SEISMIC_STATIC_UNSTABLE_CRITICAL, n=len(unstable),
+                      valid=len(valid), fos=crit.fos, target=target)
+    return _mnote(MN.SEISMIC_STATIC_UNSTABLE, n=len(unstable),
+                  valid=len(valid), target=target)
+
+
+def _newmark_lines(project, method_id, cfg, valid, _has_ky, lines) -> None:
+    """The Newmark part of :func:`_seismic_lines`: attach the displacement
+    of every valid surface with a Ky, and append to ``lines`` what stops
+    it. Split out in v0.1.498 (D439) so that a note can follow it."""
     rid = (cfg.record_id or "").strip()
     if not rid:
         lines.append(method_note(method_id, _mnote(MN.NEWMARK_NO_RECORD)))
-        return lines
+        return
     record = project.seismic_record_by_id(rid)
     if record is None:
         # v0.1.497 (D440) -- a record IS chosen and the project has none with
@@ -2780,14 +2828,14 @@ def _seismic_lines(project, method_id: str, evaluations, *,
         # that was there.
         lines.append(method_note(method_id, _mnote(
             MN.NEWMARK_RECORD_MISSING, record_id=rid)))
-        return lines
+        return
     if not record.is_usable():
         # v0.1.436 (D415) -- with its id: «Record» is a name the program
         # gave, which the window shows in the reader's language
         from ogr_core.messages import joined_name
         lines.append(method_note(method_id, _mnote(
             MN.NEWMARK_UNUSABLE, name=joined_name(record.name, record.id))))
-        return lines
+        return
 
     from .newmark import Polarity, displacement_for_record
     try:
@@ -2812,7 +2860,6 @@ def _seismic_lines(project, method_id: str, evaluations, *,
         r.details["newmark_displacement"] = out.displacement
         r.details["newmark_direct"] = out.direct
         r.details["newmark_inverse"] = out.inverse
-    return lines
 
 
 # ======================================================================
