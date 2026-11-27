@@ -247,6 +247,17 @@ class ContourSettings:
         return cls(field=field, palette="Hot to cold", intervals=8,
                    auto_range=True, decimals=2)
 
+    @staticmethod
+    def fit_percentile_for(caption: str) -> float:
+        """The share of the values the automatic maximum covers, by what
+        the run reports (v0.1.502): the whole range for a Newmark
+        displacement, whose critical end is its TOP and would be cut by the
+        0.98 that keeps a deep-seated factor from squashing the scale; 0.98
+        otherwise. One rule for the window's drawing and its Contour
+        Options dialog, which proposed 17.86 cm for a drawing up to 31.08
+        (the demo slope with c = 12 kPa and a 0.3 g sinusoid, 0.1.501)."""
+        return 1.0 if caption == "newmark" else 0.98
+
     @classmethod
     def for_reported(cls, caption: str) -> "ContourSettings":
         """The starting scale of the factor field of a run, by what the run

@@ -1035,7 +1035,9 @@ class InterpretWindow(QMainWindow):
             # v0.1.500 (D438) -- a displacement's critical end is its TOP,
             # which the percentile that trims a deep-seated factor would cut
             self.contours.fit_to(
-                values, **({"percentile": 1.0} if kind == "newmark" else {}))
+                values, percentile=(
+                    self.contours.fit_percentile_for(kind)
+                    if self.contours.field == "fos" else 0.98))
         res = self.search_result
         crit = (res.critical.fos
                 if (self.contours.field == "fos" and res
@@ -1084,8 +1086,11 @@ class InterpretWindow(QMainWindow):
         )
         fields = available_fields(self.project, self.search_result) \
             or ["fos"]
+        # v0.1.502 -- with what the run reports, so that the dialog starts,
+        # fits and restores the scale the window draws
         dlg = ContourOptionsDialog(self.contours, fields,
-                                   self.current_field_values(), self)
+                                   self.current_field_values(), self,
+                                   quantity=self._run_quantity())
         if not dlg.exec():
             return
         self.contours = dlg.settings

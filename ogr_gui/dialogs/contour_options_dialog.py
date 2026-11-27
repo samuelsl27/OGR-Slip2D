@@ -22,6 +22,15 @@ Two choices worth stating:
 * **The range follows the scalar.** Switching field resets the bounds to
   that field's defaults, because a 0–6 range means everything for a
   factor of safety and nothing for a total head in metres.
+* **And what the run reports** (v0.1.502). On a Ky or Newmark run the
+  factor field paints the run's number (D438), and the dialog starts,
+  fits and restores ITS scale (``ContourSettings.for_reported`` and
+  ``fit_percentile_for``), as the window draws it. It fitted at 0.98 and
+  restored the factor's 0–6: on a Newmark run of the demo slope with
+  c = 12 kPa it proposed 17.86 cm for a drawing up to 31.08 cm, the
+  critical surface's displacement, and *Restore Defaults* gave 0–6 in 24
+  Rainbow bands, not reversed. The *0 to 6* button is the factor's range,
+  so it is disabled there, with its reason.
 
 Author: Samuel Sáez López (UPCT)
 """
@@ -92,8 +101,11 @@ class ContourOptionsDialog(QDialog):
     """Configure the contour plot."""
 
     def __init__(self, settings: ContourSettings, fields=None,
-                 values=None, parent=None):
+                 values=None, parent=None, *, quantity: str = "fos"):
         super().__init__(parent)
+        # v0.1.502 -- what the run reports ("fos", "ky", "newmark"): the
+        # factor field's scale is that quantity's
+        self._quantity = quantity
         self.setWindowTitle(tr("Contour Options"))
         self.resize(460, 480)
         self._values = list(values or [])
@@ -164,6 +176,7 @@ class ContourOptionsDialog(QDialog):
         hb.addWidget(self.btn_fit)
         fr.addRow("", row)
         v.addWidget(gb_r)
+        self._tip_0to6 = self.btn_0to6.toolTip()
 
         gb_s = QGroupBox(tr("Appearance"))
         fs = QFormLayout(gb_s)
@@ -217,9 +230,44 @@ class ContourOptionsDialog(QDialog):
         v.addWidget(bb)
 
         self._on_auto_toggled(self.chk_auto.isChecked())
+        self._gate_0to6()
         self._refresh()
 
     # ------------------------------------------------------------------
+    def _seismic_field(self, field=None) -> bool:
+        """Whether ``field`` (the selected one) paints a Ky or a Newmark
+        displacement: the factor field of a seismic run (v0.1.502)."""
+        field = field or (self.cbo_field.currentData() or "fos")
+        return field == "fos" and self._quantity in ("ky", "newmark")
+
+    def _percentile(self) -> float:
+        """The fit's percentile for the sample values: the run's rule for
+        its quantity on the factor field, 0.98 for the others."""
+        if self._values_field == "fos":
+            return ContourSettings.fit_percentile_for(self._quantity)
+        return 0.98
+
+    def _start(self, field: str) -> ContourSettings:
+        """The scale ``field`` starts from, and *Restore Defaults* goes back
+        to: the run's quantity's on the factor field of a seismic run."""
+        if self._seismic_field(field):
+            return ContourSettings.for_reported(self._quantity)
+        return ContourSettings.for_field(field)
+
+    def _gate_0to6(self) -> None:
+        """*0 to 6* is the factor's range: disabled, saying why, where the
+        factor field paints a Ky or a displacement (v0.1.502)."""
+        if self._seismic_field():
+            self.btn_0to6.setEnabled(False)
+            self.btn_0to6.setToolTip(tr(
+                "0 to 6 is the range of a factor of safety, and this run "
+                "reports a critical seismic coefficient or a Newmark "
+                "displacement. Restore Defaults gives the scale of what it "
+                "reports."))
+        else:
+            self.btn_0to6.setEnabled(True)
+            self.btn_0to6.setToolTip(self._tip_0to6)
+
     def _fittable(self) -> bool:
         """True when the sample values belong to the selected field."""
         return bool(self._values) and (
@@ -231,7 +279,7 @@ class ContourOptionsDialog(QDialog):
         self.btn_fit.setEnabled(self._fittable())
         if on and self._fittable():
             probe = ContourSettings.from_dict(self.settings.to_dict())
-            probe.fit_to(self._values)
+            probe.fit_to(self._values, percentile=self._percentile())
             self.sp_min.blockSignals(True)
             self.sp_max.blockSignals(True)
             self.sp_min.setValue(probe.vmin)
@@ -263,6 +311,7 @@ class ContourOptionsDialog(QDialog):
 
     def _on_field_changed(self, *_a) -> None:
         """A different scalar needs a different range, not the last one."""
+        self._gate_0to6()
         self._defaults()
 
     def _range_0_to_6(self) -> None:
@@ -276,23 +325,23 @@ class ContourOptionsDialog(QDialog):
         if not self._fittable():
             return
         probe = self._collect()
-        probe.fit_to(self._values)
+        probe.fit_to(self._values, percentile=self._percentile())
         self.chk_auto.setChecked(False)
         self.sp_min.setValue(probe.vmin)
         self.sp_max.setValue(probe.vmax)
         self._refresh()
 
     def _defaults(self) -> None:
-        fresh = ContourSettings.for_field(
-            self.cbo_field.currentData() or "fos")
+        fresh = self._start(self.cbo_field.currentData() or "fos")
         if fresh.auto_range and self._fittable():
-            fresh.fit_to(self._values)
+            fresh.fit_to(self._values, percentile=self._percentile())
         self.sp_min.setValue(fresh.vmin)
         self.sp_max.setValue(fresh.vmax)
         self.sp_int.setValue(fresh.intervals)
         self.sp_dec.setValue(fresh.decimals)
         self.chk_auto.setChecked(fresh.auto_range)
-        self.chk_rev.setChecked(False)
+        # v0.1.502 -- the start's: a displacement's red end is its top
+        self.chk_rev.setChecked(fresh.reverse)
         self.cbo_mode.setCurrentIndex(
             self.cbo_mode.findData(ContourMode.FILLED))
         self.cbo_palette.setCurrentIndex(
