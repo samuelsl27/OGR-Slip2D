@@ -45,6 +45,12 @@ ERROR_NOT_CONVERGED = -111
 #: such a circle is not sliced, so ``error_code`` never returns it.
 ERROR_LEAVES_EXTERNAL = -103
 ERROR_OTHER = -101
+#: v0.1.495 (D434) — a circle of a grid centre with no valid radius, which
+#: the grid emits so that its population stays (nx+1)(ny+1)(rinc+1): the
+#: reference's -1000, «No valid slip surface is generated». Counted on the
+#: result (``SearchResult.no_valid_radius``), like the -103. Ej_1 publishes
+#: 231 of them in every method, and no -101.
+ERROR_NO_SURFACE = -1000
 ERROR_CODES = {
     ERROR_TENSILE: "tensile stress at a slice base (Tensile Stress Check)",
     ERROR_M_ALPHA: "m-alpha below its limit (the m-alpha screen)",
@@ -53,6 +59,9 @@ ERROR_CODES = {
                            "its crossings with the ground (counted before "
                            "slicing, so no surface carries it)",
     ERROR_OTHER: "any other rejection",
+    ERROR_NO_SURFACE: "a circle of a grid centre with no valid radius: no "
+                      "valid slip surface is generated there (counted "
+                      "before slicing, so no surface carries it)",
 }
 
 
@@ -204,7 +213,11 @@ def raw_data_rows(search_result) -> list:
 #:   the Slope Limits, which the reference does not code, and circles that
 #:   do not cut the ground twice, which ARE its −101 in its own words;
 #: * v0.1.445 (D420) — circles that leave the External Boundary between
-#:   their crossings with the ground, its −103.
+#:   their crossings with the ground, its −103;
+#: * v0.1.495 (D434) — the circles of a grid centre with no valid radius,
+#:   its −1000, taken out of the two rows of D263 whichever refused them.
+#:   They were Ej_1's 231 −101 ``misses_ground`` (the column x = 120) where
+#:   the reference publishes 231 −1000 and no −101.
 COUNTED_REJECTIONS = (
     (("ends_below_ground", "ends_above_ground"), ERROR_OTHER,
      "an end of the polyline is not on the ground surface"),
@@ -217,6 +230,8 @@ COUNTED_REJECTIONS = (
     (("leaves_external",), ERROR_LEAVES_EXTERNAL,
      "the circle leaves the External Boundary between its crossings with "
      "the ground"),
+    (("no_valid_radius",), ERROR_NO_SURFACE,
+     "the circle is one of a grid centre with no valid radius"),
 )
 
 

@@ -168,7 +168,9 @@ class TestTheNoteIsOfTheSearch:
 
     def test_the_premise_the_wall_finds_nothing_and_says_27(self):
         r = _wall("ghost", False)
-        assert r.total_count == 27 and r.misses_ground == 27
+        # v0.1.495 (D434) -- changed on purpose: the 27 are the -1000
+        assert r.total_count == 27 and r.no_valid_radius == 27
+        assert r.misses_ground == 0
         assert "(27 generated)" in self._note(r)[0]
 
     def test_the_circle_keeps_its_own_note(self):

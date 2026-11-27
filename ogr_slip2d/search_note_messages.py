@@ -52,6 +52,8 @@ R_SLOPE_LIMITS_MANY = "search.refused.slope_limits_many"
 R_MISSES_GROUND = "search.refused.misses_ground"
 # v0.1.445 (D420) -- the circles that left the External Boundary (the -103)
 R_LEAVES_EXTERNAL = "search.refused.leaves_external"
+# v0.1.495 (D434) -- the circles of a grid centre with no valid radius (-1000)
+R_NO_VALID_RADIUS = "search.refused.no_valid_radius"
 R_LEFT_MODEL = "search.refused.left_model"
 R_ORPHAN = "search.refused.orphan"
 R_UNSLICEABLE = "search.refused.unsliceable"
@@ -301,6 +303,10 @@ SEARCH_NOTES = {s.code: s for s in (
                 "crossings with the ground",
                 one="{n} circle that leaves the External Boundary between its "
                     "crossings with the ground", count="n"),
+    MessageSpec(R_NO_VALID_RADIUS,
+                "{n} circles of grid centres with no valid radius",
+                one="{n} circle of a grid centre with no valid radius",
+                count="n"),
     MessageSpec(R_LEFT_MODEL, "{n} that left the model"),
     MessageSpec(R_ORPHAN, "{n} that crossed a region with no material"),
     MessageSpec(R_UNSLICEABLE, "{n} that the slicer refused"),

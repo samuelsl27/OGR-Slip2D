@@ -660,11 +660,15 @@ class TestTheCensusAndTheWindow:
         """D77's wall: 27 circles that miss the ground and no evaluation;
         the window said "Every surface evaluated successfully."."""
         sr = _wall_grid()
-        assert sr.misses_ground == 27 and not sr.evaluations
+        # v0.1.495 (D434) -- changed on purpose: the 27 are circles of
+        # centres with no valid radius, the reference's -1000, and no longer
+        # counted among the circles that miss the ground
+        assert sr.no_valid_radius == 27 and sr.misses_ground == 0
+        assert not sr.evaluations
         said, = self._summary(sr)
         assert "Every surface evaluated successfully." not in said
-        assert ("  27 × the circle does not cut the ground surface twice"
-                in said.splitlines()), said
+        assert ("  27 × the circle is one of a grid centre with no valid "
+                "radius" in said.splitlines()), said
 
     def test_the_window_says_success_only_of_a_clean_run(self):
         assert self._summary(self._bare(10, 10)) == [

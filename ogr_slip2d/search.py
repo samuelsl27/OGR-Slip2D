@@ -49,6 +49,12 @@ from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 #: («Only one (or none) slip surface / slope intersections»); the first
 #: has no code of its own there. Neither is a slicer reason, so they live
 #: here and not in ``slicer``.
+#:
+#: v0.1.495 (D434) — but the circles of a grid centre with no valid radius
+#: are not −101, whatever refuses them: they are the reference's −1000 («No
+#: valid slip surface is generated»), ``_no_valid_radius``. In Ej_1 all of
+#: its 231 −1000 are those (the column x = 120), and every
+#: ``misses_ground`` of the grids measured came from such a centre.
 REFUSED_OUTSIDE_SLOPE_LIMITS = "outside_slope_limits"
 REFUSED_MISSES_GROUND = "misses_ground"
 
@@ -93,7 +99,9 @@ _RUN_COUNTERS = ("_unsliceable", "_outside_model", "_orphan_material",
                  "_base_above_ground", "_outside_slope_limits",
                  "_misses_ground", "_leaves_external",
                  # v0.1.464 (D357): surfaces whose wedges were refused
-                 "_wedges_refused")
+                 "_wedges_refused",
+                 # v0.1.495 (D434): circles of a centre with no valid radius
+                 "_no_valid_radius")
 
 #: v0.1.445 (D420) — the counters the census reads (``run`` copies them onto
 #: the result at the D263 point): rejections of the SEARCH's population that
@@ -105,10 +113,26 @@ _RUN_COUNTERS = ("_unsliceable", "_outside_model", "_orphan_material",
 #: The slicer's counters are NOT here: their notes speak of every surface the
 #: run sliced, the walk's included.
 _CENSUS_COUNTERS = ("_outside_slope_limits", "_misses_ground",
-                    "_leaves_external")
+                    "_leaves_external", "_no_valid_radius")
 
 #: v0.1.426 (D377) — ``_last_refusal`` not written by an evaluation.
 _UNTOUCHED = object()
+
+
+class _NoValidRadius(tuple):
+    """The ``(r_min, r_max)`` of a grid centre with NO valid radius
+    (v0.1.495, D434): the same two numbers as always, marked.
+
+    The grid still emits ``rinc + 1`` circles there, so its population stays
+    ``(nx+1)(ny+1)(rinc+1)``, and the reference does the same (eleven
+    circles of R = 5 at Ej_1's (120, 30)). None of them is a slip surface:
+    the reference codes them −1000, "no valid slip surface is generated",
+    and so does the census (:meth:`GridSearch._evaluate_without_radius`).
+    Two ways to be one: with one window the nearest point of the slope
+    surface is a limit point (``d_min == d_max``), so every radius reaches
+    the surface only there; with two, no radius at all is valid
+    (``r_lo is None``).
+    """
 
 
 def _bits_key(values) -> tuple:
@@ -456,6 +480,10 @@ class SearchResult:
     # -103. Counted with the two above, once per circle and only when no
     # mass of it was left to analyse.
     leaves_external: int = 0
+    # v0.1.495 (D434) — the circles a grid emits at a centre with no valid
+    # radius, refused whatever refused them: the reference's -1000 ("no
+    # valid slip surface is generated"). Not in the two counts above.
+    no_valid_radius: int = 0
 
     def score(self, result) -> float:
         """This run's objective, evaluated on one of its surfaces."""
@@ -1504,6 +1532,10 @@ class BaseSearch(ABC):
         n = int(getattr(result, "misses_ground", 0) or 0)
         if n:
             parts.append(SN.nested_search_note(SN.R_MISSES_GROUND, n=n))
+        # v0.1.495 (D434) — the -1000, until now among the two above
+        n = int(getattr(result, "no_valid_radius", 0) or 0)
+        if n:
+            parts.append(SN.nested_search_note(SN.R_NO_VALID_RADIUS, n=n))
         # v0.1.445 (D420) — and those that left the External Boundary
         # between their crossings with the ground, until now "for reasons
         # this search does not record"
@@ -2462,6 +2494,8 @@ class BaseSearch(ABC):
             result.misses_ground = self._misses_ground
             # v0.1.445 (D420) — the -103, by the same rule
             result.leaves_external = self._leaves_external
+            # v0.1.495 (D434) — and the -1000
+            result.no_valid_radius = self._no_valid_radius
             if self.optimize is not None and self.optimize.enabled:
                 # v0.1.366 (D362) — said, so a watcher can name the phase:
                 # its bar starts again here, over the optimisation
@@ -3774,7 +3808,13 @@ class GridSearch(BaseSearch):
         # which is the one way the caller can break the theorem above.
         d_max = max(d_max, d_min)
         delta = self.RADIUS_INSET * (d_max - d_min)
-        return d_min + delta, d_max - delta
+        bracket = (d_min + delta, d_max - delta)
+        # v0.1.495 (D434) -- the nearest point of the slope surface is a
+        # limit point: the circles reach the surface only there. Relative,
+        # because the two distances are found by different formulas
+        if d_max - d_min <= 1e-9 * max(1.0, d_max):
+            return _NoValidRadius(bracket)
+        return bracket
 
     # The relative margin the reference leaves at a bracket end fixed by a
     # profile corner when TWO windows are declared. MEASURED (v0.1.148): on
@@ -3986,7 +4026,7 @@ class GridSearch(BaseSearch):
         if r_lo is None:
             d = self._distance_to_surface(xc, yc, pts)
             d = max(d, self.min_radius)
-            return d, d
+            return _NoValidRadius((d, d))      # v0.1.495 (D434)
 
         def fixed_by_a_limit(r) -> bool:
             # The end IS a limit point's distance: the crossing sits on a
@@ -3998,6 +4038,14 @@ class GridSearch(BaseSearch):
         r_min = max(r_min, self.min_radius)
         if r_max < r_min:
             r_max = r_min
+            # v0.1.495 (D434) -- the two ends crossed: the range is thinner
+            # than its margins and every circle of the centre is the same
+            # one, at an end of it. Marked as a centre with no range at
+            # all: the bank's wall grid has three such centres besides its
+            # forty, and the reference fails their 61 circles too (43
+            # centres, 0 valid of 2623). A circle of one that is valid
+            # stays valid; only a refused one is the -1000.
+            return _NoValidRadius((r_min, r_max))
         return r_min, r_max
 
     @staticmethod
@@ -4193,6 +4241,9 @@ class GridSearch(BaseSearch):
                     result.attempts += n_circles
                     continue
                 r_min, r_max = bracket
+                # v0.1.495 (D434) -- no valid radius at this centre: whatever
+                # refuses each of its circles, it is the reference's -1000
+                no_valid = type(bracket) is _NoValidRadius
                 for k in range(n_circles):
                     # v0.1.187 — counted HERE, before anything can reject
                     # it, so ``attempts`` is exactly (nx+1)(ny+1)(rinc+1)
@@ -4222,7 +4273,10 @@ class GridSearch(BaseSearch):
                         result.focus_rejected += 1
                         continue
                     circle = SlipCircle(centre_x=xc, centre_y=yc, radius=r)
-                    res = self.evaluate_circle(project, circle)
+                    if no_valid:
+                        res = self._evaluate_without_radius(project, circle)
+                    else:
+                        res = self.evaluate_circle(project, circle)
                     # v0.1.83 — a circle that could not be analysed is
                     # still a circle that was GENERATED, and it has to
                     # appear in the totals. Until now ``res is None`` fell
@@ -4250,6 +4304,24 @@ class GridSearch(BaseSearch):
             self._active_share = None
 
         return result
+
+    def _evaluate_without_radius(self, project: Project, circle):
+        """:meth:`evaluate_circle` for a circle of a centre with no valid
+        radius (v0.1.495, D434). A refusal the census counts (a circle that
+        misses the ground, one outside the Slope Limits...) is counted once
+        under ``_no_valid_radius`` instead: the reference's -1000. A result,
+        if one ever came back, is the result, and nothing is taken from it.
+        """
+        before = {c: getattr(self, c, 0) or 0 for c in _CENSUS_COUNTERS}
+        res = self.evaluate_circle(project, circle)
+        if res is None:
+            moved = [c for c in _CENSUS_COUNTERS
+                     if (getattr(self, c, 0) or 0) != before[c]]
+            if moved:
+                for c in moved:
+                    setattr(self, c, before[c])
+                self._no_valid_radius = before["_no_valid_radius"] + 1
+        return res
 
 
 # ======================================================================

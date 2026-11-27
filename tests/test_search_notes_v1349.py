@@ -312,6 +312,13 @@ _V1348 = [{'code': 'search.unsliceable',
              'anywhere is refused entirely, so a vertex a ten-thousandth '
              'over the profile is enough.',
   'args': {}},
+ # v0.1.495 (D434) -- the circles of a grid centre with no valid radius
+ {'code': 'search.refused.no_valid_radius',
+  'english': '27 circles of grid centres with no valid radius',
+  'args': {'n': 27}},
+ {'code': 'search.refused.no_valid_radius',
+  'english': '1 circle of a grid centre with no valid radius',
+  'args': {'n': 1}},
  # v0.1.493 (D436) -- the start refused for a reason the search recorded
  {'code': 'search.opt.start_refused_because',
   'english': 'The optimisation cannot start from this surface, because the '

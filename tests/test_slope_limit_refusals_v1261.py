@@ -350,20 +350,27 @@ class TestASlopeLimitRefusalHasAName:
         s = build_search(p, "bishop_simplified")
         assert s.evaluate_surface(p, _poly(surface)) is not None
 
-    def test_a_circle_that_misses_the_ground_is_the_references_101(self):
+    def test_a_circle_of_a_centre_with_no_valid_radius_is_the_1000(self):
         """D77's centres with no valid radius: the grid emits the tangent
         radius rinc + 1 times at each, and every one of those circles
-        misses the ground. All 27 are counted as such, and the run that
-        ends with nothing says so."""
+        misses the ground. All 27 are counted, and the run that ends with
+        nothing says so.
+
+        v0.1.495 (D434) -- changed on purpose: counted as circles of a
+        centre with no valid radius, the reference's -1000 ("no valid slip
+        surface is generated"), and no longer as -101 circles that miss the
+        ground (the reference publishes 231 -1000 and no -101 on Ej_1)."""
         from ogr_slip2d.interpretation import invalid_summary
         r = _grid((_EXIT, _ENTRY), grid_x=(-24.0, -22.1), grid_y=(15.0, 16.8),
                   grid_nx=2, grid_ny=2, radius_increment=2,
                   min_area=2.0).run(_wall())
         assert r.total_count == 27 and r.valid_count == 0
-        assert r.misses_ground == 27
-        assert invalid_summary(r)["by_reason"].get(
-            "the circle does not cut the ground surface twice") == 27
-        assert any("27 circles that do not cut the ground twice" in n
+        assert r.no_valid_radius == 27 and r.misses_ground == 0
+        census = invalid_summary(r)
+        assert census["by_reason"].get(
+            "the circle is one of a grid centre with no valid radius") == 27
+        assert census["by_code"].get(-1000) == 27
+        assert any("27 circles of grid centres with no valid radius" in n
                    for n in r.notes), r.notes
 
     def test_a_run_with_a_valid_surface_says_nothing_of_the_kind(self):
@@ -500,7 +507,11 @@ class TestAParallelGridSaysWhatASequentialOneSays:
         s1, seq, _ = self._run(wall(False))
         s2, par, used = self._run(wall(True))
         assert used == [True], used
-        assert seq.misses_ground > 0
+        # v0.1.495 (D434) -- the circles of the centres with no valid
+        # radius, which until this version were among those that miss the
+        # ground
+        assert seq.no_valid_radius > 0
+        assert par.no_valid_radius == seq.no_valid_radius
         assert par.misses_ground == seq.misses_ground
         for name in _RUN_COUNTERS:
             assert getattr(s2, name) == getattr(s1, name), name

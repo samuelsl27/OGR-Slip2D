@@ -6158,6 +6158,11 @@ _DICTS: dict[str, dict[str, str]] = {
             '{n} círculos que no cortan dos veces el terreno',
         '{n} circle that do not cut the ground twice':
             '{n} círculo que no corta dos veces el terreno',
+        # v0.1.495 (D434)
+        '{n} circles of grid centres with no valid radius':
+            '{n} círculos de centros de la rejilla sin ningún radio válido',
+        '{n} circle of a grid centre with no valid radius':
+            '{n} círculo de un centro de la rejilla sin ningún radio válido',
         # v0.1.445 (D420)
         '{n} circles that leave the External Boundary between their '
         'crossings with the ground':
@@ -6282,6 +6287,10 @@ _DICTS: dict[str, dict[str, str]] = {
             'un extremo aflora fuera de los límites del talud',
         'the circle does not cut the ground surface twice':
             'el círculo no corta dos veces la superficie del terreno',
+        # v0.1.495 (D434)
+        'the circle is one of a grid centre with no valid radius':
+            'el círculo es de un centro de la rejilla sin ningún radio '
+            'válido',
         'the circle leaves the External Boundary between its crossings with '
         'the ground':
             'el círculo sale del contorno exterior entre sus cortes con el '
