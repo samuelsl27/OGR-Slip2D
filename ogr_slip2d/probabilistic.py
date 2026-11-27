@@ -1862,6 +1862,10 @@ class OverallSlopeResult:
             # v0.1.237 (D87) — and why there is none, when there is none.
             "critical_probabilistic_note":
                 self.notes.get("critical_probabilistic"),
+            # v0.1.504 (D442) -- whose it is, as Interpret's status bar says
+            # since v0.1.503; ``None`` when there is no such surface.
+            "critical_probabilistic_user_defined": (
+                bool(cp.user_defined) if cp else None),
             "mass_switches": self.mass_switches,        # v0.1.238 (D89)
             "failed_samples": self.failed_samples,
             "lost_by_cause": self.notes.get("lost_by_cause"),
