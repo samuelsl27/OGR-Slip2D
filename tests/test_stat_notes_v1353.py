@@ -658,6 +658,24 @@ _LATER = [
      'code': 'stat.rule_counted',
      'english': '3 times, the first: kh must not be negative, got -0.1.',
      'args': {'n': 3, 'rule': {'$raw': 'kh must not be negative, got -0.1.'}}},
+    # v0.1.501 (D441) — the variables the sensitivity leaves out for want of
+    # a range, new in that version: its English as it was written
+    {'cat': 'stat',
+     'code': 'stat.sens_no_range',
+     'english': '2 of the 3 random variables have no range (their relative '
+                'minimum and maximum are both zero), so the sensitivity '
+                'analysis did not sweep them: material_strength:m1:cohesion, '
+                'material:m1:unit_weight',
+     'args': {'n': 2, 'total': 3,
+              'keys': 'material_strength:m1:cohesion, '
+                      'material:m1:unit_weight'}},
+    {'cat': 'stat',
+     'code': 'stat.sens_no_range',
+     'english': '1 of the 2 random variables has no range (its relative '
+                'minimum and maximum are both zero), so the sensitivity '
+                'analysis did not sweep it: material_strength:m1:cohesion',
+     'args': {'n': 1, 'total': 2,
+              'keys': 'material_strength:m1:cohesion'}},
     # v0.1.453 (the review of D416) — the variables a probabilistic run does
     # not sample, by the core's reason, and the correlations it cannot apply
     {'cat': 'stat',

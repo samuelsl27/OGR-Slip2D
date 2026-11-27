@@ -131,7 +131,9 @@ stability analysis read the field.
   random_variable_set refuses the rest. A variable that is not random is
   left out of the run with a warning (stat.vars_not_random), and so is a
   correlation with it (stat.correlation_not_applied); distribution 'none'
-  switches a variable off without one.
+  switches a variable off in the probabilistic runs without one. The
+  sensitivity analysis reads only the range: it sweeps every variable with
+  one, 'none' included, and names those without (stat.sens_no_range).
 * back_analysis_run: the horizontal support force for a target factor of
   safety, over the admissible surfaces the run analyses, the ones you
   defined by hand included. Two kinds are left out: the ones already at

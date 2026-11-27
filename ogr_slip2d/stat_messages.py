@@ -40,6 +40,10 @@ NO_VARIABLES = S + "no_variables"
 NO_DETERMINISTIC_RESULT = S + "no_deterministic_result"
 NO_METHOD_SELECTED = S + "no_method_selected"
 NO_RANGE = S + "no_range"
+#: v0.1.501 (D441) -- some variables have a range and others not: the
+#: sensitivity sweeps the first and names the second, which it dropped
+#: without a word
+SENS_NO_RANGE = S + "sens_no_range"
 VARS_NONE = S + "vars_none"
 VARS_NOT_SAMPLED = S + "vars_not_sampled"
 VARS_NOT_SWEPT = S + "vars_not_swept"
@@ -157,6 +161,14 @@ STAT_NOTES = {s.code: s for s in (
     MessageSpec(NO_RANGE,
                 "No variable has a range: enter a relative minimum and "
                 "maximum for at least one parameter."),
+    MessageSpec(SENS_NO_RANGE,
+                "{n} of the {total} random variables have no range (their "
+                "relative minimum and maximum are both zero), so the "
+                "sensitivity analysis did not sweep them: {keys}",
+                one="{n} of the {total} random variables has no range (its "
+                    "relative minimum and maximum are both zero), so the "
+                    "sensitivity analysis did not sweep it: {keys}",
+                count="n", kinds=(("keys", "variable_keys"),)),
     # v0.1.434 (D412) -- a variable is named by its key («hydraulic:<uuid>:ks»),
     # which the agent uses; the window names it by its label (``variable_*``)
     MessageSpec(VARS_NONE,

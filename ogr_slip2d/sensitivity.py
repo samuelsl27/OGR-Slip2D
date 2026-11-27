@@ -277,6 +277,17 @@ def run_sensitivity(
     if not usable:
         _publish_note(res, "error", SM.stat_note(SM.NO_RANGE))
         return res
+    # v0.1.501 (D441) -- and the ones left out, by name: they disappeared
+    # from the result without a word, while the probabilistic runs name
+    # theirs (``stat.vars_not_random``). A variable whose distribution is
+    # 'none' and that has a range IS swept, as the reference documents (only
+    # the minimum and maximum apply to a sensitivity analysis; owner's
+    # decision A).
+    unswept = [rv.key for rv in variables if not rv.distribution.has_range]
+    if unswept:
+        _publish_note(res, "warning", SM.stat_note(
+            SM.SENS_NO_RANGE, n=len(unswept), total=len(variables),
+            keys=", ".join(unswept)))
     # v0.1.423 (D372) — as in ``run_global_minimum``: all hydraulic stops
     # here, some hydraulic are named and not swept (below).
     if _hydraulic_variables_stop(res, usable):

@@ -7534,6 +7534,11 @@ _DICTS: dict[str, dict[str, str]] = {
             '{n} de las {total} variables aleatorias no se pueden muestrear y '
             'se han dejado fuera: {reasons}',
         'no distribution ({keys})': 'sin distribución ({keys})',
+        # v0.1.501 (D441) -- the sensitivity's variables without a range
+        '{n} of the {total} random variables have no range (their relative minimum and maximum are both zero), so the sensitivity analysis did not sweep them: {keys}':
+            '{n} de las {total} variables aleatorias no tienen rango (su mínimo y su máximo relativos son los dos cero), así que el análisis de sensibilidad no las barrió: {keys}',
+        '{n} of the {total} random variables has no range (its relative minimum and maximum are both zero), so the sensitivity analysis did not sweep it: {keys}':
+            '{n} de las {total} variables aleatorias no tiene rango (su mínimo y su máximo relativos son los dos cero), así que el análisis de sensibilidad no la barrió: {keys}',
         'an empty range ({keys})': 'con el rango vacío ({keys})',
         'no standard deviation ({keys})': 'sin desviación típica ({keys})',
         'a mean that is not positive in a distribution of positive values '
