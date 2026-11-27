@@ -484,6 +484,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'Convergence': 'Convergencia',
         'Could not write the file: %s': 'No se ha podido escribir el archivo: %s',
         'Critical probabilistic surface: PF = %.2f %%, reliability index = %.3f': 'Superficie probabilística crítica: PF = %.2f %%, índice de fiabilidad = %.3f',
+        'Critical probabilistic surface: PF = %.2f %%, reliability index = %.3f, defined by the user.': 'Superficie probabilística crítica: PF = %.2f %%, índice de fiabilidad = %.3f, definida por el usuario.',
+        'Critical probabilistic surface': 'Superficie probabilística crítica',
         'Define User Data': 'Definir datos de usuario',
         'Delete Query': 'Eliminar consulta',
         'Elevation of the force:': 'Cota de la fuerza:',

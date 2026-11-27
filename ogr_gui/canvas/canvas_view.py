@@ -57,6 +57,11 @@ from .snap_engine import SnapEngine, SnapSettings, nice_step
 from .tool_mode import ToolMode
 from ogr_gui.i18n import tr  # noqa: E402
 
+#: v0.1.503 (D442) -- the critical probabilistic surface of Interpret. An
+#: orange, apart from the red of the critical surface, the purple of the
+#: selected one, the black of a minimum and the blue of the water.
+PROBABILISTIC_SURFACE_COLOUR = "#f77f00"
+
 # The sheet the canvas shows with nothing open. One definition, because
 # Zoom All and the scene rect both need it and they must not drift apart.
 EMPTY_VIEW_RECT = QRectF(-5, -5, 60, 40)
@@ -969,6 +974,7 @@ class CanvasView(QGraphicsView):
         error_filter: str | None = None,
         invalid_reason_fn=None,
         extra_surface_dicts=None,
+        probabilistic_surface_dict=None,
     ) -> None:
         """Render the search result on the canvas.
 
@@ -1018,7 +1024,8 @@ class CanvasView(QGraphicsView):
                 surface_mode=surface_mode, fos_filter=fos_filter,
                 query_ids=query_ids, error_filter=error_filter,
                 invalid_reason_fn=invalid_reason_fn,
-                extra_surface_dicts=extra_surface_dicts))
+                extra_surface_dicts=extra_surface_dicts,
+                probabilistic_surface_dict=probabilistic_surface_dict))
         scene = self.scene()
         for item in self._result_items:
             if item.scene() is scene:
@@ -1158,6 +1165,23 @@ class CanvasView(QGraphicsView):
                 sd, sd.get("_fos", float("inf")),
                 is_critical=False, is_selected=False, is_query=True,
             )
+            scene.addItem(item)
+            self._result_items.append(item)
+
+        # v0.1.503 (D442) -- the critical probabilistic surface, which the
+        # Interpret toggle only reported on the status bar since v0.1.37.
+        # The stroke of the minima above (the owner's decision), in a colour
+        # of its own: red is the critical surface, purple the selected one
+        # and black a minimum or a query, and this is none of those.
+        if probabilistic_surface_dict:
+            item = SlipSurfaceItem(
+                probabilistic_surface_dict, float("inf"),
+                is_critical=False, is_selected=False, is_query=True,
+            )
+            pen = item.pen()
+            pen.setColor(QColor(PROBABILISTIC_SURFACE_COLOUR))
+            item.setPen(pen)
+            item.setToolTip(tr("Critical probabilistic surface"))
             scene.addItem(item)
             self._result_items.append(item)
 

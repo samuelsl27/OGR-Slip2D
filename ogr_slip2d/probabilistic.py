@@ -1186,7 +1186,7 @@ def _accumulate_surfaces(run, per_surface: dict) -> None:
     global minimum. A surface of the user that is also one of the search
     is counted once (``seen``).
     """
-    from .search import all_evaluations_of
+    from .search import all_evaluations_of, is_user_surface_of
 
     left_out = {id(r) for r in (getattr(run, "steered", None) or ())}
     optimized = getattr(run, "optimized", None)
@@ -1198,13 +1198,22 @@ def _accumulate_surfaces(run, per_surface: dict) -> None:
             continue
         sd = ev.surface.to_dict() if hasattr(ev.surface, "to_dict") else None
         key = _surface_key(sd)
-        if not key or key in seen:
+        if not key:
+            continue
+        # v0.1.503 (D442) -- asked before ``seen``: a surface of the user
+        # that is also one of the search is counted once, and is still the
+        # user's
+        user = is_user_surface_of(run, ev)
+        if key in seen:
+            if user:
+                per_surface[key].user_defined = True
             continue
         seen.add(key)
         sp = per_surface.get(key)
         if sp is None:
             sp = SurfaceProbability(surface=sd)
             per_surface[key] = sp
+        sp.user_defined = sp.user_defined or user
         sp.statistics.values.append(ev.fos)
 
 
@@ -1783,6 +1792,11 @@ class SurfaceProbability:
     surface: Optional[dict] = None
     statistics: SampleStatistics = field(default_factory=SampleStatistics)
     times_global_minimum: int = 0
+    #: v0.1.503 (D442) -- whether the user defined it (``is_user_surface_of``
+    #: in some sample). Kept here because only the run knows it: Interpret
+    #: gets the surface as a dictionary, and a polyline of the user and one
+    #: of the search with the same vertices are the same dictionary.
+    user_defined: bool = False
 
     @property
     def probability_of_failure(self) -> Optional[float]:

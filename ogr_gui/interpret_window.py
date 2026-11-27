@@ -1741,6 +1741,8 @@ class InterpretWindow(QMainWindow):
             extra_surface_dicts=(self.reported_minima()
                                  if getattr(self, "_show_minima", False)
                                  else None),
+            # v0.1.503 (D442)
+            probabilistic_surface_dict=self._critical_probabilistic_dict(),
         )
         # v0.1.86 — the read-outs are re-added here, after the canvas has
         # rebuilt the scene, for the same reason everything else is: this
@@ -3290,9 +3292,37 @@ class InterpretWindow(QMainWindow):
         self._pick_minima_dialog = dlg
         dlg.show()
 
-    def _toggle_critical_prob(self, on: bool) -> None:
+    def _critical_probabilistic(self):
+        """The critical probabilistic surface of the statistics, or None."""
         prob, _sens = self._stat_results()
         if prob is None or not prob.ok:
+            return None
+        return getattr(prob.reported, "critical_probabilistic", None)
+
+    def _critical_probabilistic_dict(self):
+        """The surface the toggle draws (v0.1.503, D442), while it is on and
+        the statistics still have one: asked on every redraw, so a result
+        that goes takes its drawing with it."""
+        if not getattr(self, "_show_crit_prob", False):
+            return None
+        cp = self._critical_probabilistic()
+        return None if cp is None else (cp.surface or None)
+
+    def _toggle_critical_prob(self, on: bool) -> None:
+        """DRAW the critical probabilistic surface and report it.
+
+        v0.1.503 (D442) -- from v0.1.37 this slot only wrote the PF on the
+        status bar, and ticking it left the canvas the same image bit for
+        bit: the defect v0.1.126 mended in its neighbour Show GM Surfaces.
+        Since v0.1.454 (D417) the surface can be one the user defined, and
+        the user could neither see it nor tell that it was theirs.
+        """
+        was = getattr(self, "_show_crit_prob", False)
+        self._show_crit_prob = False
+        prob, _sens = self._stat_results()
+        if prob is None or not prob.ok:
+            if was:
+                self._refresh_canvas_with_highlights()
             if on:
                 self._info(tr("No probabilistic result."))
             return
@@ -3304,6 +3334,8 @@ class InterpretWindow(QMainWindow):
         # would be dead code.
         cp = getattr(prob.reported, "critical_probabilistic", None)
         if cp is None:
+            if was:
+                self._refresh_canvas_with_highlights()
             if on:
                 # v0.1.237 (D87) — an Overall Slope run can have none too,
                 # and then it says why (a search that steers on its own
@@ -3319,12 +3351,20 @@ class InterpretWindow(QMainWindow):
                     "No critical probabilistic surface: it comes from the "
                     "Overall Slope analysis type."))
             return
+        self._show_crit_prob = bool(on)
+        self._refresh_canvas_with_highlights()
         if on:
+            # with D401's words, as the back analysis says it
+            text = (tr("Critical probabilistic surface: PF = %.2f %%, "
+                       "reliability index = %.3f, defined by the user.")
+                    if getattr(cp, "user_defined", False) else
+                    tr("Critical probabilistic surface: PF = %.2f %%, "
+                       "reliability index = %.3f"))
             self.statusBar().showMessage(
-                tr("Critical probabilistic surface: PF = %.2f %%, "
-                   "reliability index = %.3f")
-                % (cp.probability_of_failure * 100.0,
-                   cp.reliability_index), 12000)
+                text % (cp.probability_of_failure * 100.0,
+                        cp.reliability_index), 12000)
+        else:
+            self.statusBar().clearMessage()
 
     def _legend_options(self) -> None:
         """Number format and precision of the colour scale."""
