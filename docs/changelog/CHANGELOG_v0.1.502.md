@@ -96,4 +96,5 @@ recomendación, deshabilitarlo con su porqué, porque la pregunta quedó sin res
 ## 4. Suite
 
 - La primera suite entera dio 2 fallos, los dos del castellano del *tooltip* (§1). Corregido y
-  repetida: ver el commit que la cierra.
+  repetida: 7666 casos, 7664 pasan, 0 fallan, 2 saltados, sin fugas ni tramos muertos. La
+  última serie fue hace 39 commits.
