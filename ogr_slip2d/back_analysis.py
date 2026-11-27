@@ -548,6 +548,37 @@ def required_force(slices, surface, target_fos, method_id="bishop_simplified",
 REFERENCE_SCREENS = True
 
 
+def model_of_slices(project):
+    """The model the slices of a run of ``project`` were computed on, as
+    the supports have to read it (v0.1.494, D432).
+
+    ``project`` itself, unless it asks for a rapid drawdown: then the model
+    at the drawn-down level, ``level_project(project, use_drawdown=True)``
+    (Duncan, Wright & Wong 1990; the same call the procedures make). Every
+    procedure publishes the slices of its drawn-down stage -- the second
+    stage of Lowe-Karafiath, the capped last pass of Duncan-Wright-Wong and
+    of Corps 2, and B-bar's one pass -- and computes the support forces of
+    those slices on that model. A support whose capacity is read from the
+    soil (a geosynthetic in coefficient mode, Jewell 1996, and every type
+    with a bond profile) reads the effective vertical stress, and with it
+    the water: at the initial level it is another force. Measured on the
+    Pilarcitos embankment of ``test_rapid_drawdown_v168`` with a sheet in
+    coefficient mode between the two levels: the force of D210's identity
+    was +0.173 of the weight with the model as drawn, 0 (to 1e-14) with this
+    one, under all four procedures, Janbu and Bishop; and at a target of
+    1.1 F a passive force 3.2 times the one the computed model asks for.
+
+    ``project`` is the model the run was given -- the factored copy under
+    a design standard (D210) -- and is never modified. Only the water
+    moves, so the ground the screens of D418 read is the same in both.
+    """
+    gw = getattr(getattr(project, "settings", None), "groundwater", None)
+    if gw is None or not getattr(gw, "rapid_drawdown", False):
+        return project
+    from .rapid_drawdown import level_project
+    return level_project(project, use_drawdown=True)
+
+
 def ground_of(project):
     """The ground profile the tops of the slices lie on, or None for a
     model without an external boundary. Found once per run and handed to
@@ -648,7 +679,10 @@ def required_force_of_result(result, target_fos, elevation, project,
     project as drawn do not price it alike. The caller answers for it
     being that model: a result does not carry the supports it was computed
     with, only their forces slice by slice at the method's own factor,
-    which cannot be read at another one.
+    which cannot be read at another one. Under a rapid drawdown the supports
+    are read at the drawn-down level, the one the slices were computed at
+    (:func:`model_of_slices`, v0.1.494, D432): the caller still hands over
+    the model of the run, and the rule is the engine's, as in the run.
 
     Until this version the interpretation window passed the run's slices
     with the coefficients and the supports of the project AS IT IS NOW:
@@ -672,8 +706,10 @@ def required_force_of_result(result, target_fos, elevation, project,
     kv = float(details.get("kv", 0.0) or 0.0)
     if method_id is None:
         method_id = getattr(result, "method_id", None)
+    # v0.1.494 (D432) -- the supports read at the level the slices were
+    # computed on: the drawn-down one under a rapid drawdown
     r = required_force(slices, result.surface, target_fos, method_id,
-                       elevation, kh, kv, project=project)
+                       elevation, kh, kv, project=model_of_slices(project))
     if r is None or r.notes or not REFERENCE_SCREENS:
         # What the method cannot price is said first, as the run says it
         # (Bishop and a surface that is not a circle, an envelope that did
@@ -803,6 +839,9 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
     # published 228 and 548 kN/m on the demo slope, growing with the arm.
     screens = REFERENCE_SCREENS
     ground = ground_of(project) if screens else None
+    # v0.1.494 (D432) -- once, for every surface: the model the supports
+    # are read on, the drawn-down one under a rapid drawdown
+    priced_on = model_of_slices(project)
     n_above = 0
     untouched = []          # the top range of each one left out
     # The inadmissible surfaces, with their forces: to say whether one of
@@ -841,7 +880,7 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
                 untouched.append(top)
                 continue
         r = required_force(slices, ev.surface, target_fos, method_id,
-                           elevation, kh, kv, project=project)
+                           elevation, kh, kv, project=priced_on)
         out.surfaces_analysed += 1
         if r is None:
             continue
