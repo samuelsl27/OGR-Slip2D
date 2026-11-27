@@ -68,7 +68,19 @@ Opción **B**, decisión de la propietaria del 2026-11-27: todo rechazo por los 
 - Banco: `d435()` en el `verificar_cierres.py` de la raíz da **CUBIERTO POR TEST** (`{-1000: 1254,
   -113: 127, -111: 261, -103: 1}`). `d403()` sigue cubierto.
 
-## 3. Lo que no se ha probado aquí
+## 3. El cierre de la tanda (0.1.493–0.1.496)
 
-- Las huellas de `_auditoria/COMPUTO/bench/` de D434 y D435, y la suite entera: van al cierre de
-  la tanda, después de este commit.
+- **Huellas del banco de cómputo** (`_auditoria/COMPUTO/bench/`, lote `version`, 23 casos). Se
+  hizo un A/B en esta máquina: 0.1.492 (67faf4f, en `datos/v0.1.492_ab`) frente a 0.1.496 (en
+  `datos/v0.1.496`). La huella de 0.1.473 se sacó en el PC anterior y no sirve para comparar.
+  - 9 casos idénticos.
+  - En los otros 14, la única diferencia es el campo nuevo `SearchResult.no_valid_radius` (D434),
+    que vale 0 en 11 de ellos.
+  - En K06, K07 y K08, los círculos de centros sin radio válido pasan de `misses_ground` a
+    `no_valid_radius`, uno por uno: 3348, 368 y 3201, en cada método.
+  - Ningún número más se mueve: ni factores ni dovelas.
+  - Los dos lotes salen con código 1 por la comprobación de entradas, no por los casos
+    (`failures: 0`). El manifiesto guarda rutas `C:\Samuel\…` del PC anterior, que hay que migrar
+    o aceptar; queda para la propietaria.
+- **Suite entera** con `--jobs 4`: 7622 casos, 7620 pasan, 0 fallan, 2 saltados, sin fugas ni
+  tramos muertos. La última serie fue hace 30 commits.
