@@ -113,14 +113,14 @@ class TestTheNoteIsSaid:
         assert args is not None, list(notes)
         crit = run.results[_METHOD].critical
         assert args["n"] == 1 and args["valid"] == 1
-        assert args["fos"] == crit.fos and args["target"] == 1.0
+        assert args["factor"] == crit.fos and args["target"] == 1.0
 
     def test_by_evaluate_surfaces_as_one_surface(self):
         _p, _run, one = _doors("factored")
         notes = _notes(one.warnings)
         args = notes.get("method.seismic_static_unstable_given")
         assert args is not None, list(notes)
-        assert args["fos"] == one.results[_METHOD].fos
+        assert args["factor"] == one.results[_METHOD].fos
         assert "method.seismic_static_unstable" not in notes
 
     def test_by_a_ky_run_without_newmark(self):

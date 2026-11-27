@@ -51,3 +51,21 @@ Caso 2 sin decisión. Caso 1, opción **A** de la propietaria (2026-11-27).
 - Áreas `sensitivity`, `stat_notes`, `core_messages`, `statistics`, `mcp`, `i18n`, `translation`
   y `random_variable`: 303 en verde.
 - Banco: `d441()` en el `verificar_cierres.py` de la raíz da **CUBIERTO POR TEST**.
+
+## 3. El cierre de la tanda (0.1.497–0.1.501)
+
+- **La suite entera con `--jobs 4` encontró un fallo de 0.1.498**, que las áreas no habían
+  ejercitado: `tests/test_terms_spanish_v1323.py`. Las plantillas de D439 llamaban `{fos:.4f}` al
+  campo del factor, y la regla del término retirado «FoS» (`\bFoS\b`, sin distinguir mayúsculas)
+  lo encontraba en sus tres valores en castellano. El campo pasa a llamarse `{factor}` en las
+  plantillas, en `_static_unstable_note`, en el castellano y en los tests (`_V1347` y
+  `test_seismic_static_unstable_v1498`). El inglés que se lee no cambia.
+- Repetida después: 7658 casos, 7656 pasan, 0 fallan, 2 saltados, sin fugas ni tramos muertos.
+  La última serie fue hace 36 commits.
+- **Queda para la propietaria:**
+  - OGR-Core: la fila «Critical surface: the one with the lowest Ky of this method» del informe
+    PDF (`report_generator._seismic_rows`) es falsa con talud arriba desde 0.1.499, y debe leer
+    `SearchResult.net_newmark`. El docstring de `SeismicAnalysisSettings` repite la premisa;
+  - gemela en ogr_ui: `contours` (`for_reported`) e `i18n` (0.1.500);
+  - la prueba a mano de Interpretar con una corrida Ky y una Newmark (mapa, leyenda, Minimum
+    Surfaces).

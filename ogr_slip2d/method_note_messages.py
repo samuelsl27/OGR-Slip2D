@@ -456,16 +456,16 @@ METHOD_NOTES = {s.code: s for s in (
                 count="n"),
     MessageSpec(SEISMIC_STATIC_UNSTABLE_CRITICAL,
                 "{n} of {valid} surfaces, the critical one among them (a "
-                "factor of {fos:.4f} at kh = 0), already have a factor of "
+                "factor of {factor:.4f} at kh = 0), already have a factor of "
                 "safety at or below the Ky target of {target:g} without an "
                 "earthquake, " + _STATIC_TAIL,
                 one="{n} of {valid} surfaces, the critical one (a factor of "
-                    "{fos:.4f} at kh = 0), already has a factor of safety at "
+                    "{factor:.4f} at kh = 0), already has a factor of safety at "
                     "or below the Ky target of {target:g} without an "
                     "earthquake, " + _STATIC_TAIL_ONE,
                 count="n"),
     MessageSpec(SEISMIC_STATIC_UNSTABLE_GIVEN,
-                "the surface already has a factor of safety of {fos:.4f} at "
+                "the surface already has a factor of safety of {factor:.4f} at "
                 "kh = 0, at or below the Ky target of {target:g}, "
                 + _STATIC_TAIL_ONE),
     MessageSpec(NEWMARK_NO_RECORD,

@@ -341,7 +341,7 @@ _V1347 = [{'code': 'method.sarma_near_pole',
              'their critical seismic coefficient is 0: that Ky, and any '
              'Newmark displacement integrated from it, are not those of a '
              'slope that stands.',
-  'args': {'n': 12, 'valid': 40, 'fos': 0.808357, 'target': 1.0},
+  'args': {'n': 12, 'valid': 40, 'factor': 0.808357, 'target': 1.0},
   'prefix': 'bishop_simplified'},
  {'code': 'method.seismic_static_unstable_critical',
   'english': 'bishop_simplified: 1 of 1 surfaces, the critical one (a factor '
@@ -349,7 +349,7 @@ _V1347 = [{'code': 'method.sarma_near_pole',
              'below the Ky target of 1 without an earthquake, so its critical '
              'seismic coefficient is 0: that Ky, and any Newmark displacement '
              'integrated from it, are not those of a slope that stands.',
-  'args': {'n': 1, 'valid': 1, 'fos': 0.808357, 'target': 1.0},
+  'args': {'n': 1, 'valid': 1, 'factor': 0.808357, 'target': 1.0},
   'prefix': 'bishop_simplified'},
  {'code': 'method.seismic_static_unstable_given',
   'english': 'bishop_simplified: the surface already has a factor of safety '
@@ -357,7 +357,7 @@ _V1347 = [{'code': 'method.sarma_near_pole',
              'critical seismic coefficient is 0: that Ky, and any Newmark '
              'displacement integrated from it, are not those of a slope that '
              'stands.',
-  'args': {'fos': 0.808357, 'target': 1.0},
+  'args': {'factor': 0.808357, 'target': 1.0},
   'prefix': 'bishop_simplified'},
  # v0.1.497 (D440) -- new in that version: its English as it was written
  {'code': 'method.newmark_record_missing',

@@ -2817,11 +2817,11 @@ def _static_unstable_note(cfg, valid, one_surface, result):
         return None
     if one_surface:
         return _mnote(MN.SEISMIC_STATIC_UNSTABLE_GIVEN,
-                      fos=unstable[0].fos, target=target)
+                      factor=unstable[0].fos, target=target)
     crit = getattr(result, "critical", None) if result is not None else None
     if crit is not None and any(r is crit for r in unstable):
         return _mnote(MN.SEISMIC_STATIC_UNSTABLE_CRITICAL, n=len(unstable),
-                      valid=len(valid), fos=crit.fos, target=target)
+                      valid=len(valid), factor=crit.fos, target=target)
     return _mnote(MN.SEISMIC_STATIC_UNSTABLE, n=len(unstable),
                   valid=len(valid), target=target)
 
