@@ -50,7 +50,8 @@ nueva de `results_get`.
   negro. El naranja no coincide con ninguno. **Para que lo mire la propietaria:** en los modos
   *Minimum* y *All Surfaces*, cada superficie toma el color de su factor en la leyenda, y el
   naranja de la leyenda (FS 0,75–1,0) se le parece. El grosor (2 px frente a 1,2) las distingue,
-  pero no del todo. La captura está en el resumen de la sesión.
+  pero no del todo. La captura está en el resumen de la sesión. **La propietaria dio por bueno
+  el naranja el 2026-11-27.**
 - Acción: no hay ninguna nueva. El conmutador sigue en *Statistics*, con su puerta de D413.
 - Mensaje: la barra dice el PF, el índice y, si es el caso, que la superficie es del usuario.
   Ningún diálogo modal en el camino que corre el test.
