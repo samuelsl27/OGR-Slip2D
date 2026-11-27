@@ -44,6 +44,14 @@ ERROR_NOT_CONVERGED = -111
 #: the result (``SearchResult.leaves_external``), never on an evaluation:
 #: such a circle is not sliced, so ``error_code`` never returns it.
 ERROR_LEAVES_EXTERNAL = -103
+#: v0.1.496 (D435) — a surface with an end that daylights outside the
+#: user's Slope Limits: the reference's -113 («Slip surface intersects the
+#: External Boundary outside of user-defined Slope Limits»). Its -101 applies
+#: instead to one that does not intersect within the default limits either,
+#: the ends of the profile; every surface counted here does, because one that
+#: cuts the ground nowhere is refused before as ``misses_ground``. Counted on
+#: the result (``SearchResult.outside_slope_limits``).
+ERROR_SLOPE_LIMITS = -113
 ERROR_OTHER = -101
 #: v0.1.495 (D434) — a circle of a grid centre with no valid radius, which
 #: the grid emits so that its population stays (nx+1)(ny+1)(rinc+1): the
@@ -58,6 +66,8 @@ ERROR_CODES = {
     ERROR_LEAVES_EXTERNAL: "the circle leaves the External Boundary between "
                            "its crossings with the ground (counted before "
                            "slicing, so no surface carries it)",
+    ERROR_SLOPE_LIMITS: "an end daylights outside the Slope Limits (counted "
+                        "before slicing, so no surface carries it)",
     ERROR_OTHER: "any other rejection",
     ERROR_NO_SURFACE: "a circle of a grid centre with no valid radius: no "
                       "valid slip surface is generated there (counted "
@@ -210,8 +220,10 @@ def raw_data_rows(search_result) -> list:
 #:   the ends, under OGR's "any other rejection" −101 with a reason of
 #:   their own;
 #: * v0.1.261 (D263) — surfaces refused because an end daylights outside
-#:   the Slope Limits, which the reference does not code, and circles that
-#:   do not cut the ground twice, which ARE its −101 in its own words;
+#:   the Slope Limits, and circles that do not cut the ground twice, which
+#:   ARE its −101 in its own words. The first were filed under −101 too, on
+#:   the reading that the reference does not code them: its help does, −113
+#:   (v0.1.496, D435);
 #: * v0.1.445 (D420) — circles that leave the External Boundary between
 #:   their crossings with the ground, its −103;
 #: * v0.1.495 (D434) — the circles of a grid centre with no valid radius,
@@ -223,7 +235,7 @@ COUNTED_REJECTIONS = (
      "an end of the polyline is not on the ground surface"),
     (("bases_above_ground",), ERROR_OTHER,
      "the base rises above the ground surface between the ends"),
-    (("outside_slope_limits",), ERROR_OTHER,
+    (("outside_slope_limits",), ERROR_SLOPE_LIMITS,
      "an end daylights outside the Slope Limits"),
     (("misses_ground",), ERROR_OTHER,
      "the circle does not cut the ground surface twice"),

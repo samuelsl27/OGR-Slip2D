@@ -46,9 +46,12 @@ from .surface import SlipCircle, WeakLayerSurface, lowest_elevation
 #: v0.1.261 (D263) — a surface refused because an end daylights outside
 #: the Slope Limits, and a circle refused because it does not cut the
 #: ground twice. The second is the reference's −101 in its own words
-#: («Only one (or none) slip surface / slope intersections»); the first
-#: has no code of its own there. Neither is a slicer reason, so they live
-#: here and not in ``slicer``.
+#: («Only one (or none) slip surface / slope intersections»); the first is
+#: its −113 (v0.1.496, D435: «Slip surface intersects the External Boundary
+#: outside of user-defined Slope Limits», when it does intersect within the
+#: default ones, the ends of the profile, which every surface refused here
+#: does: one that cuts the ground nowhere is ``misses_ground`` before).
+#: Neither is a slicer reason, so they live here and not in ``slicer``.
 #:
 #: v0.1.495 (D434) — but the circles of a grid centre with no valid radius
 #: are not −101, whatever refuses them: they are the reference's −1000 («No

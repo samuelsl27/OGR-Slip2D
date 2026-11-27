@@ -292,8 +292,13 @@ class TestASlopeLimitRefusalHasAName:
     def test_a_block_search_refused_whole_by_the_limits_says_so(self):
         """Left window [0, 10], outside every left exit: all 40 candidates
         are refused by the limits, and the run says it. Fails on v0.1.260:
-        no count, no note."""
-        from ogr_slip2d.interpretation import ERROR_OTHER, invalid_summary
+        no count, no note.
+
+        v0.1.496 (D435) -- changed on purpose: under the reference's -113
+        ("Slip surface intersects the External Boundary outside of
+        user-defined Slope Limits"), no longer -101."""
+        from ogr_slip2d.interpretation import (ERROR_SLOPE_LIMITS,
+                                               invalid_summary)
         r = self._block(((0.0, 10.0), (40.0, 60.0)))
         assert r.valid_count == 0
         assert r.outside_slope_limits == self._BUDGET == r.total_count
@@ -304,7 +309,7 @@ class TestASlopeLimitRefusalHasAName:
         census = invalid_summary(r)
         assert census["by_reason"].get(
             "an end daylights outside the Slope Limits") == self._BUDGET
-        assert census["by_code"].get(ERROR_OTHER) == self._BUDGET
+        assert census["by_code"] == {ERROR_SLOPE_LIMITS: self._BUDGET}
         assert census["not_sliced"] == 0
 
     def test_the_control_window_over_the_exits_refuses_none(self):

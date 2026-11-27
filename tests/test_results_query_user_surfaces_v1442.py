@@ -22,11 +22,12 @@ What is anchored here:
   within the bounds, and the raw data is one row for each of both lists, the
   search's first and untouched;
 * the identity of the census, which is what keeps the two rules apart: for
-  every error code, ``filter(code).count == by_code.get(code, 0)``, less at
-  -101 the rejections that leave no evaluation and the census counts there.
-  On a grid whose census is NOT empty (two -112, four -111 and eleven -101
+  every error code, ``filter(code).count == by_code.get(code, 0)``, less
+  the rejections that leave no evaluation and the census counts there.
+  On a grid whose census is NOT empty (two -112, four -111 and eleven -113
   under Bishop, the eleven refused by the Slope Limits without leaving an
-  evaluation, so the -101 clause is exercised), with a user circle the
+  evaluation, so that clause is exercised; -101 until v0.1.496, D435),
+  with a user circle the
   m-alpha screen rejects: it is in the raw data, marked, and the census
   does not move;
 * without surfaces of the user nothing changes. ``_V1441`` is MEASURED on
@@ -84,8 +85,9 @@ def _path_project(method, polylines):
 def _grid_project(circles):
     """A low grid on the demo slope whose census is not empty under Bishop,
     with a left Slope Limit that refuses some circles before they are
-    sliced: 64 circles, two -112, four -111 and eleven -101, the eleven
-    without an evaluation (measured in the review of 0.1.442)."""
+    sliced: 64 circles, two -112, four -111 and eleven -113 (-101 until
+    v0.1.496), the eleven without an evaluation (measured in the review of
+    0.1.442)."""
     from examples.quick_slope import build_demo_slope
     from ogr_slip2d.surface import SlipCircle
     p = build_demo_slope()
@@ -194,11 +196,16 @@ def _no_evaluation(sr, code: int = -101) -> int:
     count.
 
     v0.1.445 (D420) -- changed on purpose: -103 too, the circles that leave
-    the External Boundary, counted on the result since that version."""
+    the External Boundary, counted on the result since that version.
+
+    v0.1.495 (D434) and v0.1.496 (D435) -- changed on purpose: the circles
+    of a grid centre with no valid radius are -1000, and the surfaces the
+    Slope Limits refuse are -113, the reference's codes for them."""
     attrs = {-101: ("ends_below_ground", "ends_above_ground",
-                    "bases_above_ground", "outside_slope_limits",
-                    "misses_ground"),
-             -103: ("leaves_external",)}.get(code, ())
+                    "bases_above_ground", "misses_ground"),
+             -103: ("leaves_external",),
+             -113: ("outside_slope_limits",),
+             -1000: ("no_valid_radius",)}.get(code, ())
     return sum(int(getattr(sr, a, 0) or 0) for a in attrs)
 
 
@@ -605,9 +612,10 @@ class TestTheCensusStaysTheSearchs:
         from ogr_slip2d.interpretation import error_code
         r = _run("grid+user")
         census = _q("grid+user", view="error_codes")["by_code"]
-        assert census == {"-112": 2, "-111": 4, "-101": 11}, census
+        # v0.1.496 (D435) -- changed on purpose: the eleven are -113
+        assert census == {"-113": 11, "-112": 2, "-111": 4}, census
         # the eleven left no evaluation: the Slope Limits refused them
-        assert _no_evaluation(r.sr) == 11
+        assert _no_evaluation(r.sr, -113) == 11
         assert r.sr.outside_slope_limits == 11
         free, barred = r.sr.user_evaluations
         assert r.sr.critical is free
@@ -637,7 +645,7 @@ class TestTheCensusStaysTheSearchs:
                 got = _q(name, view="filter", code=code, n=1000)
                 assert got["count"] == want, (name, code, got["count"], want)
                 assert not any(map(_is_users, got["surfaces"])), (name, code)
-        assert _q("grid+user", view="filter", code=-101)["count"] == 0
+        assert _q("grid+user", view="filter", code=-113)["count"] == 0
         assert _q("grid+user", view="filter", code=-112)["count"] == 2
 
     def test_a_code_with_a_bound_is_still_the_census(self):
@@ -762,17 +770,40 @@ def _save_all(name) -> str:
             return fh.read()
 
 
+def _as_of_0_1_496(view, answer):
+    """An answer measured on 0.1.441 with the one change made on purpose
+    since: the rejections of the Slope Limits under -113 (v0.1.496, D435),
+    which until then were the only -101 of these runs. The census lists its
+    codes in ascending order."""
+    if view == "error_codes":
+        by_code = answer
+    elif view == "invalid_summary":
+        by_code = answer["by_code"]
+    else:
+        return answer
+    assert set(by_code) == {"-112", "-111", "-101"} or "-101" not in by_code
+    moved = {("-113" if k == "-101" else k): v for k, v in by_code.items()}
+    moved = dict(sorted(moved.items(), key=lambda kv: int(kv[0])))
+    if view == "error_codes":
+        return moved
+    return {**answer, "by_code": moved}
+
+
 # ======================================================================
 class TestWithoutUserSurfacesNothingChanges:
     def test_the_answers_are_the_ones_of_0_1_441(self):
+        """v0.1.496 (D435) -- changed on purpose, and only there: the eleven
+        surfaces the Slope Limits refuse on the grid are -113, not -101
+        (``_as_of_0_1_496``)."""
         got = _capture()
         assert list(got) == list(_V1441)
         bad = []
         for name, views in _V1441.items():
             assert list(got[name]) == list(views), name
             for view, text in views.items():
-                bad += _differences(json.loads(got[name][view]),
-                                    json.loads(text), f"{name}.{view}")
+                want = _as_of_0_1_496(view, json.loads(text))
+                bad += _differences(json.loads(got[name][view]), want,
+                                    f"{name}.{view}")
         assert not bad, bad[:6]
 
     def test_the_reference_was_measured_on_runs_that_say_something(self):
