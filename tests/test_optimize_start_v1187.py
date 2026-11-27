@@ -176,7 +176,11 @@ class TestTheNullHasTwoCausesAndTheyAreTwoSentences:
         _surf, res, rep = _walk(p, s, pts, densify_to=0)
         assert res is None, "the lifted surface still evaluated"
         assert "error" in rep.notes
-        assert "refused it whole" in rep.notes["error"], rep.notes["error"]
+        # v0.1.493 (D436) -- changed on purpose: the reason the search
+        # recorded, which here is the slicer's, in its own words, instead of
+        # "refused it whole" for every start that came back with nothing
+        assert "its base rises above the ground surface" in str(
+            rep.notes["error"]), rep.notes["error"]
         assert "start_invalid" not in rep.notes
 
     def test_a_surface_with_no_factor_says_the_opposite(self):

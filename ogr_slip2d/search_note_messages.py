@@ -101,6 +101,9 @@ O_INADMISSIBLE = "search.opt.inadmissible"
 OPT_UNKNOWN_TECHNIQUE = "search.opt.unknown_technique"
 OPT_THREE_VERTICES = "search.opt.three_vertices"
 OPT_START_REFUSED = "search.opt.start_refused"
+#: v0.1.493 (D436) -- the start refused for a reason the search knows: the
+#: reason, by the rule of the door of one surface (``given_refusal``)
+OPT_START_REFUSED_BECAUSE = "search.opt.start_refused_because"
 OPT_START_INVALID = "search.opt.start_invalid"
 OPT_SNAP_FAILED = "search.opt.snap_failed"
 OPT_SUMMARY = "search.opt.summary"
@@ -226,6 +229,11 @@ _REFUSALS = (
     # v0.1.446 (D403) -- the ceiling on the base of a weak-layer clip, said
     # until now only by the run's own note, so the door of one surface said
     # it "does not cut the model" and a hand-drawn one blamed a filter
+    # v0.1.493 (D436) -- a focus object of the search excludes the surface:
+    # Optimize asks the focus before it evaluates, and said "the slicer
+    # refused it whole" of a start the focus had removed
+    ("outside_focus",
+     _REFUSAL + "a focus object of the search excludes it."),
     ("weak_layer_steep",
      _REFUSAL + "a weak layer clips it, and the base of one of its slices is "
      "steeper than the \"Maximum base angle on weak-layer clips\" of Project "
@@ -420,6 +428,9 @@ SEARCH_NOTES = {s.code: s for s in (
                 "refused it whole. A polyline that rises above the ground "
                 "anywhere is refused entirely, so a vertex a ten-thousandth "
                 "over the profile is enough."),
+    MessageSpec(OPT_START_REFUSED_BECAUSE,
+                "The optimisation cannot start from this surface, because "
+                "{reason}"),
     MessageSpec(OPT_START_INVALID,
                 "The starting surface was evaluated and has no factor of "
                 "safety: {reason}. That is not missing data, it is the "

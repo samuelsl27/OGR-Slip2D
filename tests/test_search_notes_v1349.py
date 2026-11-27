@@ -312,6 +312,17 @@ _V1348 = [{'code': 'search.unsliceable',
              'anywhere is refused entirely, so a vertex a ten-thousandth '
              'over the profile is enough.',
   'args': {}},
+ # v0.1.493 (D436) -- the start refused for a reason the search recorded
+ {'code': 'search.opt.start_refused_because',
+  'english': 'The optimisation cannot start from this surface, because the '
+             'surface was not analysed: a focus object of the search '
+             'excludes it.',
+  'args': {'reason': {'$code': 'search.refused_surface.outside_focus',
+                      '$args': {}}}},
+ {'code': 'search.refused_surface.outside_focus',
+  'english': 'the surface was not analysed: a focus object of the search '
+             'excludes it.',
+  'args': {}},
  {'code': 'search.opt.start_invalid',
   'english': 'The starting surface was evaluated and has no factor of '
              'safety: no reason declared. That is not missing data, it is '
@@ -761,7 +772,10 @@ class TestOneSentenceForEachRefusal:
                     SC.REVERSE_CURVATURE_NO_CRACK,
                     # v0.1.446 (D403) -- changed on purpose: the ceiling of
                     # a weak-layer clip, recorded since this version
-                    S.REFUSED_WEAK_LAYER_STEEP}
+                    S.REFUSED_WEAK_LAYER_STEEP,
+                    # v0.1.493 (D436) -- changed on purpose: a focus object
+                    # that removes the start of Optimize
+                    S.REFUSED_OUTSIDE_FOCUS}
         coded = {c[len(REFUSED):] for c in SEARCH_NOTES
                  if c.startswith(REFUSED) and c != REFUSED_DEFAULT}
         assert coded == recorded, coded ^ recorded

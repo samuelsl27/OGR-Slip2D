@@ -6079,6 +6079,10 @@ _DICTS: dict[str, dict[str, str]] = {
         '{reason}. That is not missing data, it is the answer.':
             'La superficie de partida se evaluó y no tiene factor de '
             'seguridad: {reason}. No es un dato que falte, es la respuesta.',
+        # v0.1.493 (D436) -- the start of Optimize refused for a known reason
+        'The optimisation cannot start from this surface, because {reason}':
+            'La optimización no puede partir de esta superficie, porque '
+            '{reason}',
         'The starting surface could not be evaluated: the slicer refused it '
         'whole. A polyline that rises above the ground anywhere is refused '
         'entirely, so a vertex a ten-thousandth over the profile is enough.':
@@ -6258,6 +6262,10 @@ _DICTS: dict[str, dict[str, str]] = {
             'base de una de sus dovelas es más empinada que el «Ángulo máximo '
             'de base en recortes de capa débil» de Ajustes de proyecto > '
             'Avanzado.',
+        'the surface was not analysed: a focus object of the search excludes '
+        'it.':
+            'la superficie no se analizó: un objeto de foco de la búsqueda la '
+            'excluye.',
         'the surface was not analysed, and no reason was recorded; filters '
         'active that can remove it: {filters}.':
             'la superficie no se analizó y no se registró ningún motivo; '

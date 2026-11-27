@@ -67,6 +67,10 @@ REFUSED_TENSION_CRACK_ZONE = "tension_crack_zone"
 #: (``_base_angle_ok``), which said so only in the run's note.
 REFUSED_WEAK_LAYER_STEEP = "weak_layer_steep"
 
+#: v0.1.493 (D436) -- a surface a focus object of the search excludes,
+#: recorded by Optimize, which asks the focus before it evaluates its start.
+REFUSED_OUTSIDE_FOCUS = "outside_focus"
+
 #: v0.1.446 (D403) — the slicer's counts the note "no valid surface" names,
 #: with their fragments. The note is of the SEARCH: ``run`` takes these
 #: before the user's surfaces, which have a note of their own each.
@@ -2372,6 +2376,32 @@ class BaseSearch(ABC):
         (``search_note_messages.refusal``), keyed by the refusal recorded.
         """
         return SN.refusal(getattr(self, "_last_refusal", None))
+
+    def given_refusal(self, project):
+        """Why this search gave no result for the one surface it was last
+        handed, said as every door that evaluates one surface says it.
+
+        The reason it recorded, when it recorded one. Otherwise, with filters
+        active that can remove a surface, those filters, named as the run
+        names them for a hand-drawn one (v0.1.446, D403): the door of one
+        surface said "the surface does not cut the model" of a circle that a
+        Minimum Area 1 the model never declared had removed, while the run
+        named that Minimum Area. With no reason and no filter, the default
+        (``SN.REFUSED_DEFAULT``); and with no External Boundary too, whatever
+        the filters (no surface cuts a model that has none, and the search
+        leaves without a reason).
+
+        v0.1.493 (D436) -- moved here from ``analysis_runner`` so that
+        Optimize asks the same rule: it blamed the slicer for every start
+        it could not evaluate, a Minimum Area or a weak layer included.
+        """
+        if (getattr(self, "_last_refusal", None) is None
+                and project.external_boundary() is not None):
+            filters = self._user_surface_filters(project)
+            if filters:
+                return SN.search_note(SN.GIVEN_NO_RESULT_FILTERED,
+                                      filters=filters)
+        return self.refusal_text()
 
     def _leaves_soil(self, project: Project, surface) -> bool:
         """Whether a non-circular surface dips below the External."""

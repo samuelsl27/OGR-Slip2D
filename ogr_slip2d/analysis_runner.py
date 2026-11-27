@@ -2664,23 +2664,10 @@ def evaluate_surfaces(project, surface, method_ids=None, *,
 def _given_refusal(search, project):
     """Why ``search`` gave no result for the one surface it was handed.
 
-    The reason it recorded, when it recorded one. Otherwise, with filters
-    active that can remove a surface, those filters, named as the run names
-    them for a hand-drawn one (v0.1.446, D403): this door said "the surface
-    does not cut the model" of a circle that a Minimum Area 1 the model
-    never declared had removed, while the run named that Minimum Area.
-    With no reason and no filter, the default; and with no External
-    Boundary too, whatever the filters (no surface cuts a model that has
-    none, and the search leaves without a reason).
+    The rule is the search's (:meth:`BaseSearch.given_refusal`, v0.1.493,
+    D436), which Optimize asks too: one rule, one place.
     """
-    if (getattr(search, "_last_refusal", None) is None
-            and project.external_boundary() is not None):
-        filters = search._user_surface_filters(project)
-        if filters:
-            from . import search_note_messages as SN
-            return SN.search_note(SN.GIVEN_NO_RESULT_FILTERED,
-                                  filters=filters)
-    return search.refusal_text()
+    return search.given_refusal(project)
 
 
 # ----------------------------------------------------------------------

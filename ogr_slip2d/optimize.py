@@ -48,6 +48,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Optional
 
+from ogr_core.messages import as_nested
 from ogr_core.project.settings import optimize_enabled_for
 
 from . import search_note_messages as SN
@@ -410,6 +411,32 @@ def _densify(points, target: int) -> list:
     return pts
 
 
+#: What ``_walk`` records as the refusal of an evaluation that raised: no
+#: reason the catalogue knows, so ``given_refusal`` answers its default.
+_RAISED = "raised"
+
+
+def _start_refusal(evaluator, project):
+    """Why the walk could not evaluate its start (v0.1.493, D436).
+
+    By the rule of the door of one surface (``BaseSearch.given_refusal``,
+    which ``evaluate_surfaces`` asks): the reason the search recorded, else
+    the filters active, else nothing known. Until this version every start
+    that came back with nothing was blamed on the slicer, "refused whole",
+    a Minimum Area or a weak layer included. Read from ``evaluator``: with
+    the surface checks off that is a copy of the search (``_evaluator_for``),
+    and the reason is written there. With nothing known -- an evaluation
+    that raised, or no reason and no filter -- the sentence of always,
+    which is the slicer's most common refusal and claims nothing new.
+    """
+    # ``_RAISED`` is no key of the catalogue, so it reads as the default
+    given = evaluator.given_refusal(project)
+    if given.code == SN.REFUSED_DEFAULT:
+        return SN.search_note(SN.OPT_START_REFUSED)
+    return SN.search_note(SN.OPT_START_REFUSED_BECAUSE,
+                          reason=as_nested(given))
+
+
 def _evaluator_for(search, opts: "OptimizeSettings"):
     """The object candidates are scored against.
 
@@ -632,10 +659,17 @@ def _walk(project, search, surface, opts, rep, rng, pts, progress_cb):
         # and the walk treats both the same way.
         rejects = getattr(evaluator, "_focus_rejects", None)
         if rejects is not None and rejects(surface_):
+            # v0.1.493 (D436) -- recorded, so a start the focus removed is
+            # said to be that and not blamed on the slicer
+            from .search import REFUSED_OUTSIDE_FOCUS
+            evaluator._last_refusal = REFUSED_OUTSIDE_FOCUS
             return None
         try:
             return evaluator.evaluate_surface(project, surface_)
         except Exception:  # noqa: BLE001
+            # Nothing is known of why: the start says the default, and no
+            # reason left by an earlier evaluation is read as this one's.
+            evaluator._last_refusal = _RAISED
             return None
 
     # v0.1.187 — ONE message used to cover two different facts, and the
@@ -657,14 +691,14 @@ def _walk(project, search, surface, opts, rep, rng, pts, progress_cb):
     #     for a number that does not exist.
     #
     # The ``error`` key keeps its name in both cases because the menu
-    # action short-circuits on it (``main_window._optimize_current``); the
+    # action short-circuits on it (``MainWindow._optimize_surfaces``); the
     # distinction goes in a key of its own.
     best_res = _evaluate(pts)
     if best_res is None or not best_res.is_valid:
         if opts.densify_to and len(pts) > len(surface.polyline.vertices):
             rep.notes["start_densified_to"] = len(pts)
         if best_res is None:
-            rep.notes["error"] = SN.search_note(SN.OPT_START_REFUSED)
+            rep.notes["error"] = _start_refusal(evaluator, project)
         else:
             # v0.1.349 (D335) -- the reason with the code D314 gave it;
             # ``start_invalid`` keeps the sentence, which callers read
