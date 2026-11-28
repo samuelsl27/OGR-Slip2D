@@ -38,4 +38,7 @@ del problema 059 del banco. Lo vio la suite entera de 0.1.519: 20 fallos, todos 
 
 ## 3. Suite
 
-La suite entera, con `--jobs 4`, tras el commit.
+La suite entera con `--jobs 4`, sobre 61f8ed8 y con el núcleo fijado 0.2.14, sale en verde: **7754 casos,
+0 fallos**, 2 saltados, sin fugas y sin tramos muertos. La última serie en verde fue hace 65 commits.
+También cubre 0.1.519: su suite tenía los 20 fallos de arriba, con el núcleo 0.2.14 y con 0.2.15.dev0
+(así lo vio la sesión de OGR Core).
