@@ -142,6 +142,8 @@ stability analysis read the field.
   does nothing for them). Give elevation a y ON the slope face: the
   default, 0, usually touches nothing, and then there is no force and
   notes.error says between which elevations the masses meet the ground.
+  The force is horizontal on purpose and has no angle: an anchor or a
+  wall at an angle is a support (support_set), which has one.
   optimize_run refines a NON-CIRCULAR critical surface into a new
   result, with the model's technique (search.optimize_technique:
   monte_carlo, the default random walk, or surface_altering, which moves

@@ -212,7 +212,15 @@ def back_analysis_run(ws, project_id: Optional[str] = None,
     """The horizontal support force needed to reach a target factor of
     safety, as a job: over the admissible surfaces of the configured run,
     the user's included (v0.1.428, D396), that are below the target and
-    that the force touches (v0.1.441, D418)."""
+    that the force touches (v0.1.441, D418).
+
+    The force is horizontal on purpose (D433, the owner's decision of
+    2026-11-27; ``BackAnalysisSettings`` of the core says why): no published
+    case of the bench asks for an angle, and an anchor or a wall at an
+    angle is a support, which has one. An inclined force is not a
+    projection of this one -- its vertical part changes the normal of the
+    slice it acts on -- so it would be a new formulation, validated on its
+    own."""
     from ogr_slip2d.back_analysis import SUPPORTED_METHODS
 
     wait = _wait(wait_seconds)

@@ -1765,7 +1765,8 @@ def build_server(ws, *, profile: str = "full", toolsets=None,
         safety, over the admissible surfaces of the configured run, the
         user's included, that are below the target and that the force
         touches (a job). With none left there is no force: required_force is
-        null and notes.error says why."""
+        null and notes.error says why. The force is horizontal on purpose:
+        an inclined anchor or wall is a support, which has its angle."""
         return await run_job(ctx, "back_analysis_run", "back analysis",
                              wait_seconds, project_id=project_id,
                              target_fos=target_fos, elevation=elevation,
