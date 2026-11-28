@@ -126,7 +126,7 @@ Los choques generales están en OGR-GUI. Estos son los de Slip2D:
 
 | Choque | Se resuelve así |
 |---|---|
-| Paleta de luminosidad monótona (D-10, FEM2D) frente a «Rainbow (24 bands)» por defecto | Se queda Rainbow por defecto (identidad, v0.1.82); «Accessible» y «Greyscale» a un clic, y la leyenda lleva siempre sus números, así que el color nunca va solo |
+| Paleta de luminosidad monótona (D-10, FEM2D) frente a «Rainbow (24 bands)» por defecto | El factor de seguridad se queda en Rainbow por defecto (identidad, v0.1.82). Los demás campos (los hidráulicos, y el Ky y Newmark de una corrida sísmica) empiezan en Viridis desde v0.1.506, como FEM2D (su D5, decisión de la propietaria del 2026-11-28), oscuros en el extremo crítico. «Accessible» y «Greyscale» a un clic, y la leyenda lleva siempre sus números, así que el color nunca va solo |
 | Pocos menús (Hick; tope de 9 de OGR Data) frente a los 14 de Slip2D | Se quedan los 14: siguen el trabajo. Lo que crece va a submenús de su paso; ningún menú de una sola entrada nuevo |
 | Fluent 2 (tipo oración, «…» con espacio) frente a las etiquetas de Slip2D | Como Slip2D (decisión de OGR-GUI) |
 | Paridad con los programas del oficio frente a una fuente | Se propone la mejora en la spec; sin OK de la propietaria, gana la paridad, que es lo que el ingeniero ya sabe usar |

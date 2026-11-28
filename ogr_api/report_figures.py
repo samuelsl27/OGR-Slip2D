@@ -96,9 +96,14 @@ def grid_data(search_result, project=None) -> Optional[dict]:
     out = {"x": xs, "y": ys, "values": fos, "critical": critical,
            "quantity": caption,
            "centres": ([c[0] for c in centres], [c[1] for c in centres])}
+    # v0.1.506 -- Viridis, dark at the critical end, as Interpret draws it
+    # (``ContourSettings.for_reported``): the lowest Ky, and the largest
+    # displacement (reversed). The factor keeps the drawing's default.
+    if caption == KY:
+        out["cmap"] = "viridis"
     if caption == NEWMARK:
         out["unit"] = displacement_in_units(project, 0.0)[1]
-        out["cmap"] = "RdYlBu_r"
+        out["cmap"] = "viridis_r"
     return out
 
 

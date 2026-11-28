@@ -80,6 +80,17 @@ PALETTES: dict[str, tuple[str, ...]] = {
 
 DEFAULT_PALETTE = "Rainbow (24 bands)"
 
+#: v0.1.506 -- the starting palette of every field that is not the factor of
+#: safety: the hydraulic fields, and the Ky and the Newmark displacement of a
+#: seismic run (OGR FEM2D's proposal D5, the owner's decision of 2026-11-28).
+#: Its lightness (CIELAB L*) grows with the value, so the order of the values
+#: reads in a grey copy and to a reader who does not tell red from green; a
+#: divergent ramp such as «Hot to cold», light in the middle, only says
+#: something when the middle is a value with a meaning, and a head, a
+#: pressure, a Ky or a displacement have none. The factor keeps its measured
+#: legend (``DEFAULT_PALETTE``), the identity the interface guide keeps.
+FIELD_PALETTE = "Viridis"
+
 # Palettes whose stops ARE the bands, one colour each, rather than a
 # continuous ramp to be sampled. When the interval count matches the stop
 # count the colour is taken straight from the list, which is the only way
@@ -244,7 +255,7 @@ class ContourSettings:
         """
         if field == "fos":
             return cls(field="fos")          # the dataclass defaults
-        return cls(field=field, palette="Hot to cold", intervals=8,
+        return cls(field=field, palette=FIELD_PALETTE, intervals=8,
                    auto_range=True, decimals=2)
 
     @staticmethod
@@ -264,16 +275,17 @@ class ContourSettings:
         reports (v0.1.500, D438): the factor's fixed legend
         (:meth:`for_field`), or, for a critical seismic coefficient
         (``"ky"``) or a Newmark displacement (``"newmark"``), an automatic
-        range in eight bands from red to blue, red at the critical end: the
-        lowest Ky, and the largest displacement (``reverse``). The fixed
+        range in eight bands of ``FIELD_PALETTE``, DARK at the critical end:
+        the lowest Ky, and the largest displacement (``reverse``). The fixed
         0-6 bands of a factor put every Ky of a slope, 0.1 to 0.4, in the
         first one. The same choice as the report's figure (D423: the
-        reversed colour map of a displacement)."""
+        reversed colour map of a displacement; v0.1.506, both Viridis, where
+        until then both were red to blue with red at the critical end)."""
         if caption == "ky":
-            return cls(field="fos", palette="Hot to cold", intervals=8,
+            return cls(field="fos", palette=FIELD_PALETTE, intervals=8,
                        auto_range=True, decimals=4)
         if caption == "newmark":
-            return cls(field="fos", palette="Hot to cold", intervals=8,
+            return cls(field="fos", palette=FIELD_PALETTE, intervals=8,
                        auto_range=True, decimals=3, reverse=True)
         return cls.for_field("fos")
 

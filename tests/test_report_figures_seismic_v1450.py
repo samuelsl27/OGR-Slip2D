@@ -20,8 +20,9 @@ the figure now draws what the run minimises
 
 * on a Ky run, the lowest Ky of each centre, under the scale «minimum Ky»;
 * on a Newmark run, the largest Newmark displacement of each centre, in the
-  project's unit and with the colour map reversed, so that red is still the
-  critical end, under «maximum Newmark displacement [cm]»;
+  project's unit and with the colour map reversed, so that the critical end
+  keeps its colour (red until v0.1.506; since then Viridis, dark, as the Ky),
+  under «maximum Newmark displacement [cm]»;
 * on a run of factors, what it always drew, byte for byte.
 
 Interpret's map of centres, Minimum Surfaces on the canvas and the API's
@@ -270,7 +271,9 @@ class TestAKyRun:
             method_figures(p, results, width=300, height=200)
         (_ax, a, k), = contours
         assert list(a[1]) == _drawn(grid)
-        assert k["cmap"] == "RdYlBu"           # low Ky, the critical, red
+        # v0.1.506 -- Viridis, low Ky (the critical) dark, as Interpret
+        # draws it; it was "RdYlBu", low Ky red
+        assert k["cmap"] == "viridis"
         assert bars[0][2]["label"] == "minimum Ky"
 
 
@@ -296,7 +299,7 @@ class TestANewmarkRun:
         assert abs(max(_drawn(grid)) - _cm(sr.critical)) <= 1e-12
         assert grid["critical"] == _centre_of(sr.critical)
 
-    def test_red_is_still_the_critical_end_and_the_scale_names_it(self):
+    def test_the_dark_end_is_the_critical_one_and_the_scale_names_it(self):
         from matplotlib.axes import Axes
         from matplotlib.figure import Figure
 
@@ -306,7 +309,9 @@ class TestANewmarkRun:
         with _spy(Axes, "tricontourf", contours), \
                 _spy(Figure, "colorbar", bars):
             method_figures(p, results, width=300, height=200)
-        assert contours[0][2]["cmap"] == "RdYlBu_r"
+        # v0.1.506 -- Viridis reversed: the largest displacement dark, as
+        # Interpret draws it; it was "RdYlBu_r", the largest red
+        assert contours[0][2]["cmap"] == "viridis_r"
         assert bars[0][2]["label"] == "maximum Newmark displacement [cm]"
 
     def test_in_the_projects_unit(self):

@@ -33,7 +33,7 @@ window's maximum 31.083 cm, the 0.98 percentile 19.589 cm):
 * on a Newmark run the four ways the dialog sets a range — opening, the
   box, *Fit*, *Restore Defaults* — give the window's maximum, the critical
   surface's displacement; *Restore Defaults* gives the run's scale (8 bands,
-  Hot to cold, reversed);
+  Viridis since v0.1.506, reversed);
 * on a Ky run *Restore Defaults* gives the Ky's scale, not 0 to 6;
 * the *0 to 6* button is disabled with its reason on both, and enabled,
   with its own tooltip, on a run of factors, where nothing else changes
@@ -154,7 +154,7 @@ class TestANewmarkRun:
             d._defaults()
             s = d._collect()
             assert (s.intervals, s.reverse, s.palette, s.auto_range) == (
-                8, True, "Hot to cold", True)
+                8, True, "Viridis", True)   # Hot to cold until v0.1.506
             assert abs(s.vmax - self._max()) <= 1e-4
         finally:
             _close(d)
@@ -169,7 +169,7 @@ class TestAKyRun:
             s = d._collect()
             contours = _case("ky")[0]
             assert (s.intervals, s.reverse, s.palette, s.auto_range) == (
-                8, False, "Hot to cold", True)
+                8, False, "Viridis", True)  # Hot to cold until v0.1.506
             assert abs(s.vmin - contours.vmin) <= 1e-4
             assert abs(s.vmax - contours.vmax) <= 1e-4
         finally:
