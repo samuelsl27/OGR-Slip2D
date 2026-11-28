@@ -942,6 +942,16 @@ def _slice_boundaries(
     cuts.update(_crossing_cuts(
         project, surface, x_l, x_r, (s_lo, s_hi),
         (BoundaryType.MATERIAL, BoundaryType.WATER_TABLE), grid_tol))
+    # v0.1.519 (D468) -- and a vertical face of the ground with free water in
+    # front of it, inside the mass: on a cut, the face is the side of the
+    # slice on its high side and nobody's top; inside a slice it was read as
+    # part of a straight top, and the water against it came out of the chord
+    # (196.2 for 240.3 kN/m with 97 slices, 0 with 30). Only the WET faces,
+    # so that a model without one is sliced as before, bit for bit.
+    if INTERIOR_FACE_PONDED_WATER:
+        cuts.update(f[0] for f in _wet_faces(
+            project, _ground_surface_from_external(
+                project.external_boundary()), x_l, x_r, grid_tol))
 
     if not cuts:
         # v0.1.458 (D407) -- the last boundary IS x_r, as in the branch with
@@ -2680,6 +2690,9 @@ def slice_surface(
     # water is the thrust there.
     if END_FACE_PONDED_WATER:
         _apply_end_face_water(project, result, ground, wall, grid_tol)
+    # v0.1.519 (D468) -- and on the faces inside the mass
+    if INTERIOR_FACE_PONDED_WATER:
+        _apply_interior_face_water(project, result, ground, grid_tol)
     if wall is not None and not project.tension_crack_properties.is_dry():
         result = _apply_tension_crack(project, result, wall)
 
@@ -2778,6 +2791,99 @@ def end_face_water(project: Project, ground: Polyline, x: float,
     moment = gamma_w * (0.5 * level * (y_hi * y_hi - y_lo * y_lo)
                         - (y_hi ** 3 - y_lo ** 3) / 3.0)
     return force, moment / force
+
+
+#: v0.1.519 (D468) -- the ponded water against a vertical face of the ground
+#: INSIDE the mass (a mass that runs under a cliff and leaves above it). The
+#: face is the side of the column on its HIGH side (the owner's decision of
+#: 2026-11-28): the column on the low side has its top at the foot of the
+#: face, and a thrust put on it, whole or half, would act above its own top,
+#: in the air. Measured on the block of D468 with the closed-form thrust on a
+#: cut: Spencer 2.61580 on the high side, 2.65413 on the low one, 2.63486
+#: half and half, 2.16582 without it (the methods that sum the whole mass do
+#: not tell them apart). The face is also a mandatory cut
+#: (``_slice_boundaries``). A module switch, read at call time, for the A/B.
+INTERIOR_FACE_PONDED_WATER = True
+
+
+def _wet_faces(project: Project, ground: Polyline, x_l: float, x_r: float,
+               tol: float) -> list:
+    """``(x, foot, top, low_side)`` of each vertical face of ``ground``
+    strictly inside ``(x_l, x_r)`` with a water surface above its foot on
+    either side; ``low_side`` is −1 when the ground is lower to the left of
+    the face, +1 to the right. Consecutive vertical segments are one face.
+
+    The ground envelope runs left to right, so a face's two ends say its
+    sides: the elevation the run arrives at is the ground on its left, the
+    one it leaves at the ground on its right. The level is read a tolerance
+    into each side. Either side, not only the low one: a face inside a slice
+    is read as part of a straight top whichever side the water is on (a
+    water table above the foot behind the face, with no free water in front
+    of it, put 196.2 kN/m on such a slice from the chord), so it is a cut
+    whenever the water reaches above its foot. Whether free water stands
+    AGAINST it, in front, is for ``end_face_water``.
+    """
+    verts = ground.vertices
+    out = []
+    i, n = 0, len(verts)
+    while i < n - 1:
+        j = i
+        while (j < n - 1 and abs(verts[j + 1].x - verts[i].x) <= tol):
+            j += 1
+        if j > i and abs(verts[j].y - verts[i].y) > tol:
+            x = verts[i].x
+            if x_l + tol < x < x_r - tol:
+                left, right = verts[i].y, verts[j].y
+                low_side = -1.0 if left < right else 1.0
+                foot, top = min(left, right), max(left, right)
+                levels = [ponded_water_level_at(project, x + side * tol)
+                          for side in (-1.0, 1.0)]
+                if any(lv is not None and lv > foot + tol for lv in levels):
+                    out.append((x, foot, top, low_side))
+            i = j
+        else:
+            i += 1
+    return out
+
+
+def _apply_interior_face_water(project: Project, slices: Slices, ground,
+                               tol: float) -> None:
+    """The ponded water on the vertical faces of the ground inside the mass,
+    in place (``INTERIOR_FACE_PONDED_WATER``): the closed form of
+    ``end_face_water`` on the wet part of each face, whole on the slice of
+    its HIGH side, pushing from the water into it; through
+    ``add_water_force`` and ``pond_force_h``, as the end faces.
+
+    Only a face on a slice boundary: the slicer cuts there. A face inside a
+    slice (Sarma's own columns, whose cuts are given and whose water is the
+    wedges') is left to the top of that slice, as before.
+    """
+    if not slices.slices:
+        return
+    s_list = slices.slices
+    for x, _foot, _top, low_side in _wet_faces(
+            project, ground, s_list[0].base_x_left, s_list[-1].base_x_right,
+            tol):
+        if low_side < 0:      # the high side is to the right
+            s = next((t for t in s_list if abs(t.base_x_left - x) <= tol),
+                     None)
+            if s is None:
+                continue
+            y_base, y_top = s.base_y_left, s.top_y_left
+        else:
+            s = next((t for t in s_list if abs(t.base_x_right - x) <= tol),
+                     None)
+            if s is None:
+                continue
+            y_base, y_top = s.base_y_right, s.top_y_right
+        thrust = end_face_water(project, ground, x, y_base, y_top, tol,
+                                low_side)
+        if thrust is None:
+            continue
+        force, y_c = thrust
+        push = -low_side
+        s.add_water_force(f_h=push * force, y=y_c)
+        s.pond_force_h += push * force
 
 
 def _apply_end_face_water(project: Project, slices: Slices, ground,
