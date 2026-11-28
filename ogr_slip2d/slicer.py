@@ -39,7 +39,7 @@ from ogr_core.hydraulic.excess_pore_pressure import (
     excess_at,
     is_enabled as excess_is_enabled,
 )
-from ogr_core.hydraulic.ponded_water import ponded_depth_at
+from ogr_core.hydraulic.ponded_water import ponded_depth_at, ponded_water_level_at
 from ogr_core.hydraulic.pore_pressure import pore_pressure_at, _interp_y_on_polyline
 from ogr_core.hydraulic.water_surfaces import (
     water_surface_defined_at,
@@ -2674,10 +2674,128 @@ def slice_surface(
     # or wet, so a method that needs where the mass meets the ground at
     # its cracked end does not have to guess it from the end slice.
     result.tension_crack_wall = wall
+    # v0.1.515 (D450) -- the ponded water against a vertical face of the
+    # ground that bounds the mass at one of its ends (see
+    # ``END_FACE_PONDED_WATER``). Not on a cracked end: the crack's own
+    # water is the thrust there.
+    if END_FACE_PONDED_WATER:
+        _apply_end_face_water(project, result, ground, wall, grid_tol)
     if wall is not None and not project.tension_crack_properties.is_dry():
         result = _apply_tension_crack(project, result, wall)
 
     return result
+
+
+#: v0.1.515 (D450) -- the ponded water standing against a VERTICAL face of
+#: the ground that bounds the mass at one of its ends pushes that end slice
+#: (and Sarma's end wedge) into the mass. The water on the ground is applied
+#: on the slice tops (:func:`_apply_ponded_water`), and a face with any width
+#: is the top of some slice; a face of zero width is the top of none, so a
+#: surface leaving through a cliff below the water lost the thrust on the
+#: wet part of the cliff between its exit and the water. Measured on the
+#: step of the ficha (a cliff from 10 to 20, the water at 17, the exit at
+#: 14): 0 where ½·γw·3² = 44.1 kN/m belongs, on both paths. A module switch,
+#: read at call time, so the bank can attribute what it moves.
+END_FACE_PONDED_WATER = True
+
+
+def _ground_face_at(ground: Polyline, x: float, tol: float):
+    """``(foot, top)`` of the vertical face of ``ground`` at ``x``, or None.
+
+    The ground envelope draws a vertical face as consecutive vertices with
+    the same abscissa (to ``tol``); several in a row are one face.
+    """
+    foot = top = None
+    verts = ground.vertices
+    for a, b in zip(verts[:-1], verts[1:]):
+        if (abs(a.x - x) <= tol and abs(b.x - x) <= tol
+                and abs(a.y - b.y) > tol):
+            lo, hi = min(a.y, b.y), max(a.y, b.y)
+            foot = lo if foot is None else min(foot, lo)
+            top = hi if top is None else max(top, hi)
+    return None if foot is None else (foot, top)
+
+
+def end_face_water(project: Project, ground: Polyline, x: float,
+                   y_base: float, y_top: float, tol: float):
+    """``(F, y_c)``: the ponded water's thrust on the end face of a mass at
+    ``x``, from its base ``y_base`` to its top ``y_top``, or None.
+
+    Only a face of the GROUND carries it: the end of the mass is then a
+    vertical face of the model, and the free water in front of it stands
+    against it from the foot of the face up to the water surface. The wet
+    part on the mass runs from ``max(y_base, foot)`` to
+    ``min(level, y_top, top)``, and the hydrostatic pressure
+    ``p = γw·(level − y)`` integrates over it to
+
+        F = ½·γw·[(level − y_lo)² − (level − y_hi)²]
+
+    applied at the centroid of the trapezoidal diagram; with the water
+    below the crest of the face, ½·γw·h² at h/3 above the wet base. The
+    resultant of the hydrostatic pressure on a plane face (the expression
+    ``_apply_tension_crack`` uses for a crack: Terzaghi 1943). External water
+    pressures are part of the total stress on the boundary of the mass and
+    have to be included for its equilibrium (Duncan, Wright & Brandon 2014,
+    §3.4.4-3.4.5, pp. 28-29); with every one of them, total weights and
+    boundary water give the factor of the buoyant weights (their §14.6,
+    p. 245).
+
+    An end that is not on a vertical face of the ground (a buried end, with
+    ``END_ON_GROUND`` off) gets nothing: there is no free water in front of
+    it.
+    """
+    if y_top - y_base <= tol:
+        return None
+    face = _ground_face_at(ground, x, tol)
+    if face is None:
+        return None
+    level = ponded_water_level_at(project, x)
+    if level is None:
+        return None
+    foot, top = face
+    y_lo = max(y_base, foot)
+    y_hi = min(level, y_top, top)
+    if y_hi - y_lo <= tol:
+        return None
+    gamma_w = project.settings.groundwater.pore_fluid_unit_weight
+    d_lo, d_hi = level - y_lo, level - y_hi
+    force = 0.5 * gamma_w * (d_lo * d_lo - d_hi * d_hi)
+    # ∫ γw·(level − y)·y dy over [y_lo, y_hi], the moment about y = 0
+    moment = gamma_w * (0.5 * level * (y_hi * y_hi - y_lo * y_lo)
+                        - (y_hi ** 3 - y_lo ** 3) / 3.0)
+    return force, moment / force
+
+
+def _apply_end_face_water(project: Project, slices: Slices, ground,
+                          wall, tol: float) -> None:
+    """The ponded water on the end faces of the mass, on the two end
+    slices, in place (``END_FACE_PONDED_WATER``): +x on the left end, −x on
+    the right one, into the mass. Through ``add_water_force``, which keeps
+    its moment, and in ``pond_force_h``: it is the pond's horizontal
+    pressure, which the Ordinary Method keeps out of its base normal like
+    the pond's on the tops (D199), so that a submerged mass keeps the
+    factor of its buoyant weights.
+
+    An end that is the wall of a tension crack is left alone: the crack's
+    water (``_apply_tension_crack``) is the thrust there, and adding the
+    pond's too would count the water twice.
+    """
+    if not slices.slices:
+        return
+    first, last = slices.slices[0], slices.slices[-1]
+    for s, x, y_base, y_top, push in (
+            (first, first.base_x_left, first.base_y_left, first.top_y_left,
+             1.0),
+            (last, last.base_x_right, last.base_y_right, last.top_y_right,
+             -1.0)):
+        if wall is not None and abs(wall[0] - x) <= tol:
+            continue
+        thrust = end_face_water(project, ground, x, y_base, y_top, tol)
+        if thrust is None:
+            continue
+        force, y_c = thrust
+        s.add_water_force(f_h=push * force, y=y_c)
+        s.pond_force_h += push * force
 
 
 def _apply_tension_crack(project: Project, slices: Slices, wall):

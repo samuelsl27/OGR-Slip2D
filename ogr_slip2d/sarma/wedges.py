@@ -1009,6 +1009,29 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
                      line_shares=line_shares.get(i, []))
         wedges.append(w)
 
+    # v0.1.515 (D450) -- the ponded water against a vertical face of the
+    # ground at an end of the mass, by the slicer's rule
+    # (``slicer.end_face_water``): the end faces are the outer faces of the
+    # first and the last wedge, vertical where the mass ends on a cliff. As
+    # every other water force of a wedge, it reaches the solver as the base's
+    # horizontal force; not on a cracked end, whose own water is its thrust.
+    if _slicer.END_FACE_PONDED_WATER and wedges:
+        wall = vertical.tension_crack_wall
+        for w, (xb, yb), (xt, yt), push in (
+                (wedges[0], V[0], tops[0], 1.0),
+                (wedges[-1], V[-1], tops[-1], -1.0)):
+            if abs(xt - xb) > grid_tol:
+                continue
+            if wall is not None and abs(wall[0] - xb) <= grid_tol:
+                continue
+            thrust = _slicer.end_face_water(project, ground, xb, yb, yt,
+                                            grid_tol)
+            if thrust is None:
+                continue
+            force, y_c = thrust
+            w.add_water_force(f_h=push * force, y=y_c)
+            w.pond_force_h += push * force
+
     faces = []
     for k in range(n + 1):
         (xb, yb), (xt, yt) = V[k], tops[k]

@@ -861,7 +861,12 @@ class TestTheVertexMenu:
         finally:
             loose.close()
             loose.deleteLater()
-        assert "Move Vertex" in texts and "Set Face Angle" not in texts, texts
+        # v0.1.513 (D456) -- the boundary vertex's menu did open (its one
+        # action off the main window is Copy Coordinates; Move Vertex was
+        # the control here until the edit actions left Interpret's canvas)
+        assert "Copy Coordinates" in texts and "Move Vertex" not in texts, \
+            texts
+        assert "Set Face Angle" not in texts, texts
 
     def test_with_a_circular_run_its_actions_are_grey(self):
         from ogr_core.project.settings import SurfaceType
