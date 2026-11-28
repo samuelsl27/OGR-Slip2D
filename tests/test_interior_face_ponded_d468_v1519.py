@@ -31,9 +31,12 @@ Checked here, against the closed form (rule 1):
 * Sarma's wedges carry the same 240.345 (the step lies inside a wedge's
   top, which already integrated it);
 * with no free water in front of the face (the water table at 5 in front
-  of it, below its foot, and at 17 behind), the face is still a cut and
-  nothing pushes; without the rule the slice holding the face read
-  γw·2·10 = 196.2 kN/m off the chord of its top (top 15 at its centre);
+  of it, below its foot, and at 17 behind), the rule does nothing: no cut
+  and no thrust, the slices of the switch off bit for bit. (The slice that
+  holds the face there still reads water off the chord of its top, 196.2
+  kN/m with 97 slices: a defect of its own, reported and not fixed here;
+  making such a face a cut moved the validated slicing of bank problem 059,
+  whose water table rises from the foot of its wall);
 * the control: with the water below the foot of the face, the slices are
   the ones of the switch off, bit for bit;
 * ``INTERIOR_FACE_PONDED_WATER`` moves the factor of safety (rule 7).
@@ -142,17 +145,13 @@ class TestInteriorFacePondedWater:
         assert math.isclose(sum(x.water_force_h for x in w), _WANT,
                             rel_tol=1e-9)
 
-    def test_no_water_in_front_a_cut_and_no_thrust(self):
-        """With the water table above the foot BEHIND the face only, the
-        face is still a cut and nothing pushes; without the rule the slice
-        that held the face read 196.2 kN/m off the chord of its top."""
+    def test_no_water_in_front_the_rule_does_nothing(self):
+        """With the water table above the foot BEHIND the face only, no
+        cut and no thrust: the slices of the switch off, bit for bit."""
         p = _model(from_face=True)
         on = _cut(p, _surface(), 97)
         off = _switch(False, lambda: _cut(p, _surface(), 97))
-        assert all(s.water_force_h == 0.0 for s in on)
-        assert any(abs(s.base_x_left - 50.0) < 1e-9 for s in on)
-        assert math.isclose(sum(s.water_force_h for s in off),
-                            GW * 2.0 * 10.0, rel_tol=1e-9)
+        assert [s.to_dict() for s in on] == [s.to_dict() for s in off]
 
     def test_control_dry_face_bit_for_bit(self):
         p = _model(level=9.0)               # below the foot of the face

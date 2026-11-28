@@ -2809,19 +2809,22 @@ INTERIOR_FACE_PONDED_WATER = True
 def _wet_faces(project: Project, ground: Polyline, x_l: float, x_r: float,
                tol: float) -> list:
     """``(x, foot, top, low_side)`` of each vertical face of ``ground``
-    strictly inside ``(x_l, x_r)`` with a water surface above its foot on
-    either side; ``low_side`` is −1 when the ground is lower to the left of
-    the face, +1 to the right. Consecutive vertical segments are one face.
+    strictly inside ``(x_l, x_r)`` with free water in FRONT of it, above its
+    foot; ``low_side`` is −1 when the ground is lower to the left of the
+    face, +1 to the right. Consecutive vertical segments are one face.
 
     The ground envelope runs left to right, so a face's two ends say its
     sides: the elevation the run arrives at is the ground on its left, the
-    one it leaves at the ground on its right. The level is read a tolerance
-    into each side. Either side, not only the low one: a face inside a slice
-    is read as part of a straight top whichever side the water is on (a
-    water table above the foot behind the face, with no free water in front
-    of it, put 196.2 kN/m on such a slice from the chord), so it is a cut
-    whenever the water reaches above its foot. Whether free water stands
-    AGAINST it, in front, is for ``end_face_water``.
+    one it leaves at the ground on its right. The water is read in front of
+    the face, a tolerance into the low side, as ``end_face_water`` reads it.
+
+    In front only, on purpose. Read on either side, the water table of bank
+    problem 059, which rises from the foot of its wall at (0, 0) and stands
+    0.00046 m above that foot a tolerance behind it, made the wall a new cut
+    and moved its validated slicing (20 tests of D145/D146 on its published
+    circle). A water surface above the foot only BEHIND a face, inside a
+    slice, is still read off the chord of that slice's top; that is a defect
+    of its own, reported and not fixed here.
     """
     verts = ground.vertices
     out = []
@@ -2836,9 +2839,8 @@ def _wet_faces(project: Project, ground: Polyline, x_l: float, x_r: float,
                 left, right = verts[i].y, verts[j].y
                 low_side = -1.0 if left < right else 1.0
                 foot, top = min(left, right), max(left, right)
-                levels = [ponded_water_level_at(project, x + side * tol)
-                          for side in (-1.0, 1.0)]
-                if any(lv is not None and lv > foot + tol for lv in levels):
+                level = ponded_water_level_at(project, x + low_side * tol)
+                if level is not None and level > foot + tol:
                     out.append((x, foot, top, low_side))
             i = j
         else:
