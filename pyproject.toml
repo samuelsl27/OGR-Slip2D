@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ogr-slip2d"
-version = "0.1.520"
+version = "0.1.521"
 description = "OGR Slip2D — open-source slope stability and groundwater analysis (OpenGeoRock Suite)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -47,7 +47,9 @@ dependencies = [
     # said on reading and Delete by identity (D445), _fmt writes an
     # integer with its decimals (D446), the endpoint weld keeps a thin
     # layer and warns when it joins two contacts (D449).
-    "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.14",
+    # v0.1.521 -- v0.2.15: the slice table of the report heads the weight
+    # in kN/m, as the face table does (D455).
+    "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.15",
     "numpy>=1.26",
     "scipy>=1.14",
     "shapely>=2.0",

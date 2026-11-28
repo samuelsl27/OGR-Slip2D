@@ -31,7 +31,7 @@ AGPL-3.0-or-later.
 - **Geometría**: Shapely. **Numérico**: NumPy, SciPy.
 - **Gráficas**: Matplotlib. **Informes**: reportlab. **CAD**: ezdxf.
 - **Núcleo**: `ogr-core`, fijado a una etiqueta en `pyproject.toml`
-  (`ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.14`).
+  (`ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.15`).
 - **Tests**: el runner compartido de `ogr_core.testing.runner`, con
   `tests/_runner.py` como envoltorio que le dice lo de este repositorio
   (aporta un `pytest` simulado; **no** hay pytest real instalado).
@@ -68,7 +68,7 @@ que puede fijar otra. Al subir la fijación, se cambia la del entorno:
 
 Después, **no repitas** `pip install -e ".[mcp]"` sin `--no-deps`: reinstala
 `ogr-core` desde GitHub. El runner nombra el núcleo que mide
-(`shared: ogr_core 0.2.14 …`) y **se niega** si no es la versión fijada. Un
+(`shared: ogr_core 0.2.15 …`) y **se niega** si no es la versión fijada. Un
 núcleo sin etiquetar (`X.Y.Z.devN`) se prueba sin instalar nada (ver «Un
 núcleo y varios programas»).
 

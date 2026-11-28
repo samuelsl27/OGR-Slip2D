@@ -22,10 +22,12 @@ Checked here, on the panel's own table (``_SliceDataDock.FIELDS``):
 * the units that were right stay: kN/m³ for the unit weight, kPa for the
   stresses.
 
-The report's slice table («Weight [kN]») is OGR Core's, and moves with the
-pin that brings its fix; its check joins this file then.
+And the report's slice table, which is OGR Core's: since 0.2.15 (pinned in
+v0.1.521) it heads the weight «Weight [kN/m]», as its face table heads PW,
+E, E′ and X; until 0.2.14 it wrote [kN].
 
-Cost: reads a table and a dictionary; no window.
+Cost: reads a table and a dictionary, and slices one circle of the demo
+slope for the report's table; no window.
 """
 from __future__ import annotations
 
@@ -64,3 +66,18 @@ class TestForceUnits:
         assert "Unit weight γ (kN/m³)" in labels
         assert "Pore pressure u (kPa)" in labels
         assert "Base normal stress σₙ (kPa)" in labels
+
+    def test_the_report_slice_table_heads_the_weight_per_metre(self):
+        """v0.1.521 -- OGR Core 0.2.15 (D455)."""
+        import ogr_core.report.report_generator as RG
+        from ogr_core.project.demo import build_demo_project
+        from ogr_slip2d.analysis_runner import build_search
+        from ogr_slip2d.surface import SlipCircle
+        p = build_demo_project()
+        p.settings.methods.enabled_methods = ["bishop_simplified"]
+        ev = build_search(p, "bishop_simplified").evaluate_circle(
+            p, SlipCircle(centre_x=34.0, centre_y=30.0, radius=130 ** 0.5))
+        header = [str(c) for c in RG._slice_table(ev, p)._cellvalues[0]]
+        weight = [c for c in header if c.startswith("Weight")]
+        assert weight and all(c.endswith("[kN/m]") for c in weight), header
+        assert not any(c.endswith("[kN]") for c in header), header
