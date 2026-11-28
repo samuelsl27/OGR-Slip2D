@@ -101,8 +101,9 @@ La propietaria decidió desarrollarlo con lo que hay en `referencias/Documentaci
 
 ### Ventana (0.1.464–0.1.469)
 
-- [ ] La casilla de Sarma y su grupo de ajustes en Métodos, en gris cuando no aplican. Sin marcar a 2026-11-17: el
-      comportamiento es el pedido (medido), pero no tiene test. Lo pide D463 del banco.
+- [x] La casilla de Sarma y su grupo de ajustes en Métodos, en gris cuando no aplican. Marcado en 0.1.512 (D463):
+      `tests/test_sarma_settings_grey_v1512.py` fija los cuatro estados control a control, el camino de la señal y
+      cae con un `_refresh_sarma` que no hace nada.
 - [x] La tabla de ángulo, c y φ por vértice, desde el menú Superficies y desde el menú contextual del vértice.
 - [x] La herramienta de ángulos con el ratón: rayo en vivo, clic o tecleo de 0 a 360°, y deshacer.
 - [x] Interpret dibuja las cuñas: polígonos, caras inclinadas y filas de cara.

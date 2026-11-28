@@ -97,7 +97,8 @@ Pequeñas y verificables. Cada versión se cierra con `/release`:
   - guardas en el PNG, en Interpret y en el informe.
 
   Sin marcar a 2026-11-17: todo está programado, pero el gris del grupo no tiene test (D463). El changelog de
-  0.1.464 declara sin test el dibujo de las caras en el PNG.
+  0.1.464 declara sin test el dibujo de las caras en el PNG. El gris del grupo tiene test desde 0.1.512
+  (`tests/test_sarma_settings_grey_v1512.py`); sigue sin marcar por el dibujo de las caras en el PNG.
 - [ ] 20. La suite archivo a archivo, con las exenciones justificadas (soportes), y el A/B de coste.
   Sin marcar a 2026-11-17: la suite y las exenciones están en el §3 del changelog de 0.1.464; el A/B de coste no
   consta en él.
