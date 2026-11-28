@@ -4418,6 +4418,9 @@ _DICTS: dict[str, dict[str, str]] = {
             'Fijo: la cuña de arriba baja',
         "Kinematic: the rigid wedges' own":
             'Cinemático: el de las cuñas rígidas',
+        # v0.1.523 (D460) — no face parallel to weak planes
+        'No face is tried parallel to the planes of an anisotropic material: with the strength from the materials a face that crosses one is refused, and with a given strength the orientation of a face does not change its strength.':
+            'No se prueba ninguna cara paralela a los planos de un material anisótropo: con la resistencia de los materiales, una cara que cruza uno se rechaza, y con una resistencia dada la orientación de una cara no cambia su resistencia.',
         # v0.1.522 (D462) — a stored value a combo does not list
         'Unknown value: %s':
             'Valor desconocido: %s',

@@ -98,6 +98,33 @@ THE GUARD OF D457 (v0.1.471 to v0.1.486)
     guard, which could then refuse nothing, went with it (the owner's
     decision, rule 7).
 
+WEAK PLANES (v0.1.523, D460: the owner's decision, closed by documentation)
+    The documentation of the reference program says its optimisation also
+    tries slice boundaries parallel to the weak planes of a material (the
+    bedding of an anisotropic one). It does not say how, nor what strength
+    such a face then has. No candidate here comes from a material's
+    orientation, and the search does not read the materials, because such a
+    candidate could change nothing:
+
+    * with the face strength from the materials, a face that crosses a
+      material that is not Mohr-Coulomb (every anisotropic one) is refused
+      (``wedges._face_strength``, ``lem.sarma_face_strength``), so with weak
+      planes Sarma computes only with a given strength or one per vertex;
+    * with those, the strength of a face does not depend on its
+      orientation: a face parallel to the bedding is like any other, and the
+      pattern search finds its angle, if it matters, to the last step
+      (0.3125°).
+
+    The candidate would mean something only beside a rule giving a face
+    parallel to the planes the strength of the plane, and there is no
+    source for that rule here: neither the reference (its face strength
+    from the materials is the mean of each layer's c and φ by length, and
+    it says nothing of anisotropy), nor a published case that uses weak
+    planes with Sarma (none of the bank's). Measured on 0.1.523 on the
+    figure 1.3 of problem 1 with the upper soil Anisotropic Linear (bedding
+    33.7°): refused with the materials; with c 5 and φ 12° given, F 0.86558
+    after 672 faces tried, none of them parallel to the bedding.
+
 Author: Samuel Sáez López (UPCT)
 
 References:
