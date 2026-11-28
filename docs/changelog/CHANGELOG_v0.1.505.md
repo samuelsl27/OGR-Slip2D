@@ -57,13 +57,18 @@ versión por ficha, de 0.1.506 a 0.1.510.
 Para que la lleve la propietaria a esa sesión:
 
 ```
-| OGR Slip2D | `samuelsl27/OGR-Slip2D` | `v0.2.14` | su v0.1.505 (`<commit>`) | `QT_QPA_PLATFORM=offscreen python tests/_runner.py --jobs 4` |
+| OGR Slip2D | `samuelsl27/OGR-Slip2D` | `v0.2.14` | su v0.1.505 (`e3fe92b`) | `QT_QPA_PLATFORM=offscreen python tests/_runner.py --jobs 4` |
 ```
 
 ## 3. Tests
 
 - `test_report_seismic_v1449`: 25 de 25 con 0.2.14 instalada.
-- La suite entera se corre al final de la tanda.
+- Suite entera con `--jobs 4` en `d439a93` (0.1.505 más los textos de D433), con 0.2.14 instalada: 7677
+  casos, 0 fallos, 2 saltados, sin fugas ni tramos caídos. La primera, en `e3fe92b`, salió igual pero no vale:
+  esta sesión tocó cuatro archivos de textos del agente mientras corría. Subida a GitHub tras la segunda
+  (`67faf4f..d439a93`).
+- **Banco**: D442 (CUBIERTO POR TEST) y D433 (CIERRE DOCUMENTAL) retiradas el 2026-11-28, con la instantánea
+  `Evaluaciones/0.1.505`; se abre D467 (el falso 0 de Bishop), en P10, leída y sin medir.
 
 ## 4. Pendiente por ficha (0.1.506–0.1.510)
 
