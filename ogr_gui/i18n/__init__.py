@@ -2820,6 +2820,9 @@ _DICTS: dict[str, dict[str, str]] = {
         "Square": "Cuadrado",
 
         "Support Force Diagram...": "Diagrama de fuerza del soporte...",
+        # v0.1.513 (D456) -- Interpret's vertex menu
+        "Copy Coordinates": "Copiar coordenadas",
+        "Coordinates copied: ({0}, {1}).": "Coordenadas copiadas: ({0}, {1}).",
         "Support Force Diagram": "Diagrama de fuerza del soporte",
         "Requires at least one support in the model.":
             "Requiere al menos un soporte en el modelo.",

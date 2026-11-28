@@ -886,6 +886,12 @@ class InterpretWindow(QMainWindow):
             self.canvas.tool_mode_changed.connect(self._on_tool_mode)
             # v0.1.331 (D329a) — Measure and Dimension Length
             self.canvas.segment_picked.connect(self._on_segment_picked)
+            # v0.1.513 (D456) -- the one action a support's context menu
+            # offers here, and what the canvas says (Copy Coordinates)
+            self.canvas.support_diagram_requested.connect(
+                lambda i: self._support_force_diagram(support_index=i))
+            self.canvas.status_message.connect(
+                lambda m: self.statusBar().showMessage(m, 3000))
         except AttributeError:
             pass
 
@@ -2145,11 +2151,15 @@ class InterpretWindow(QMainWindow):
                     tr("Supports on the critical surface (FS = %.4f):"))
                    % crit.fos + "\n\n" + "\n".join(rows))
 
-    def _support_force_diagram(self) -> None:
+    def _support_force_diagram(self, *_args, support_index=None) -> None:
         """Capacity of one support along its length, mode by mode.
 
         NON-modal, like every other informative chart here: the diagram is
         meant to be read beside the model, not instead of it.
+
+        v0.1.513 (D456) -- ``support_index``, the support whose context menu
+        asked for it, comes chosen; keyword-only, because the menu action's
+        ``triggered`` hands its ``checked`` flag positionally.
         """
         if not getattr(self.project, "supports", None):
             self._info(tr("Requires at least one support in the model."))
@@ -2161,7 +2171,7 @@ class InterpretWindow(QMainWindow):
         crit = res.critical if res else None
         from .xy_chart import keep_chart
         return keep_chart(self, SupportForceDiagramWindow(
-            self.project, crit, self))
+            self.project, crit, self, support_index=support_index))
 
     def _back_analysis_report(self) -> None:
         """Support force required to reach a target factor of safety."""

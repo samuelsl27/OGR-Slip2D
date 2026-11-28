@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.512"
+    VERSION = "0.1.513"
 
     def __init__(self) -> None:
         super().__init__()
@@ -417,6 +417,9 @@ class MainWindow(QMainWindow):
         # context menu of a user surface's vertex, which only this canvas
         # offers (Interpret's listens to none of it)
         self.canvas.user_surface_menu = True
+        # v0.1.513 (D456) -- and the edit actions of the vertex, boundary,
+        # support and load menus, whose four signals are connected below
+        self.canvas.model_edit_menus = True
         self.canvas.sarma_angle_picked.connect(self._on_sarma_angle_picked)
         self.canvas.sarma_angle_typed.connect(self._on_sarma_angle_typed)
         self.canvas.sarma_angle_removed.connect(self._on_sarma_angle_removed)

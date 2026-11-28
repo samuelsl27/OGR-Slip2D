@@ -159,7 +159,8 @@ class SupportForceDiagramWindow(QDialog):
     """Capacity against distance along one support at a time: from the
     head, or from the crest for a type measured from it (v0.1.254, D97)."""
 
-    def __init__(self, project, critical=None, parent=None) -> None:
+    def __init__(self, project, critical=None, parent=None,
+                 support_index=None) -> None:
         super().__init__(parent)
         self.project = project
         self.critical = critical
@@ -194,6 +195,10 @@ class SupportForceDiagramWindow(QDialog):
             label = (_support_class_label(getattr(stype, "DISPLAY_NAME", ""))
                      if stype and not set_name_names_its_class(raw) else "")
             self.cbo.addItem(f"{name}  [{label}]" if label else name, i - 1)
+        # v0.1.513 (D456) -- the support whose context menu opened it,
+        # chosen before ``refresh`` is connected: drawn once, that one
+        if support_index is not None and 0 <= support_index < self.cbo.count():
+            self.cbo.setCurrentIndex(support_index)
         top.addWidget(self.cbo, 1)
         lay.addLayout(top)
 

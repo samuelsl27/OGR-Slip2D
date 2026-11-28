@@ -326,6 +326,9 @@ class CanvasView(QGraphicsView):
     support_clicked = Signal(int)        # index in project.supports
     # v0.1.14 — right-click on a support (action, support_idx)
     support_action_requested = Signal(str, int)
+    # v0.1.513 (D456) — Support Force Diagram from a support's menu, on a
+    # canvas without the model's edit menus (Interpret's): support_idx
+    support_diagram_requested = Signal(int)
 
     # v0.1.12 — generic scene-coordinate signals for the Interpret window
     # (Query Slice Data, hover preview of slip surfaces over a grid).
@@ -421,6 +424,15 @@ class CanvasView(QGraphicsView):
         # Interpret's canvas is a CanvasView too and listens to none of it
         # (the review of v0.1.469: its actions did nothing there).
         self.user_surface_menu = False
+        # v0.1.513 (D456) -- and whether its context menus over a vertex, a
+        # boundary, a support and a load offer the actions that EDIT the
+        # model: the main window's, which connects their four signals. On
+        # Interpret's canvas they opened, enabled, and did nothing (10
+        # actions on the demo slope): a read-only view of results that may
+        # be of an earlier model (D419) cannot edit it. Off, each menu keeps
+        # its heading and offers only what reads: the vertex's coordinates
+        # to the clipboard, a support's force diagram.
+        self.model_edit_menus = False
         # v0.1.336 (D142b) — Scale / Rotate: the boundary clicked first and
         # its dashed ghost, until the pivot is clicked
         self._transform_target: Optional[int] = None
@@ -1780,6 +1792,16 @@ class CanvasView(QGraphicsView):
         menu.addAction(info)
         menu.addSeparator()
 
+        # v0.1.513 (D456) -- without the edit menus, only what reads
+        if not self.model_edit_menus:
+            a = QAction(tr("Copy Coordinates"), self)
+            a.triggered.connect(
+                lambda _checked=False, x=v.x, y=v.y:
+                self._copy_coordinates(x, y))
+            menu.addAction(a)
+            menu.exec(global_pos)
+            return
+
         # v0.1.321 (D300) — the labels of the context menus below are
         # English in their tables and go through tr() where shown.
         for label, action_id in (
@@ -1799,6 +1821,19 @@ class CanvasView(QGraphicsView):
             self._add_user_vertex_actions(menu, user_hit)
         menu.exec(global_pos)
 
+    def _copy_coordinates(self, x: float, y: float) -> None:
+        """v0.1.513 (D456) -- ``x<TAB>y`` to the clipboard, at full precision
+        (``repr`` is the shortest text that reads back the same double: the
+        heading's three decimals would lose what a coordinate carries), so
+        that a spreadsheet takes it as two cells."""
+        from PySide6.QtWidgets import QApplication
+        clipboard = QApplication.clipboard()
+        if clipboard is None:
+            return
+        clipboard.setText(f"{x!r}\t{y!r}")
+        self.status_message.emit(
+            tr("Coordinates copied: ({0}, {1}).").format(repr(x), repr(y)))
+
     # ==================================================================
     # v0.1.9 — Boundary (line) right-click context menu
     # ==================================================================
@@ -1817,6 +1852,11 @@ class CanvasView(QGraphicsView):
         info = QAction(boundary_heading(b), self)
         info.setEnabled(False)
         menu.addAction(info)
+        # v0.1.513 (D456) -- without the edit menus, the heading alone: every
+        # action below edits the model
+        if not self.model_edit_menus:
+            menu.exec(global_pos)
+            return
         menu.addSeparator()
 
         # Common actions
@@ -1893,6 +1933,16 @@ class CanvasView(QGraphicsView):
         menu.addAction(info)
         menu.addSeparator()
 
+        # v0.1.513 (D456) -- without the edit menus, the diagram that reads
+        # this support (Interpret's Support Force Diagram, on this one)
+        if not self.model_edit_menus:
+            a = QAction(tr("Support Force Diagram..."), self)
+            a.triggered.connect(
+                lambda _c=False: self.support_diagram_requested.emit(sidx))
+            menu.addAction(a)
+            menu.exec(global_pos)
+            return
+
         for label, aid in (
             ("Properties…", "support_properties"),
             ("Stretch", "support_stretch"),
@@ -1936,6 +1986,10 @@ class CanvasView(QGraphicsView):
         info = QAction(label, self)
         info.setEnabled(False)
         menu.addAction(info)
+        # v0.1.513 (D456) -- without the edit menus, the heading alone
+        if not self.model_edit_menus:
+            menu.exec(global_pos)
+            return
         menu.addSeparator()
 
         act_modify = QAction(tr("Modify…"), self)
