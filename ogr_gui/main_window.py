@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.510"
+    VERSION = "0.1.511"
 
     def __init__(self) -> None:
         super().__init__()
@@ -356,6 +356,14 @@ class MainWindow(QMainWindow):
         self._stale_timer.setSingleShot(True)
         self._stale_timer.setInterval(300)
         self._stale_timer.timeout.connect(self._check_results_stale)
+        # v0.1.511 (D449) -- the contacts the region builder's weld joins,
+        # said once the edits of the boundaries pause (rule C of OGR Core
+        # 0.2.14: building the regions is not free on every event)
+        self._welds_said: tuple = ()
+        self._weld_timer = QTimer(self)
+        self._weld_timer.setSingleShot(True)
+        self._weld_timer.setInterval(400)
+        self._weld_timer.timeout.connect(self._say_welded_contacts)
         # v0.1.302 (D310) — garbage the cyclic collector finds on the compute
         # thread or a process pool's threads is held, not freed there (where
         # shiboken would queue its Qt objects for a deferred deletion that
@@ -1337,6 +1345,11 @@ class MainWindow(QMainWindow):
                 if t]
         if said:
             self.statusBar().showMessage("  ".join(said), 20000)
+        # v0.1.511 (D449) -- and the contacts its regions weld, unless the
+        # reading already took the bar (they are said at the next edit)
+        self._welds_said = ()
+        if not said:
+            self._say_welded_contacts()
 
     def _read_notes_text(self) -> str:
         """The notes the reading of the open file left
@@ -5493,10 +5506,43 @@ class MainWindow(QMainWindow):
 
 
     # ----- v0.1.7: dynamic action availability ------------------------
+    #: The events after which the contacts may weld differently (D449).
+    _GEOMETRY_EVENTS = frozenset({"boundary_added", "boundary_removed",
+                                  "boundary_replaced", "boundary_modified",
+                                  "model_restored"})
+
     def _on_project_event(self, event: str) -> None:
         """Project notified a state change — refresh conditional UI."""
         self.refresh_action_availability()
         self._schedule_stale_check()
+        if event in self._GEOMETRY_EVENTS:
+            timer = getattr(self, "_weld_timer", None)
+            if timer is not None:
+                timer.start()
+
+    def _say_welded_contacts(self) -> bool:
+        """Say on the status bar the material boundaries the endpoint weld of
+        the region builder joins where they did not meet
+        (``rules.contacts_welded``, rule C of D449, OGR Core 0.2.14: the
+        layer between them is not a region of its own), in the reader's
+        language; whether it said something. Once for the same joins: a
+        warning is said once (the interface guide, D-14), and again only
+        after the model stops having them."""
+        from ogr_core.project.rules import contacts_welded
+
+        from .core_messages import note_text
+        try:
+            notes = contacts_welded(self.project)
+        except Exception:  # noqa: BLE001 -- a model the builder cannot
+            notes = []     # take is said by the region check, not here
+        key = tuple(str(n) for n in notes)
+        if not notes or key == self._welds_said:
+            self._welds_said = key
+            return False
+        self._welds_said = key
+        self.statusBar().showMessage("  ".join(
+            note_text(n, project=self.project) for n in notes), 20000)
+        return True
 
     def _schedule_stale_check(self) -> None:
         """Once the edits pause, check whether the result in the results

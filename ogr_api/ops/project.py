@@ -189,13 +189,17 @@ def status_of(project) -> dict:
     # v0.1.509 (D445) -- ids two boundaries, or two user surfaces, share:
     # whatever refers to them may read either (``duplicate_id_notes``)
     from ogr_core.project.rules import duplicate_id_notes
+    # v0.1.511 (D449) -- rule C: two material boundaries the region
+    # builder's weld joins, the layer between them lost (``contacts_welded``)
+    from ogr_core.project.rules import contacts_welded
     from ..results import with_warning_codes
     return with_warning_codes(
         {"can_run": not blockers and not diag["problems"],
          "blockers": blockers + diag["problems"],
          "warnings": (orphan_assignment_messages(project)
                       + stale_surface_links(project)
-                      + duplicate_id_notes(project) + diag["warnings"]),
+                      + duplicate_id_notes(project)
+                      + contacts_welded(project) + diag["warnings"]),
          "model_notes": notes})
 
 
