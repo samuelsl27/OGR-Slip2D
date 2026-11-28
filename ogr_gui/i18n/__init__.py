@@ -5566,6 +5566,15 @@ _DICTS: dict[str, dict[str, str]] = {
             "El material '{material}' toma su superficie anisótropa de "
             "{boundary}, que no es una superficie anisótropa: su resistencia "
             "no la lee.",
+        # v0.1.507 (D443) — what a conversion or a deletion did to the
+        # links of the materials (ogr_api.link_notes)
+        'Materials that used it now have no water surface: {0}':
+            'Los materiales que lo usaban se quedan sin superficie de agua: '
+            '{0}',
+        "'{0}' lost its anisotropic surface.":
+            "'{0}' ha perdido su superficie anisótropa.",
+        'Materials that used it now read it as a {0}: {1}':
+            'Los materiales que lo usaban ahora lo leen como {0}: {1}',
         # OGR Core 0.2.14 (D449) — rule C, two contacts the weld joins
         'The material boundaries {first} and {second} end {distance:.3f} m '
         'apart, within the welding tolerance, and were joined at '

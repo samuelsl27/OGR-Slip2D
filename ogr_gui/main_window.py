@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.506"
+    VERSION = "0.1.507"
 
     def __init__(self) -> None:
         super().__init__()
@@ -6596,12 +6596,25 @@ class MainWindow(QMainWindow):
                 return
             # v0.1.7: RemoveBoundaryCommand takes the Boundary object
             # itself so undo can re-insert the exact same instance.
-            self.command_stack.do(
-                self.project, RemoveBoundaryCommand(boundary=b)
-            )
+            # v0.1.507 (D443) -- in the same undo step, the core's rule for
+            # the links of the materials (``unlink_on_removal``), which the
+            # agent asks too: until now the window left them pointing at a
+            # boundary that was gone. First, while the boundary is there (a
+            # material reading it by the fallback is found through it).
+            from ogr_core.project.commands import MacroCommand, SnapshotCommand
+            from ogr_core.project.rules import unlink_on_removal
+            links = SnapshotCommand(
+                "Remove Boundary",
+                lambda project, _id=b.id: unlink_on_removal(project, _id),
+                attrs=("materials",))
+            self.command_stack.do(self.project, MacroCommand(
+                children=[links, RemoveBoundaryCommand(boundary=b)],
+                description="Remove Boundary"))
             # v0.1.432 (D399) -- the label, not the stored English name
+            said = tr('Deleted {0}').format(self._boundary_label(b))
             self.ogr_status.showMessage(
-                tr('Deleted {0}').format(self._boundary_label(b)), 2000)
+                self._with_link_notes(said, links.result), 8000
+                if links.result else 2000)
 
     def _do_copy_boundary(self, index: int) -> None:
         if 0 <= index < len(self.project.boundaries):
@@ -6698,16 +6711,47 @@ class MainWindow(QMainWindow):
                 + tr("The boundary was not converted."), 8000)
             return
         new_b.id = current.id
+        changes = []
         if new_b.to_dict() != current.to_dict():
-            self.command_stack.do(self.project, ReplaceBoundaryCommand(
-                index=index, new_boundary=new_b))
+            # v0.1.507 (D443) -- the core's rule for the links of the
+            # materials (``relink_on_conversion``), in the same undo step,
+            # before the boundary changes type (a material reading it by the
+            # fallback is found through it). The agent's change_type asks it
+            # too. Until now a water table made a piezometric line left u at
+            # (25; 0.5) of the demo slope at 0 kPa, where it was 73.6.
+            from ogr_core.project.commands import (MacroCommand,
+                                                   SnapshotCommand)
+            from ogr_core.project.rules import relink_on_conversion
+            links = SnapshotCommand(
+                "Edit Boundary",
+                lambda project, _b=current, _t=new_type:
+                    relink_on_conversion(project, _b, _t),
+                attrs=("materials",))
+            self.command_stack.do(self.project, MacroCommand(
+                children=[links, ReplaceBoundaryCommand(
+                    index=index, new_boundary=new_b)],
+                description="Edit Boundary"))
+            changes = links.result or []
         # v0.1.432 (D399) -- the type through tr(): «Convertido en Water
         # Table» with the interface in Spanish
         from .labels import boundary_type_label
+        said = tr('Converted to {0}').format(boundary_type_label(new_type))
         self.ogr_status.showMessage(
-            tr('Converted to {0}').format(
-                boundary_type_label(new_type)), 2000
-        )
+            self._with_link_notes(said, changes, new_type),
+            8000 if changes else 2000)
+
+    def _with_link_notes(self, said: str, changes, new_type=None) -> str:
+        """``said`` and what a conversion or a deletion did to the links of
+        the materials (v0.1.507, D443): the agent's notes, in the reader's
+        language (``ogr_api.link_notes``, the one place that writes them)."""
+        if not changes:
+            return said
+        from ogr_api.link_notes import link_change_notes
+
+        from .labels import boundary_type_label
+        notes = link_change_notes(changes, new_type, translate=tr,
+                                  type_label=boundary_type_label)
+        return " ".join([said.rstrip(".") + "."] + notes)
 
     def _do_assign_material(self, index: int) -> None:
         """Deprecated fallback — kept for legacy menu entries.

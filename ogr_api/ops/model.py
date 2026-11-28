@@ -361,6 +361,7 @@ def boundary_edit(ws, boundary: str, op: str,
         b = find_boundary(project, boundary)
         idx = project.boundaries.index(b)
         notes = []
+        relink_to = None
         if op == "copy":
             from ogr_core.geometry.transforms import copy_boundary
             _check_allowed(project, b.btype)
@@ -380,19 +381,15 @@ def boundary_edit(ws, boundary: str, op: str,
                 raise Conflict(why.message,
                                hint="Point those joints at another surface "
                                     "or define them by angle first.")
+            # v0.1.507 (D443) -- the core's rule, which the window asks too
+            # (OGR Core 0.2.14); until now this door cleared the links by
+            # hand, and the window not at all. Before the boundary goes: a
+            # material that reads it by the fallback is found through it.
+            from ogr_core.project.rules import unlink_on_removal
+
+            from ..link_notes import link_change_notes
+            notes.extend(link_change_notes(unlink_on_removal(project, b.id)))
             project.boundaries.pop(idx)
-            cleared = [m for m in project.materials
-                       if m.water_surface_id == b.id]
-            if cleared:
-                from ogr_core.project.rules import assign_water_surface
-                assign_water_surface(project, b.id, [],
-                                     [m.id for m in cleared])
-                notes.append("Materials that used it now have no water "
-                             "surface: " + ", ".join(m.name for m in cleared))
-            for m in project.materials:
-                if m.anisotropic_surface_id == b.id:
-                    m.anisotropic_surface_id = None
-                    notes.append(f"{m.name!r} lost its anisotropic surface.")
             project._notify("boundary_removed")
             return {"deleted": b.id, "notes": notes,
                     "regions": len(project.resolve_regions())}
@@ -477,6 +474,10 @@ def boundary_edit(ws, boundary: str, op: str,
             if why is not None:
                 raise Conflict(why.message)
             new = convert_boundary(b, target)
+            # v0.1.507 (D443) -- the links of the materials follow or are
+            # cleared by the core's rule, applied below once every check of
+            # the edit has passed (the step is atomic all the same)
+            relink_to = target
         elif op == "block_object":
             new.block_object = (_block_object_spec(block_object, b.btype)
                                 if block_object is not None else None)
@@ -496,6 +497,12 @@ def boundary_edit(ws, boundary: str, op: str,
         # A vertex moved onto the first one of a closed ring is the closing
         # vertex again (v0.1.197: never stored).
         drop_closing_vertex(new.polyline)
+        if relink_to is not None:
+            from ogr_core.project.rules import relink_on_conversion
+
+            from ..link_notes import link_change_notes
+            notes.extend(link_change_notes(
+                relink_on_conversion(project, b, relink_to), relink_to))
         project.boundaries[idx] = new
         project._notify("boundary_modified")
         return {"boundary": boundary_info(new, with_vertices=True),
