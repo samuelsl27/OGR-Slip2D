@@ -5575,6 +5575,25 @@ _DICTS: dict[str, dict[str, str]] = {
             "'{0}' ha perdido su superficie anisótropa.",
         'Materials that used it now read it as a {0}: {1}':
             'Los materiales que lo usaban ahora lo leen como {0}: {1}',
+        # v0.1.508 (D444) — the refusals of OGR Core 0.2.14 the window
+        # shows: a polyline that crosses itself, and an import that leaves
+        # two of a boundary a model holds one of (rules.IMPORT_TWO), with the
+        # window's own advice (the core's names the agent's arguments)
+        'The edit makes the boundary cross itself.':
+            'Con esta edición el contorno se corta a sí mismo.',
+        'The import leaves two External boundaries.':
+            'La importación deja dos contornos exteriores.',
+        'The import leaves two Water Tables.':
+            'La importación deja dos niveles freáticos.',
+        'The import leaves two Tension Crack boundaries.':
+            'La importación deja dos grietas de tracción.',
+        'The import leaves two Drawdown Lines.':
+            'La importación deja dos líneas de desembalse.',
+        'Nothing was imported. Tick «Replace existing boundaries of the '
+        'imported types», or map only one layer to {0}.':
+            'No se ha importado nada. Marca «Sustituir los contornos '
+            'existentes de los tipos importados», o asigna una sola capa a '
+            '{0}.',
         # OGR Core 0.2.14 (D449) — rule C, two contacts the weld joins
         'The material boundaries {first} and {second} end {distance:.3f} m '
         'apart, within the welding tolerance, and were joined at '

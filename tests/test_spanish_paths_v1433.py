@@ -290,8 +290,9 @@ class TestTheWindowSaysItInSpanish:
                               error_args={},
                               error="No layer has been assigned a geometry "
                                     "type.")
+        # ``sanitised``: what the import rule reads (v0.1.508, D444)
         good = SimpleNamespace(ok=True, report=None, external_area=0.0,
-                               area_matches=True)
+                               area_matches=True, sanitised={})
 
         def dialog(pv):
             class _Dialog:

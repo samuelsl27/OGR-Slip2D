@@ -489,11 +489,13 @@ def boundary_edit(ws, boundary: str, op: str,
         # stay one its geometry can be: moving a vertex of a Polyline so it
         # doubles back is refused here, with the reason, not at compute.
         _check_block_object(new)
-        from ogr_core.geometry.cleanup import has_self_intersections
-        if len(new.polyline.vertices) >= 4 and has_self_intersections(
-                new.polyline):
-            raise InvalidArgument("The edit makes the boundary cross "
-                                  "itself.")
+        # v0.1.508 (D444) -- the core's rule of the geometry (OGR Core
+        # 0.2.14, ``rules.SELF_INTERSECTING``, the sentence this door wrote
+        # by hand), which the window's Convert Tool to Boundary asks too
+        from ogr_core.project.rules import polyline_refusal
+        why = polyline_refusal(new.btype, new.polyline)
+        if why is not None and why.code == "self_intersecting":
+            raise InvalidArgument(why.message)
         # A vertex moved onto the first one of a closed ring is the closing
         # vertex again (v0.1.197: never stored).
         drop_closing_vertex(new.polyline)

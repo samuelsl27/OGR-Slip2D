@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.507"
+    VERSION = "0.1.508"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1382,7 +1382,26 @@ class MainWindow(QMainWindow):
             self._info((preview_error_text(pv) if pv is not None else "")
                        or tr("The drawing could not be read."))
             return
-        created = apply_to_project(self.project, pv, dlg.options)
+        self._apply_dxf_import(pv, dlg.options)
+
+    def _apply_dxf_import(self, pv, options) -> bool:
+        """Write the DXF preview ``pv`` into the model with ``options``, or
+        say why not; whether it was written.
+
+        v0.1.508 (D444) -- first the core's rule (``import_refusal``, OGR
+        Core 0.2.14), which the agent asks too: an import that leaves two
+        External boundaries, or two water tables, tension cracks or drawdown
+        lines, is refused WHOLE (the owner's decision) and nothing is
+        written. Until now the window wrote it: without Replace, a second
+        External that the region builder never reads."""
+        from ogr_core.dxf import apply_to_project
+        from ogr_core.project.rules import import_refusal
+        refusal = import_refusal(self.project, pv, options)
+        if refusal is not None:
+            self.statusBar().showMessage(
+                self._import_refusal_text(refusal), 20000)
+            return False
+        created = apply_to_project(self.project, pv, options)
         self.canvas.set_project(self.project)
         self.canvas.refresh_scene()
         self.canvas.zoom_all() if hasattr(self.canvas, "zoom_all") else None
@@ -1409,6 +1428,26 @@ class MainWindow(QMainWindow):
             or (pv.external_area > 0 and not pv.area_matches))
         if needs_panel:
             self._show_dxf_problems(pv)
+        return True
+
+    @staticmethod
+    def _import_refusal_text(refusal) -> str:
+        """Why the DXF import is refused, in the reader's language, with the
+        window's advice: the core's names the agent's arguments
+        (``replace_model``, ``layer_kinds``), the window its own controls
+        (v0.1.508, D444)."""
+        from ogr_core.project.rules import IMPORT_TWO
+        from .labels import boundary_type_label
+        btype = next((k for k, v in IMPORT_TWO.items()
+                      if v == refusal.message), None)
+        if btype is None:
+            from .core_messages import note_text
+            return note_text(refusal.message)
+        return " ".join([
+            tr(refusal.message),
+            tr("Nothing was imported. Tick «Replace existing boundaries of "
+               "the imported types», or map only one layer to {0}.").format(
+                   boundary_type_label(btype))])
 
     def _show_dxf_problems(self, pv) -> None:
         """Open (or refresh) the non-modal DXF problem report."""
@@ -2733,10 +2772,7 @@ class MainWindow(QMainWindow):
         """
         from PySide6.QtWidgets import QInputDialog
 
-        from ogr_core.annotations import to_boundary_points
-        from ogr_core.geometry import (
-            Boundary, BoundaryType, Polyline, Vertex,
-        )
+        from ogr_core.geometry import BoundaryType
 
         candidates = [a for a in self.project.annotations
                       if a.convertible]
@@ -2770,19 +2806,41 @@ class MainWindow(QMainWindow):
             return
         btype = types[tlabels.index(tchoice)][0]
 
+        self._convert_annotation(ann, btype, tchoice)
+
+    def _convert_annotation(self, ann, btype, label: str) -> bool:
+        """Add ``ann`` to the model as a boundary of ``btype`` (``label``,
+        its name as the dialog showed it), or say why not; whether it was
+        added. The step after the two dialogs of Convert Tool to Boundary.
+
+        v0.1.508 (D444) -- first the rule of its type and of its geometry
+        (``boundary_refusal`` with the polyline, OGR Core 0.2.14), as the end
+        of a drawing and the agent ask: until now this path added a second
+        water table, a second External, an open External or a polyline that
+        crosses itself."""
+        from ogr_core.annotations import to_boundary_points
+        from ogr_core.geometry import Boundary, Polyline, Vertex
+        from ogr_core.project.rules import boundary_refusal
+
         pts = to_boundary_points(ann)
         if not pts:
             self._info(tr("This annotation has no usable geometry."))
-            return
+            return False
+        poly = Polyline(vertices=[Vertex(x, y) for x, y in pts],
+                        closed=ann.closed)
+        refusal = boundary_refusal(self.project, btype, polyline=poly)
+        if refusal is not None:
+            self.statusBar().showMessage(
+                self._boundary_refusal_text(refusal) + " "
+                + tr("The boundary was not added."), 8000)
+            return False
         # v0.1.305 (D292) — one undo step, named as boundary_add names it
         # (v0.1.414, D349: by the one rule in ogr_core)
         from ogr_core.project.commands import add_boundary_step_name
         self._model_step(
             add_boundary_step_name(btype),
             lambda: self.project.add_boundary(Boundary(
-                btype=btype,
-                polyline=Polyline(vertices=[Vertex(x, y) for x, y in pts],
-                                  closed=ann.closed))))
+                btype=btype, polyline=poly)))
         self.canvas.set_project(self.project)
         self.canvas.refresh_scene()
         # The annotation stays: converting copies the shape into the
@@ -2790,7 +2848,8 @@ class MainWindow(QMainWindow):
         # intent is not lost.
         self.statusBar().showMessage(
             tr("Converted to %s (%d vertices). The annotation was kept.")
-            % (tchoice, len(pts)), 8000)
+            % (label, len(pts)), 8000)
+        return True
 
     @undo_step("Set annotation")
     def _add_image(self) -> None:
@@ -6472,6 +6531,10 @@ class MainWindow(QMainWindow):
                           "\n", " ")
         if "Drawdown Line" in message:
             return tr("Only one Drawdown Line is allowed.")
+        # v0.1.508 (D444) -- the polyline that crosses itself
+        # (``rules.SELF_INTERSECTING``), in the agent's words
+        if code == "self_intersecting":
+            return tr(message)
         from .core_messages import note_text
         return note_text(message)
 

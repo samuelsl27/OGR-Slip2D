@@ -97,11 +97,19 @@ def dxf_import(ws, path: str, project_id: Optional[str] = None,
                                    "with layer_kinds.")
 
     def edit(project):
+        # v0.1.508 (D444) -- the core's rule (OGR Core 0.2.14), which the
+        # window asks too, BEFORE writing: until now this door wrote the
+        # import and counted the External boundaries afterwards (the atomic
+        # step put it back), and let a second water table, tension crack or
+        # drawdown line through
+        from ogr_core.project.rules import (IMPORT_TWO, import_hint,
+                                            import_refusal)
+        why = import_refusal(project, pv, opts)
+        if why is not None:
+            btype = next((k for k, v in IMPORT_TWO.items()
+                          if v == why.message), BoundaryType.EXTERNAL)
+            raise Conflict(why.message, hint=import_hint(btype))
         created = apply_to_project(project, pv, opts)
-        if len(project.boundaries_of(BoundaryType.EXTERNAL)) > 1:
-            raise Conflict("The import leaves two External boundaries.",
-                           hint="Use replace_model=true, or map only one "
-                                "layer to 'external'.")
         notes = []
         alive = {b.id for b in project.boundaries}
         for m in project.materials:

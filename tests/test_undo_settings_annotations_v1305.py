@@ -500,9 +500,11 @@ class TestImportAndTerminal:
             result = 1
 
             def __init__(self, path, parent=None):
+                # ``sanitised``: what the import rule reads (v0.1.508,
+                # D444); empty, so the rule has nothing to refuse
                 self.result_preview = SimpleNamespace(
                     ok=True, report=None, regions=0, external_area=0.0,
-                    area_matches=True, error="")
+                    area_matches=True, error="", sanitised={})
                 self.options = None
 
             def exec(self):
