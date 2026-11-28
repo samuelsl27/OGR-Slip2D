@@ -30,4 +30,5 @@ del informe, desde esta versión.
 
 ## 3. Suite
 
-La suite entera con `--jobs 4` y el núcleo 0.2.15, tras el commit.
+La suite entera con `--jobs 4` y el núcleo 0.2.15 (`shared: ogr_core 0.2.15`), sobre 875d2b0, sale en verde:
+**7755 casos, 0 fallos**, 2 saltados, sin fugas y sin tramos muertos. La última serie en verde fue hace 67 commits.
