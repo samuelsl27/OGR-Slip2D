@@ -2717,9 +2717,12 @@ def _ground_face_at(ground: Polyline, x: float, tol: float):
 
 
 def end_face_water(project: Project, ground: Polyline, x: float,
-                   y_base: float, y_top: float, tol: float):
+                   y_base: float, y_top: float, tol: float,
+                   outside: float):
     """``(F, y_c)``: the ponded water's thrust on the end face of a mass at
     ``x``, from its base ``y_base`` to its top ``y_top``, or None.
+    ``outside`` is the side of the face away from the mass: −1 for the left
+    end of a mass, +1 for the right one.
 
     Only a face of the GROUND carries it: the end of the mass is then a
     vertical face of the model, and the free water in front of it stands
@@ -2743,13 +2746,24 @@ def end_face_water(project: Project, ground: Polyline, x: float,
     An end that is not on a vertical face of the ground (a buried end, with
     ``END_ON_GROUND`` off) gets nothing: there is no free water in front of
     it.
+
+    v0.1.517 -- the level is the one IN FRONT of the face, read a tolerance
+    outside it, over ground of the model. Read at the face's own abscissa, a
+    water table drawn only over the soil, from the face inwards (a
+    phreatic surface that seeps out of the cliff), put a pond in front of a
+    face that has none: measured, 44.145 kN/m on the block of D450 with the
+    water table from (50, 17), where the ground in front is dry.
     """
     if y_top - y_base <= tol:
         return None
     face = _ground_face_at(ground, x, tol)
     if face is None:
         return None
-    level = ponded_water_level_at(project, x)
+    x_out = x + outside * tol
+    xs = [v.x for v in ground.vertices]
+    if not min(xs) <= x_out <= max(xs):
+        return None
+    level = ponded_water_level_at(project, x_out)
     if level is None:
         return None
     foot, top = face
@@ -2790,7 +2804,8 @@ def _apply_end_face_water(project: Project, slices: Slices, ground,
              -1.0)):
         if wall is not None and abs(wall[0] - x) <= tol:
             continue
-        thrust = end_face_water(project, ground, x, y_base, y_top, tol)
+        thrust = end_face_water(project, ground, x, y_base, y_top, tol,
+                                -push)
         if thrust is None:
             continue
         force, y_c = thrust

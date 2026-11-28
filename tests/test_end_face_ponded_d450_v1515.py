@@ -36,6 +36,8 @@ Checked here against that closed form (rule 1):
   trapezoid of sides a = 2·γw and b = 8·γw over h = 6);
 * an end that is the wall of a tension crack gets nothing from the pond:
   the crack's water is the thrust there;
+* with no free water in front of the face (a water table drawn from the
+  face inwards, v0.1.517), nothing, on both paths and in the mirror;
 * a surface whose ends are on the flat ground keeps every bit it had
   (control);
 * ``END_FACE_PONDED_WATER`` moves the factor of safety, of a vertical-slice
@@ -63,7 +65,9 @@ def _pl(points, closed=False):
                     closed=closed)
 
 
-def _model(level=17.0, mirror=False):
+def _model(level=17.0, mirror=False, from_face=False):
+    """``from_face``: the water table drawn only over the soil, from the
+    face inwards, so that the ground in front of the face is dry."""
     def mx(pts):
         return [(100.0 - x, y) for x, y in pts] if mirror else pts
     p = Project("D450")
@@ -75,8 +79,9 @@ def _model(level=17.0, mirror=False):
                  strength=MohrCoulomb(cohesion=5.0, friction_angle=30.0),
                  pore_pressure=PorePressureType.WATER_TABLE)
     p.materials = [m]
-    wt = Boundary(polyline=_pl([(-1, level), (101, level)]),
-                  btype=BoundaryType.WATER_TABLE)
+    line = [(50, level), (101, level)] if from_face else [(-1, level),
+                                                          (101, level)]
+    wt = Boundary(polyline=_pl(mx(line)), btype=BoundaryType.WATER_TABLE)
     p.add_boundary(wt)
     m.water_surface_id = wt.id
     return p
@@ -153,6 +158,18 @@ class TestEndFacePondedWater:
             f, y = _line(piece)
             assert math.isclose(f, want, rel_tol=1e-12), (name, f)
             assert math.isclose(y, y_want, rel_tol=1e-12), (name, y)
+
+    def test_no_pond_in_front_of_the_face_no_thrust(self):
+        """v0.1.517 -- the level is read in front of the face: a water
+        table drawn from the face inwards leaves the ground in front dry,
+        and 0.1.515 read it at the face and pushed 44.145 kN/m anyway."""
+        for mirror in (False, True):
+            p = _model(mirror=mirror, from_face=True)
+            s = _surface(_CLIFF, mirror=mirror)
+            v = _cut(p, s)
+            w = _wedges(p, s, v)
+            assert all(x.water_force_h == 0.0 for x in v), mirror
+            assert all(x.water_force_h == 0.0 for x in w), mirror
 
     def test_a_cracked_end_takes_none_of_the_pond(self):
         from ogr_slip2d import slicer

@@ -1025,7 +1025,7 @@ def build_wedges(project, surface, vertical: Slices, num_wedges: int = 25, *,
             if wall is not None and abs(wall[0] - xb) <= grid_tol:
                 continue
             thrust = _slicer.end_face_water(project, ground, xb, yb, yt,
-                                            grid_tol)
+                                            grid_tol, -push)
             if thrust is None:
                 continue
             force, y_c = thrust
