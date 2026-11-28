@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.508"
+    VERSION = "0.1.509"
 
     def __init__(self) -> None:
         super().__init__()
@@ -1310,21 +1310,41 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            self._attach_project(Project.load(Path(path)))
-            self.terminal_dock.attach_context(self.project, self.canvas, self)
-            self.command_stack.clear()
-            self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — {Path(path).name}")
-            self.ogr_status.showMessage(tr('Loaded {0}').format(path), 3000)
-            # v0.1.298 (D298) — a file saved before D287 can carry a region
-            # whose material was deleted: said on opening, not modal
-            orphan = self._orphan_region_text()
-            if orphan:
-                self.statusBar().showMessage(orphan.replace("\n", "  "),
-                                             20000)
+            self._open_path(path)
         except Exception as e:  # noqa: BLE001
             from .core_messages import error_text
             QMessageBox.critical(self, tr("Error"), tr(
                 'Could not open project:\n{0}').format(error_text(e)))
+
+    def _open_path(self, path) -> None:
+        """Open the ``.ogr`` at ``path`` into this window and say what its
+        reading found: the step after the file dialog of Open (v0.1.509,
+        split from ``act_open`` so it runs without one). Raises what
+        ``Project.load`` raises; ``act_open`` says it."""
+        self._attach_project(Project.load(Path(path)))
+        self.terminal_dock.attach_context(self.project, self.canvas, self)
+        self.command_stack.clear()
+        self.setWindowTitle(f"OGR Slip2D v{self.VERSION} — {Path(path).name}")
+        self.ogr_status.showMessage(tr('Loaded {0}').format(path), 3000)
+        # v0.1.298 (D298) — a file saved before D287 can carry a region
+        # whose material was deleted: said on opening, not modal.
+        # v0.1.509 (D445) -- and what the reading itself noted
+        # (``Project.read_notes``, OGR Core 0.2.14): ids the file repeats,
+        # and the polyline ids it renewed. Never a refusal: an old file has
+        # to open.
+        said = [t for t in (self._read_notes_text(),
+                            self._orphan_region_text().replace("\n", "  "))
+                if t]
+        if said:
+            self.statusBar().showMessage("  ".join(said), 20000)
+
+    def _read_notes_text(self) -> str:
+        """The notes the reading of the open file left
+        (``Project.read_notes``), in the reader's language, one after the
+        other; empty when there is none (v0.1.509, D445)."""
+        from .core_messages import note_text
+        return "  ".join(note_text(n, project=self.project)
+                         for n in getattr(self.project, "read_notes", []))
 
     def act_save(self) -> None:
         if self.project.file_path is None:

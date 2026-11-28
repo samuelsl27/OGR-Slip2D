@@ -186,12 +186,16 @@ def status_of(project) -> dict:
     # reader does not read, which an old file can bring (a conversion before
     # this version left the link): a warning, it computes, with nothing read
     from ogr_core.project.rules import stale_surface_links
+    # v0.1.509 (D445) -- ids two boundaries, or two user surfaces, share:
+    # whatever refers to them may read either (``duplicate_id_notes``)
+    from ogr_core.project.rules import duplicate_id_notes
     from ..results import with_warning_codes
     return with_warning_codes(
         {"can_run": not blockers and not diag["problems"],
          "blockers": blockers + diag["problems"],
          "warnings": (orphan_assignment_messages(project)
-                      + stale_surface_links(project) + diag["warnings"]),
+                      + stale_surface_links(project)
+                      + duplicate_id_notes(project) + diag["warnings"]),
          "model_notes": notes})
 
 
@@ -308,6 +312,13 @@ def project_open(ws, path: str) -> dict:
     out = {"project_id": handle.id, "summary": summary_of(handle)}
     if notes:
         out["migration_notes"] = notes
+    # v0.1.509 (D445) -- what the reading noted (``Project.read_notes``, OGR
+    # Core 0.2.14): ids the file repeats, and the polyline ids it renewed;
+    # with their codes, as the window says them
+    read = list(getattr(project, "read_notes", []) or [])
+    if read:
+        from ..results import with_warning_codes
+        out.update(with_warning_codes({"read_notes": read}, key="read_notes"))
     return out
 
 
