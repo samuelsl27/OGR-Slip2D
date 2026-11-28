@@ -68,6 +68,14 @@ El castellano del aviso entró en `efaa846`.
 - Áreas `region`, `lens`, `contact`, `weld`, `boundary`, `undo`, `open`, `mcp`, `api` y `status`,
   con `--jobs 4`: 400 en verde.
 
-## 4. Suite
+## 4. Suite y banco (cierre de la tanda 0.1.503–0.1.511)
 
-La suite entera se corre al final de la tanda.
+- **Suite entera** con `--jobs 4` en `382b65c` y ogr-core 0.2.14 instalado: 7720 casos, 0 fallos, 2
+  saltados, sin fugas ni tramos caídos. La última serie en verde fue hace 54 commits (toca a los 100).
+- **Banco**, el 2026-11-28:
+  - D443, D444, D445, D446 y D449 salen CUBIERTO POR TEST en el `verificar_cierres.py` de la raíz,
+    cada una con una medida en vivo; se retiran con la instantánea `Evaluaciones/0.1.511`;
+  - quedan 33 prompts, sin ninguna FALTA, y 0 ERROR en las dos auditorías de invariantes;
+  - la nota de modelado de la ficha del 005 dice ya que el filtro se resolvió.
+
+  P10 sigue abierto con D450, D455, D456, D463 y D467.
