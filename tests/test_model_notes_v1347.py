@@ -622,6 +622,82 @@ _V1346 = [('model.seismic_statistics',
   'here, so this run does not optimise. Tick it to get the old behaviour.')]
 
 
+def _label(kind, n, name=None):
+    """A boundary named in a note, as ``boundary_label`` nests it."""
+    if name is None:
+        return {"code": "rule.boundary_label",
+                "args": {"kind": kind, "n": n}, "text": f"{kind} #{n}"}
+    return {"code": "rule.boundary_label_named",
+            "args": {"name": name, "kind": kind, "n": n},
+            "text": f"'{name}' ({kind} #{n})"}
+
+
+#: OGR Core 0.2.14 (D443, D445, D449): the codes of ``RULES`` that core
+#: brings, with the sentences it writes (from ``Project.from_dict``,
+#: ``duplicate_id_notes``, ``stale_surface_links`` and ``contacts_welded``
+#: on real models). They join the samples only when the core under test has
+#: them, so the file holds against the pinned core and against the next one.
+_V0214 = [
+ ('rule.duplicate_boundary_id',
+  {'id': 'b-1', 'boundaries': [_label('Water Table', 1),
+                               _label('Material Boundary', 1)]},
+  "The boundaries Water Table #1, Material Boundary #1 share the id 'b-1': "
+  "whatever refers to that id (the water surface or the anisotropic surface "
+  "of a material, a support, a face of Sarma's method) may read either of "
+  "them."),
+ ('rule.duplicate_user_surface_id',
+  {'id': 's-1', 'surfaces': [
+      {'code': 'rule.user_circle_label', 'args': {'n': 1},
+       'text': 'user circle #1'},
+      {'code': 'rule.user_polyline_label', 'args': {'n': 2},
+       'text': 'user polyline #2'}]},
+  "The user surfaces user circle #1, user polyline #2 share the id 's-1': "
+  "whatever refers to that id may read either of them."),
+ ('rule.polyline_id_renewed',
+  {'id': 'p-1', 'boundaries': [_label('Water Table', 1),
+                               _label('Material Boundary', 1)]},
+  "The boundaries Water Table #1, Material Boundary #1 shared the polyline "
+  "id 'p-1'; it was renewed on reading for all but the first. Nothing reads "
+  "it, so the model is the same."),
+ ('rule.boundary_label', {'kind': 'Material Boundary', 'n': 2},
+  'Material Boundary #2'),
+ ('rule.boundary_label_named',
+  {'name': 'Techo', 'kind': 'Material Boundary', 'n': 1},
+  "'Techo' (Material Boundary #1)"),
+ ('rule.user_circle_label', {'n': 3}, 'user circle #3'),
+ ('rule.user_polyline_label', {'n': 1}, 'user polyline #1'),
+ ('rule.stale_water_link',
+  {'material': 'Silty clay', 'boundary': _label('Material Boundary', 1)},
+  "The material 'Silty clay' takes its water surface from Material Boundary "
+  "#1, which its pore-pressure model does not read: assign it a water "
+  "surface again."),
+ ('rule.stale_anisotropic_link',
+  {'material': 'Shale', 'boundary': _label('Weak Layer', 1)},
+  "The material 'Shale' takes its anisotropic surface from Weak Layer #1, "
+  "which is not an anisotropic surface: its strength does not read it."),
+ ('rule.contacts_welded',
+  {'first': _label('Material Boundary', 1, 'Techo'),
+   'second': _label('Material Boundary', 2),
+   'distance': 0.5, 'x': -5, 'y': 9.5},
+  "The material boundaries 'Techo' (Material Boundary #1) and Material "
+  "Boundary #2 end 0.500 m apart, within the welding tolerance, and were "
+  "joined at (-5.000, 9.500): whatever lay between those two ends is not a "
+  "region of its own. Move them apart, or end them on the same point."),
+]
+
+
+def _samples():
+    from ogr_core.project.messages import RULES
+    return _V1346 + [s for s in _V0214 if s[0] in RULES]
+
+
+def _wordless(t):
+    """A template with no words of its own (``{kind} #{n}``): its Spanish is
+    the English, its words come translated in its fields."""
+    return not any(ch.isalpha() for lit, _f, _s, _c in
+                   string.Formatter().parse(t) for ch in lit)
+
+
 def _catalogue():
     from ogr_core.messages import CORE_MESSAGES
     from ogr_core.project.messages import RULES
@@ -639,17 +715,17 @@ class TestTheEnglishIsTheOldOne:
     def test_every_code_with_its_sample(self):
         from ogr_core.messages import english
         cat = _catalogue()
-        for code, args, old in _V1346:
+        for code, args, old in _samples():
             assert english(cat, code, args) == old, code
 
     def test_the_samples_cover_every_code_and_both_numbers(self):
         from ogr_core.project.messages import RULES
         from ogr_slip2d.note_messages import NOTES
         codes = set(NOTES) | set(RULES)
-        assert {c for c, _a, _e in _V1346} == codes
+        assert {c for c, _a, _e in _samples()} == codes
         for code, spec in {**NOTES, **RULES}.items():
             if spec.one:
-                counts = {a.get(spec.count) for c, a, _e in _V1346
+                counts = {a.get(spec.count) for c, a, _e in _samples()
                           if c == code}
                 assert 1 in counts and len(counts) > 1, code
 
@@ -686,20 +762,25 @@ class TestEveryCodeSaysItselfInSpanish:
             if code in ("join", "note.method"):
                 continue
             for en in [spec.english] + ([spec.one] if spec.one else []):
+                if _wordless(en):
+                    continue
                 assert en in es, (code, en[:60])
                 assert _fields(es[en]) == _fields(en), code
                 assert es[en] != en, code
 
     def test_each_sample_renders_in_spanish(self):
         from ogr_core.messages import render
+        from ogr_gui.core_messages import _show
         from ogr_gui.i18n import tr
         cat = _catalogue()
         from ogr_gui.i18n import current_language, set_language
         before = current_language()
         set_language("es")
         try:
-            for code, args, old in _V1346:
-                said = render(cat, code, args, old, translate=tr)
+            for code, args, old in _samples():
+                # ``show`` as the window passes it: a wordless label
+                # (``{kind} #{n}``) is Spanish through its kind
+                said = render(cat, code, args, old, translate=tr, show=_show)
                 assert said and said != old, code
         finally:
             set_language(before)

@@ -5526,6 +5526,56 @@ _DICTS: dict[str, dict[str, str]] = {
             'ya no existe. Asígnale otro material (Propiedades > Asignar '
             'materiales); una superficie que pase por ella no se puede '
             'analizar.',
+        # OGR Core 0.2.14 (D445) — ids a file repeats, said on reading.
+        # «{kind} #{n}» and «'{name}' ({kind} #{n})» have no words of their
+        # own: the kind is translated where it is shown, as the Block Search
+        # labels are.
+        "The boundaries {boundaries} share the id '{id}': whatever refers "
+        "to that id (the water surface or the anisotropic surface of a "
+        "material, a support, a face of Sarma's method) may read either of "
+        "them.":
+            "Los contornos {boundaries} comparten el id '{id}': lo que se "
+            "refiera a ese id (la superficie de agua o la superficie "
+            "anisótropa de un material, un soporte, una cara del método de "
+            "Sarma) puede leer cualquiera de ellos.",
+        "The user surfaces {surfaces} share the id '{id}': whatever refers "
+        "to that id may read either of them.":
+            "Las superficies de usuario {surfaces} comparten el id '{id}': lo "
+            "que se refiera a ese id puede leer cualquiera de ellas.",
+        "The boundaries {boundaries} shared the polyline id '{id}'; it was "
+        "renewed on reading for all but the first. Nothing reads it, so the "
+        "model is the same.":
+            "Los contornos {boundaries} compartían el id de polilínea '{id}'; "
+            "al leer se ha renovado en todos menos el primero. Nada lo lee, "
+            "así que el modelo es el mismo.",
+        'user circle #{n}':
+            'círculo de usuario #{n}',
+        'user polyline #{n}':
+            'polilínea de usuario #{n}',
+        # OGR Core 0.2.14 (D443) — a link an old file brings to a boundary of
+        # a type that does not read it
+        "The material '{material}' takes its water surface from {boundary}, "
+        "which its pore-pressure model does not read: assign it a water "
+        "surface again.":
+            "El material '{material}' toma su superficie de agua de "
+            "{boundary}, que su modelo de presión intersticial no lee: "
+            "vuelve a asignarle una superficie de agua.",
+        "The material '{material}' takes its anisotropic surface from "
+        "{boundary}, which is not an anisotropic surface: its strength does "
+        "not read it.":
+            "El material '{material}' toma su superficie anisótropa de "
+            "{boundary}, que no es una superficie anisótropa: su resistencia "
+            "no la lee.",
+        # OGR Core 0.2.14 (D449) — rule C, two contacts the weld joins
+        'The material boundaries {first} and {second} end {distance:.3f} m '
+        'apart, within the welding tolerance, and were joined at '
+        '({x:.3f}, {y:.3f}): whatever lay between those two ends is not a '
+        'region of its own. Move them apart, or end them on the same point.':
+            'Los contornos de material {first} y {second} terminan a '
+            '{distance:.3f} m uno de otro, dentro de la tolerancia de '
+            'soldadura, y se han unido en ({x:.3f}, {y:.3f}): lo que hubiera '
+            'entre esos dos extremos no es una región propia. Sepáralos, o '
+            'haz que terminen en el mismo punto.',
         # v0.1.348 (D335) — the notes about one method's surface
         'The critical surface daylights at {steepest:.1f} deg from the '
         'horizontal, which is too steep for a fixed number of slices to '
@@ -7636,6 +7686,10 @@ _DICTS: dict[str, dict[str, str]] = {
         # its factor as a datum of it, never as a minimum
         'the one with the lowest Ky of this method':
             'la de menor Ky de este método',
+        # OGR Core 0.2.13 (D437) — with up-slope displacement allowed, the
+        # critical surface is the one that moves most, net
+        'the one with the largest net Newmark displacement of this method':
+            'la de mayor desplazamiento neto de Newmark de este método',
         '{0} of this surface':
             '{0} de esta superficie',
         '{0} of this surface, kh = {1:g}':
