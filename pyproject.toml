@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ogr-slip2d"
-version = "0.1.504"
+version = "0.1.505"
 description = "OGR Slip2D — open-source slope stability and groundwater analysis (OpenGeoRock Suite)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -41,7 +41,13 @@ dependencies = [
     # not a number and a material name that is not a string are refused at
     # opening with their codes (0.2.11, D429); a test pattern that matches
     # no file makes the runner exit with 2 (0.2.12, D431).
-    "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.12",
+    # v0.1.505 -- v0.2.14: the report's Newmark row with upslope sliding
+    # (0.2.13, D437); the P10 batch: conversion relinks materials
+    # (D443), self-intersection and import refusals (D444), repeated ids
+    # said on reading and Delete by identity (D445), _fmt writes an
+    # integer with its decimals (D446), the endpoint weld keeps a thin
+    # layer and warns when it joins two contacts (D449).
+    "ogr-core @ git+https://github.com/samuelsl27/OGR-Core@v0.2.14",
     "numpy>=1.26",
     "scipy>=1.14",
     "shapely>=2.0",

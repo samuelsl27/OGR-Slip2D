@@ -27,6 +27,10 @@ engine re-exports it:
   says the Ky and the displacement carry the partial factors (the owner's
   decision), for the run (``run_caption``) and only when some method has a
   critical surface;
+* with upslope sliding allowed (v0.1.505, OGR Core 0.2.13, D437) the
+  critical surface is «the one with the largest net Newmark displacement
+  of this method», in English and in Spanish, and one-way it stays the
+  lowest Ky;
 * without Ky or Newmark the report is the one it was (``_V1354`` of
   ``test_report_spanish_v1355`` is the text-for-text control).
 
@@ -129,6 +133,11 @@ def _run(key):
             ds = p.settings.design_standard
             ds.enabled, ds.standard = True, "custom"
             ds.factor_cohesion = ds.factor_friction = _FACTOR
+        elif key == "upslope":
+            # OGR Core 0.2.13 (D437): Newmark with upslope sliding allowed,
+            # where the run publishes the surface that moves most, net
+            p = _plane("newmark", standard=True)
+            p.settings.seismic.allow_upslope = True
         else:
             p = _plane(*key)
         out = run_analysis(p)
@@ -308,6 +317,49 @@ class TestANewmarkRun:
             block, shown)
 
 
+class TestANetNewmarkRun:
+    """OGR Core 0.2.13 (D437 of v0.1.499): with upslope sliding allowed the
+    critical surface is the one with the largest NET displacement
+    (``SearchResult.net_newmark``), and the report says so, not «the one
+    with the lowest Ky». The displacement it prints is the critical
+    surface's own; the other rows do not change."""
+
+    def test_the_premise_the_run_is_a_net_one(self):
+        _p, results, _rep = _run("upslope")
+        sr = results[_METHOD]
+        assert sr.net_newmark is True
+        assert "newmark_displacement" in sr.critical.details
+
+    def test_the_block_says_the_largest_net_displacement(self):
+        p, results, rep = _run("upslope")
+        block = _block(_capture(p, results, rep))
+        assert block[1] == "Newmark displacement", block
+        metres = results[_METHOD].critical.details["newmark_displacement"]
+        assert block[2] == "%.3f cm" % (100.0 * metres), block
+        assert _after(block, "Critical surface") == (
+            "the one with the largest net Newmark displacement of this "
+            "method"), block
+        assert "the one with the lowest Ky of this method" not in block
+
+    def test_one_way_the_row_is_the_lowest_ky(self):
+        """The control: the same plane without upslope sliding."""
+        _p, results, _rep = _run(("newmark", True))
+        assert not getattr(results[_METHOD], "net_newmark", False)
+
+    def test_in_spanish(self):
+        from ogr_gui.core_messages import note_text
+        from ogr_gui.labels import method_name
+        p, results, rep = _run("upslope")
+        with _Spanish():
+            said = _capture(p, results, rep, translate=note_text,
+                            method_name=method_name)
+            # the heading in Spanish too, as TestInSpanish takes it
+            head = "Método: " + method_name(_METHOD)
+        block = _block(said, head)
+        assert _after(block, "Superficie crítica") == (
+            "la de mayor desplazamiento neto de Newmark de este método"), block
+
+
 class TestItDoesNotCallItTheMinimum:
 
     def test_the_premise_two_wedges_in_closed_form(self):
@@ -454,6 +506,8 @@ class TestInSpanish:
     def test_every_new_text_has_its_spanish(self):
         from ogr_gui.core_messages import note_text
         new = ["the one with the lowest Ky of this method",
+               "the one with the largest net Newmark displacement of this "
+               "method",
                "{0} of this surface", "{0} of this surface, kh = {1:g}"]
         with _Spanish():
             assert all(note_text(t) != t for t in new), \
