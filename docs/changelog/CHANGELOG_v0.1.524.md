@@ -58,3 +58,15 @@ opción A con la nota de C. Ningún número cambia.
 No hay test nuevo: es un cierre documental y ningún número cambia. Tests dirigidos
 (`sarma design i18n texts_details settings budget dialogs_fit`, 33 archivos): 585 en verde. El veredicto en
 vivo lo da `d461()` del `verificar_cierres.py` de la raíz del banco.
+
+## 3. Suite y cierre en el banco
+
+- **La suite entera con `--jobs 4`** (núcleo `ogr_core 0.2.15`), sobre 55de1a5, sale en verde: **7760 casos, 0
+  fallos**, 2 saltados, sin fugas y sin tramos muertos. Cubre las tres versiones de la tanda, de 0.1.522 a
+  0.1.524. La última serie en verde fue hace 71 commits.
+- **Banco, raíz**, el 2026-11-28:
+  - `d460()`, `d461()` y `d462()` del `verificar_cierres.py`: CIERRE DOCUMENTAL, CIERRE DOCUMENTAL y CUBIERTO
+    POR TEST. Con el árbol de 0.1.521, las tres dan SIGUE ABIERTO.
+  - Instantánea `Evaluaciones/0.1.524`; las tres fichas retiradas y podadas de P9.
+  - Nace **D470** (P8): los 16 combos de otros diálogos.
+  - Auditoría de invariantes: 0 ERROR.
