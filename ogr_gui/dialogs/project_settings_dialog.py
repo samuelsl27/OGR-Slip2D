@@ -52,6 +52,7 @@ from ogr_core.project.units import (
 )
 from ogr_gui.dialog_size import (VerticalScrollArea, WrappingCheckBox,
                                   list_width, open_at_content_size)
+from ogr_gui.combo_values import select_stored_value
 from ogr_gui.i18n import tr
 from ogr_gui.labels import (groundwater_method_label, permeability_unit_label,
                             time_unit_label)  # noqa: E402
@@ -422,9 +423,9 @@ class _MethodsPage(QWidget):
             (tr("Clipped Sine"), "clipped_sine"),
         ):
             self.cbo_f.addItem(label, value)
-        i = self.cbo_f.findData(
-            getattr(s.methods, "interslice_function", "half_sine"))
-        self.cbo_f.setCurrentIndex(max(0, i))
+        # v0.1.522 (D462): a value this version does not list is kept
+        select_stored_value(self.cbo_f, getattr(
+            s.methods, "interslice_function", "half_sine"))
         self.cbo_f.setToolTip(tr(
             "Shape of the interslice force function used by GLE / "
             "Morgenstern-Price. Constant makes GLE equivalent to "
@@ -443,9 +444,8 @@ class _MethodsPage(QWidget):
             (tr("Total (water thrust included)"), "total"),
         ):
             self.cbo_zf.addItem(label, value)
-        i = self.cbo_zf.findData(
-            getattr(s.methods, "interslice_forces", "total"))
-        self.cbo_zf.setCurrentIndex(max(0, i))
+        select_stored_value(self.cbo_zf, getattr(
+            s.methods, "interslice_forces", "total"))
         # v0.1.144 — the tooltip says which one to pick, not only what
         # they are. An option whose two values are both defensible and
         # whose consequences are nowhere written is an option the user
@@ -508,8 +508,7 @@ class _MethodsPage(QWidget):
                              (tr('Optimised, all surfaces'),
                               "optimized_all")):
             self.cbo_sarma_angles.addItem(label, value)
-        self.cbo_sarma_angles.setCurrentIndex(
-            max(0, self.cbo_sarma_angles.findData(sa.slice_angles)))
+        select_stored_value(self.cbo_sarma_angles, sa.slice_angles)
         self.cbo_sarma_angles.setToolTip(tr("The angle of the faces no vertex gives one. Bisector: the bisector of the two bases that meet; mean normal: their normals weighted by the lengths of the bases; vertical: the vertical methods' slices. A face that would cross a neighbour or not reach the ground is dropped with its boundary where it is a uniform division on a straight stretch of one Mohr-Coulomb material, and made vertical elsewhere: at a vertex, a contact, a water-table cut or on the chords of a circle.") + "\n" + tr("Optimised: the angles that make the factor least, from the best of the three, by steps of 10° down to 0.3125° (a step counts when it lowers the factor by more than the tolerance on F); the faces given at vertices stay. Global minimum: every surface with the bisector, then the critical one optimised; all surfaces: every surface optimised, much slower (from seconds to a minute a surface with 25 wedges)."))
         form.addRow(tr('Face angles:'), self.cbo_sarma_angles)
         self.cbo_sarma_strength = QComboBox()
@@ -517,8 +516,7 @@ class _MethodsPage(QWidget):
                              (tr('Given c and φ'), "given"),
                              (tr('No face strength'), "none")):
             self.cbo_sarma_strength.addItem(label, value)
-        self.cbo_sarma_strength.setCurrentIndex(
-            max(0, self.cbo_sarma_strength.findData(sa.interslice_strength)))
+        select_stored_value(self.cbo_sarma_strength, sa.interslice_strength)
         self.cbo_sarma_strength.setToolTip(tr("The shear strength of the faces between wedges, which F divides as it divides the bases'. Materials: the mean of the Mohr-Coulomb materials each face crosses, by length; given: the cohesion and friction angle below, divided by the design standard's material factors; none: the faces carry no shear."))
         form.addRow(tr('Face strength:'), self.cbo_sarma_strength)
         self.dsp_sarma_c = QDoubleSpinBox()
@@ -541,8 +539,7 @@ class _MethodsPage(QWidget):
         for label, value in ((tr('Fixed: the upper wedge moves down'), "fixed"),
                              (tr("Kinematic: the rigid wedges' own"), "kinematic")):
             self.cbo_sarma_sense.addItem(label, value)
-        self.cbo_sarma_sense.setCurrentIndex(
-            max(0, self.cbo_sarma_sense.findData(sa.shear_sense)))
+        select_stored_value(self.cbo_sarma_sense, sa.shear_sense)
         self.cbo_sarma_sense.setToolTip(tr('Fixed: the upper wedge moves down relative to the lower one on every face. Kinematic: the sense the motion of the rigid wedges gives; they differ where a base is less steep than the one below it.'))
         form.addRow(tr('Sense of the face shear:'), self.cbo_sarma_sense)
         self._sarma_widgets = (
@@ -613,8 +610,7 @@ class _GroundwaterPage(QWidget):
             # v0.1.321 (D300) — the combo showed the stored identifier
             # (``grid_total_head``) in every language.
             self.cbo_method.addItem(groundwater_method_label(m), m.value)
-        i = self.cbo_method.findData(s.groundwater.method)
-        self.cbo_method.setCurrentIndex(max(0, i))
+        select_stored_value(self.cbo_method, s.groundwater.method)
 
         self.dsp_gamma = QDoubleSpinBox()
         self.dsp_gamma.setRange(0.1, 50.0); self.dsp_gamma.setDecimals(3)
@@ -717,8 +713,8 @@ class _GroundwaterPage(QWidget):
             "Water Surfaces and at least one material marked as "
             "undrained. The three multi-stage ones also need an R or "
             "Kc=1 envelope on it; B-bar needs its B-bar coefficient."))
-        i = self.cbo_drawdown.findData(s.groundwater.rapid_drawdown_method)
-        self.cbo_drawdown.setCurrentIndex(max(0, i))
+        select_stored_value(self.cbo_drawdown,
+                            s.groundwater.rapid_drawdown_method)
 
         # The transient option lives here too, next to the two it is
         # exclusive with. Its solver parameters stay on the Transient
@@ -1235,8 +1231,7 @@ class _StatisticsPage(QWidget):
         for value, label in (("global_minimum", tr("Global Minimum")),
                              ("overall_slope", tr("Overall Slope"))):
             self.cbo_type.addItem(label, value)
-        i = self.cbo_type.findData(self.s.analysis_type)
-        self.cbo_type.setCurrentIndex(max(0, i))
+        select_stored_value(self.cbo_type, self.s.analysis_type)
         self.cbo_type.setToolTip(tr(
             "Global Minimum reuses the deterministic critical surface for "
             "every sample. Overall Slope repeats the WHOLE search per "
@@ -1247,8 +1242,7 @@ class _StatisticsPage(QWidget):
         for value, label in (("monte_carlo", tr("Monte Carlo")),
                              ("latin_hypercube", tr("Latin Hypercube"))):
             self.cbo_sampling.addItem(label, value)
-        j = self.cbo_sampling.findData(self.s.sampling_method)
-        self.cbo_sampling.setCurrentIndex(max(0, j))
+        select_stored_value(self.cbo_sampling, self.s.sampling_method)
         self.cbo_sampling.setToolTip(tr(
             "Latin Hypercube converges markedly faster: around 1000 of "
             "its samples match some 5000 Monte Carlo ones."))
@@ -1294,8 +1288,7 @@ class _RandomNumbersPage(QWidget):
         for value, label in (("pseudo_random", tr("Pseudo-random")),
                              ("random", tr("Random"))):
             self.cbo_method.addItem(label, value)
-        i = self.cbo_method.findData(self.s.method)
-        self.cbo_method.setCurrentIndex(max(0, i))
+        select_stored_value(self.cbo_method, self.s.method)
         self.cbo_method.currentIndexChanged.connect(self._on_method)
         form.addRow(tr("Generation:"), self.cbo_method)
 
@@ -1375,8 +1368,7 @@ class _DesignStandardPage(QWidget):
             label = (tr("No standard") if value == "none"
                      else tr(DESIGN_STANDARD[value]))
             self.cbo_std.addItem(label, value)
-        i = self.cbo_std.findData(self.s.standard)
-        self.cbo_std.setCurrentIndex(max(0, i))
+        select_stored_value(self.cbo_std, self.s.standard)
         self.cbo_std.currentIndexChanged.connect(self._on_standard)
         form.addRow(tr("Design standard:"), self.cbo_std)
 

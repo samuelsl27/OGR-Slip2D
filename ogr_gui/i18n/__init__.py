@@ -4418,6 +4418,11 @@ _DICTS: dict[str, dict[str, str]] = {
             'Fijo: la cuña de arriba baja',
         "Kinematic: the rigid wedges' own":
             'Cinemático: el de las cuñas rígidas',
+        # v0.1.522 (D462) — a stored value a combo does not list
+        'Unknown value: %s':
+            'Valor desconocido: %s',
+        'This version of the program does not know this value. It is kept as it is unless you choose another option.':
+            'Esta versión del programa no conoce este valor. Se conserva tal cual salvo que elijas otra opción.',
         # v0.1.465 (D357) — Sarma's data per vertex
         'Sarma Data per Vertex...':
             'Datos de Sarma por vértice...',
