@@ -244,12 +244,12 @@ class TestTheWindow:
             from ogr_gui.interpret_window import _SliceDataDock as D
             assert D.solves_interslice(r)
             for label, key, side in (
-                    ("E left (kN)", "sarma_face_thrusts", 0),
-                    ("E right (kN)", "sarma_face_thrusts", 1),
-                    ("X left (kN)", "sarma_face_shears", 0),
-                    ("X right (kN)", "sarma_face_shears", 1),
-                    ("E′ left (kN)", "sarma_face_effective", 0),
-                    ("E′ right (kN)", "sarma_face_effective", 1)):
+                    ("E left (kN/m)", "sarma_face_thrusts", 0),
+                    ("E right (kN/m)", "sarma_face_thrusts", 1),
+                    ("X left (kN/m)", "sarma_face_shears", 0),
+                    ("X right (kN/m)", "sarma_face_shears", 1),
+                    ("E′ left (kN/m)", "sarma_face_effective", 0),
+                    ("E′ right (kN/m)", "sarma_face_effective", 1)):
                 assert float(_row(w, label)) == round(d[key][i + side], 2), (
                     label, _row(w, label), d[key][i + side])
             faces = r.slices.faces
@@ -258,7 +258,7 @@ class TestTheWindow:
                 want = round(math.degrees(faces[i + side].theta), 2)
                 assert float(_row(w, label)) == want, (label, want)
             want = round(r.base_shear_force[i], 2)
-            assert float(_row(w, "Driving shear W·sinα (kN)")) == want
+            assert float(_row(w, "Driving shear W·sinα (kN/m)")) == want
         finally:
             w.close()
 
@@ -385,7 +385,7 @@ class TestTheWindow:
     def test_the_new_labels_speak_spanish(self):
         from ogr_gui.i18n import _DICTS, current_language, set_language, tr
         es = _DICTS["es"]
-        for label in ("E′ left (kN)", "E′ right (kN)", "Face angle left θ (°)",
+        for label in ("E′ left (kN/m)", "E′ right (kN/m)", "Face angle left θ (°)",
                       "Face angle right θ (°)", "Wedge number:",
                       "Wedge %d of %d — x from %.2f to %.2f",
                       "Free Body Diagram — wedge {0} ({1})"):

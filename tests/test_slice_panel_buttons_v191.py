@@ -206,7 +206,7 @@ class TestEveryLabelIsTranslated:
             "Centre the view on the selected slice",
             "Show only the selected slice, for a clean capture",
             "─ Interslice forces ─", "Resolved by this method",
-            "E left (kN)", "E right (kN)", "X left (kN)", "X right (kN)",
+            "E left (kN/m)", "E right (kN/m)", "X left (kN/m)", "X right (kN/m)",
             "no — this method does not resolve them")
 
     def test_they_all_have_a_spanish_entry(self):

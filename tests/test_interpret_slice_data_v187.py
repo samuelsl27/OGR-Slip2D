@@ -58,7 +58,7 @@ _WINDOWS = []
 # minimum of Ej_2. FS there is 1.11442.
 REFERENCE_ROW_1 = {
     "Width b (m)": 1.04705,
-    "Weight W (kN)": 9.40306,
+    "Weight W (kN/m)": 9.40306,
     "Base cohesion c (kPa)": 26.0,
     "Base friction angle φ (°)": 30.0,
     "Shear strength τ_f (kPa)": 31.082,
@@ -159,7 +159,7 @@ class TestThePanelMatchesTheReference:
         # W·sin(alpha) is a different quantity. On this slice it is not
         # even close: mistaking one for the other is what the first
         # version of this panel did.
-        driving = float(_field("Driving shear W·sinα (kN)", s, res))
+        driving = float(_field("Driving shear W·sinα (kN/m)", s, res))
         assert abs(driving - tau_m * s.base_length) > 0.1, driving
 
     def test_strength_follows_mohr_coulomb_at_the_base(self):
@@ -197,11 +197,11 @@ class TestClickingASliceFillsThePanel:
         s = w._query_slice_target.slices[5]
         _click_slice(w, s)
         t = w.slice_dock.table
-        interslice = {"E left (kN)", "E right (kN)",
-                      "X left (kN)", "X right (kN)"}
+        interslice = {"E left (kN/m)", "E right (kN/m)",
+                      "X left (kN/m)", "X right (kN/m)"}
         # v0.1.467 (D357) -- E′ = E − PW on a face, which only Sarma's method
         # solves: a dash for Bishop is the honest answer there too
-        effective = {"E′ left (kN)", "E′ right (kN)"}
+        effective = {"E′ left (kN/m)", "E′ right (kN/m)"}
         blanks = [t.item(i, 0).text() for i in range(t.rowCount())
                   if t.item(i, 1).text() == "—"]
         unexpected = [b for b in blanks if b not in interslice | effective]

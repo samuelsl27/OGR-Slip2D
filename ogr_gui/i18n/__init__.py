@@ -559,7 +559,7 @@ _DICTS: dict[str, dict[str, str]] = {
         'Height h (m)': 'Altura h (m)',
         'Base y left (m)': 'y de base izquierda (m)',
         'Base y right (m)': 'y de base derecha (m)',
-        'Weight W (kN)': 'Peso W (kN)',
+        'Weight W (kN/m)': 'Peso W (kN/m)',
         'Weight factor': 'Factor de peso',
         # v0.1.243 (D226b): la acción de una carga
         'Load action:': 'Acción de la carga:',
@@ -591,8 +591,8 @@ _DICTS: dict[str, dict[str, str]] = {
             'deslizamiento de la superficie o se opone a él.',
         'Pore pressure u (kPa)': 'Presión intersticial u (kPa)',
         'Surface load q (kPa)': 'Carga en superficie q (kPa)',
-        'Base normal force N (kN)': 'Fuerza normal en la base N (kN)',
-        'Driving shear W·sinα (kN)': 'Cortante motor W·senα (kN)',
+        'Base normal force N (kN/m)': 'Fuerza normal en la base N (kN/m)',
+        'Driving shear W·sinα (kN/m)': 'Cortante motor W·senα (kN/m)',
         'Base normal stress σₙ (kPa)': 'Tensión normal en la base σₙ (kPa)',
         'Effective normal σ′ₙ (kPa)': 'Normal efectiva σ′ₙ (kPa)',
         'Shear strength τ_f (kPa)': 'Resistencia al corte τ_f (kPa)',
@@ -613,10 +613,10 @@ _DICTS: dict[str, dict[str, str]] = {
         # botones del diálogo de la referencia.
         '─ Interslice forces ─': '─ Fuerzas entre dovelas ─',
         'Resolved by this method': 'Las resuelve este método',
-        'E left (kN)': 'E izquierda (kN)',
-        'E right (kN)': 'E derecha (kN)',
-        'X left (kN)': 'X izquierda (kN)',
-        'X right (kN)': 'X derecha (kN)',
+        'E left (kN/m)': 'E izquierda (kN/m)',
+        'E right (kN/m)': 'E derecha (kN/m)',
+        'X left (kN/m)': 'X izquierda (kN/m)',
+        'X right (kN/m)': 'X derecha (kN/m)',
         # v0.1.468 (D357) — Sarma's method in the PDF report
         'Number of Wedges': 'Número de cuñas',
         # v0.1.488 (D454): the engine does not keep a least number; the
@@ -642,8 +642,8 @@ _DICTS: dict[str, dict[str, str]] = {
         'Faces of the Wedges': 'Caras de las cuñas',
         'Length': 'Longitud',
         # v0.1.467 (D357) — the wedges of Sarma's method in Interpret
-        'E′ left (kN)': 'E′ izquierda (kN)',
-        'E′ right (kN)': 'E′ derecha (kN)',
+        'E′ left (kN/m)': 'E′ izquierda (kN/m)',
+        'E′ right (kN/m)': 'E′ derecha (kN/m)',
         'Face angle left θ (°)': 'Ángulo de la cara izquierda θ (°)',
         'Face angle right θ (°)': 'Ángulo de la cara derecha θ (°)',
         'Wedge %d of %d — x from %.2f to %.2f':

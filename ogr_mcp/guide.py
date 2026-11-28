@@ -44,7 +44,7 @@ GUIDE = """\
 # OGR Slip2D — modelling guide for agents
 
 ## Units and axes
-SI everywhere: lengths in m, forces in kN (per metre out of plane),
+SI everywhere: lengths in m, forces in kN/m (per metre out of plane),
 stresses in kPa, unit weights in kN/m3, angles in degrees. x grows to the
 right, y grows upwards. The unit system in settings only changes what the
 interface DISPLAYS; every value you send or receive here is SI.

@@ -155,14 +155,14 @@ class _SliceDataDock(QDockWidget):
         ("Base y right (m)", lambda s, r: round(s.base_y_right, 3)),
         # --- Forces ----------------------------------------------------
         ("─ Forces ─", lambda s, r: ""),
-        ("Weight W (kN)",    lambda s, r: round(s.weight, 2)),
+        ("Weight W (kN/m)",    lambda s, r: round(s.weight, 2)),
         # v0.1.242 (D226a) -- the permanent-action factor the weight above
         # already carries: 1.0 without a design standard.
         ("Weight factor",
          lambda s, r: round(getattr(s, "weight_factor", 1.0), 3)),
         ("Pore pressure u (kPa)",   lambda s, r: round(s.pore_pressure, 2)),
         ("Surface load q (kPa)",    lambda s, r: round(s.surface_pressure, 2)),
-        ("Base normal force N (kN)",
+        ("Base normal force N (kN/m)",
          lambda s, r: _SliceDataDock._r(
              _per_slice(r, "base_normal_force",
                         getattr(s, "index", None)), 2)),
@@ -178,7 +178,7 @@ class _SliceDataDock(QDockWidget):
         # same slice — and the two Janbu put nothing there at all. All nine
         # report the driving force now; the mobilised shear is the row
         # three below, which divides the strength by F.
-        ("Driving shear W·sinα (kN)",
+        ("Driving shear W·sinα (kN/m)",
          lambda s, r: _SliceDataDock._r(
              _per_slice(r, "base_shear_force", getattr(s, "index", None)), 2)),
         # --- Stresses --------------------------------------------------
@@ -247,16 +247,16 @@ class _SliceDataDock(QDockWidget):
         ("─ Interslice forces ─", lambda s, r: ""),
         ("Resolved by this method",
          lambda s, r: _SliceDataDock._inter_status(r)),
-        ("E left (kN)",  lambda s, r: _SliceDataDock._inter(r, s, "E", 0)),
-        ("E right (kN)", lambda s, r: _SliceDataDock._inter(r, s, "E", 1)),
-        ("X left (kN)",  lambda s, r: _SliceDataDock._inter(r, s, "X", 0)),
-        ("X right (kN)", lambda s, r: _SliceDataDock._inter(r, s, "X", 1)),
+        ("E left (kN/m)",  lambda s, r: _SliceDataDock._inter(r, s, "E", 0)),
+        ("E right (kN/m)", lambda s, r: _SliceDataDock._inter(r, s, "E", 1)),
+        ("X left (kN/m)",  lambda s, r: _SliceDataDock._inter(r, s, "X", 0)),
+        ("X right (kN/m)", lambda s, r: _SliceDataDock._inter(r, s, "X", 1)),
         # v0.1.467 (D357) -- the faces of a wedge of Sarma's are inclined
         # and carry water: their angle (90 on a vertical slice, which is
         # what every other method's faces are) and E′ = E − PW, which only
         # Sarma's method solves
-        ("E′ left (kN)",  lambda s, r: _SliceDataDock._inter(r, s, "E′", 0)),
-        ("E′ right (kN)", lambda s, r: _SliceDataDock._inter(r, s, "E′", 1)),
+        ("E′ left (kN/m)",  lambda s, r: _SliceDataDock._inter(r, s, "E′", 0)),
+        ("E′ right (kN/m)", lambda s, r: _SliceDataDock._inter(r, s, "E′", 1)),
         ("Face angle left θ (°)",
          lambda s, r: _SliceDataDock._face_angle(r, s, 0)),
         ("Face angle right θ (°)",
