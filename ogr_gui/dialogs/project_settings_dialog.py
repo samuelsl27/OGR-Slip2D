@@ -1432,7 +1432,13 @@ class _DesignStandardPage(QWidget):
             "action: with this on, every slice takes the unfavourable "
             "factor. Off, a slice whose base drives the sliding takes the "
             "unfavourable factor, and one whose base climbs against it the "
-            "favourable one."))
+            "favourable one.") + "\n" + tr(
+            # v0.1.524 (D461): the jump of Sarma's inclined faces
+            "Off, with Sarma and Ru, the face between a wedge that drives "
+            "and one that resists takes the factor of the wedge it leans "
+            "over, so the factor of safety jumps as that face crosses the "
+            "vertical: -0.6 % with Ru 0.3 and 6 wedges, -2 % with Ru 0.6, "
+            "on a test circle. On, there is no jump."))
         self.chk_single_source.toggled.connect(
             lambda _on: self._on_enabled(self.chk_enabled.isChecked()))
         form.addRow("", self.chk_single_source)

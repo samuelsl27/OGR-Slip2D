@@ -1376,7 +1376,48 @@ def _face_factor(face, toe_side: float, head_side: float) -> float:
     wedge on its −x side above it); the mean of the two on a vertical face,
     whose column is the boundary between them. (v0.1.463: the first
     version took the mean everywhere, and the adversarial review measured
-    PW 485 against 557 with γG and γG,fav apart.)"""
+    PW 485 against 557 with γG and γG,fav apart.)
+
+    The jump at the vertical (v0.1.524, D461: the owner's decision, closed
+    by documentation). With a design standard and ``single_source_weight``
+    off, the factor is a property of each wedge (γG where its base drives
+    the sliding, γG,fav where it resists), so the field of factors is
+    discontinuous at the boundary between a driving and a resisting wedge.
+    The face on that boundary takes one side's factor leaning one way and
+    the other's leaning the other, and F jumps as it crosses θ = 90°.
+    Measured on 0.1.485 and again on 0.1.524 on the circle of
+    ``tests/test_sarma_optimize_angles_v1471.py`` (centre (30; 35), R 26,
+    c 1, φ 30°), DA1-C1, between 89.999° and 90.001°: −0.578 % with Ru 0.3
+    and 6 wedges (face 2, x = 31.162), −0.316 % with 10, −0.118 % with 25,
+    −2.074 % with Ru 0.6 and 6 wedges, and nothing with Ru 0. Faces between
+    two wedges of the same factor do not jump, and with the mean of the
+    two factors on every face (the rule the review rejected) no face does.
+
+    The jump is a consequence of the model, not an error: the rule above is
+    the right one for the column over each point. EN 1997-1 gives no rule
+    for pore pressure that comes from a weight favourable in one part of
+    the mass and unfavourable in another. Frank et al. (2004, §11.5) call
+    that split "often difficult" and recommend one factor on every
+    permanent action, water included; their single-source principle (the
+    same factor on all water pressures from one source, in their examples
+    of footings and piles) points the same way. That is what
+    ``single_source_weight`` on does, by default: every wedge takes γG and
+    nothing jumps. A weighted mean of the two factors would make F
+    continuous, but no source gives it.
+
+    In the angle optimiser, a jump above ``optimize_angles.JUMP`` (1 %) is
+    a change of branch, and the continuity refuses the move. On the same
+    circle, ``optimized_global``: with Ru 0.3 the boundary face crosses the
+    vertical on its first move (92.59° to 82.59°) and ends at 67.59°, F
+    1.215381; with Ru 0.6 that first crossing (92.61° to 82.61°) is refused,
+    and the same move is kept on the next pass, once the face below has
+    moved; the face ends at 77.60°, F 0.552147.
+
+    References:
+        Frank, R. et al. (2004). Designers' Guide to EN 1997-1. Thomas
+        Telford, §11.5; the single-source principle in its examples of
+        drained footings (ch. 6) and of uplift of piles (ch. 7).
+    """
     if abs(face.theta - 0.5 * math.pi) <= 1e-12:
         return 0.5 * (toe_side + head_side)
     return toe_side if face.theta < 0.5 * math.pi else head_side

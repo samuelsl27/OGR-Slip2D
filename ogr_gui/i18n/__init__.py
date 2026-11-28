@@ -4418,6 +4418,9 @@ _DICTS: dict[str, dict[str, str]] = {
             'Fijo: la cuña de arriba baja',
         "Kinematic: the rigid wedges' own":
             'Cinemático: el de las cuñas rígidas',
+        # v0.1.524 (D461) — the jump of Sarma's inclined faces
+        'Off, with Sarma and Ru, the face between a wedge that drives and one that resists takes the factor of the wedge it leans over, so the factor of safety jumps as that face crosses the vertical: -0.6 % with Ru 0.3 and 6 wedges, -2 % with Ru 0.6, on a test circle. On, there is no jump.':
+            'Desactivada, con Sarma y Ru, la cara entre una cuña que empuja y otra que resiste toma el coeficiente de la cuña sobre la que se inclina, así que el factor de seguridad salta cuando esa cara cruza la vertical: -0.6 % con Ru 0.3 y 6 cuñas, -2 % con Ru 0.6, en un círculo de prueba. Activada, no hay salto.',
         # v0.1.523 (D460) — no face parallel to weak planes
         'No face is tried parallel to the planes of an anisotropic material: with the strength from the materials a face that crosses one is refused, and with a given strength the orientation of a face does not change its strength.':
             'No se prueba ninguna cara paralela a los planos de un material anisótropo: con la resistencia de los materiales, una cara que cruza uno se rechaza, y con una resistencia dada la orientación de una cara no cambia su resistencia.',
