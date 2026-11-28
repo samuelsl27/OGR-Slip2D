@@ -48,4 +48,6 @@ Sin defectos en las otras reglas. Lo que se apunta y no se cambia:
 
 ## 4. Suite
 
-La suite entera se corre después de esta versión.
+La suite entera de la tanda (0.1.512–0.1.517), con `--jobs 4` sobre 440cfc5, el 2026-11-28, sale en verde:
+**7748 casos, 0 fallos**, 2 saltados, sin fugas y sin tramos muertos. La última serie en verde fue hace 61
+commits (7aff40b): todavía no le toca.
