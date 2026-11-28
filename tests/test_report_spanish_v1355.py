@@ -39,6 +39,22 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 _ROOT = Path(__file__).resolve().parent.parent
 
+
+def _core_writes_kn_per_m() -> bool:
+    """v0.1.518 (D455) -- whether the imported core heads the slice table's
+    weight in kN/m: OGR Core 0.2.15 does (the owner's decision, one unit for
+    a force per metre of slope), 0.2.14 and earlier wrote [kN]. Read off the
+    core's version so that this suite passes against the pinned core and
+    against the development 0.2.15.devN the core is tagged from
+    (``--dev-core``); once the pin reaches 0.2.15 the text is just [kN/m]."""
+    import ogr_core
+    nums = [int(x) for x in re.findall(r"\d+", ogr_core.__version__)[:3]]
+    return tuple(nums) >= (0, 2, 15)
+
+
+_WEIGHT_HEADER = ('Weight\n[kN/m]' if _core_writes_kn_per_m()
+                  else 'Weight\n[kN]')
+
 #: ``(kind, text)``: what the v0.1.354 report wrote, in order and without
 #: repeats -- "p" a paragraph, "t" a table cell, "f" the page footer.
 _V1354 = [('p', 'Report'),
@@ -116,7 +132,7 @@ _V1354 = [('p', 'Report'),
  ('t', 'Janbu Simplified'),
  ('p', 'Slice Data (Global Minimum Query)'),
  ('t', 'Width\n[m]'),
- ('t', 'Weight\n[kN]'),
+ ('t', _WEIGHT_HEADER),
  ('t', 'Weight\nfactor'),
  ('t', 'Base\nMat.'),
  ('t', 'c\n[kPa]'),
