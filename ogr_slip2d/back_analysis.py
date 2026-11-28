@@ -116,6 +116,10 @@ class BackAnalysisResult:
     # that the force does not touch. Not in ``surfaces_analysed``.
     surfaces_above_target: int = 0
     surfaces_untouched: int = 0
+    # v0.1.516 (D467) -- and, with Bishop, the ones below the target whose
+    # circle has its centre below the force (``ARM_ABOVE_CENTRE_REFUSED``).
+    # Not in ``surfaces_analysed`` either.
+    surfaces_above_centre: int = 0
     notes: dict = field(default_factory=dict)
 
     @property
@@ -132,6 +136,7 @@ class BackAnalysisResult:
             "surfaces": self.surfaces_analysed,
             "surfaces_above_target": self.surfaces_above_target,
             "surfaces_untouched": self.surfaces_untouched,
+            "surfaces_above_centre": self.surfaces_above_centre,
             "active_force": c.active_force if c else math.nan,
             "passive_force": c.passive_force if c else math.nan,
             "required_force": self.required_force,
@@ -516,6 +521,20 @@ def required_force(slices, surface, target_fos, method_id="bishop_simplified",
     resisting, driving, arm = sums
     if abs(arm) < 1e-9:
         return None
+    # v0.1.516 (D467) -- a negative arm is Bishop's force ABOVE the centre of
+    # the circle (Janbu's arm is 1). Its moment then turns the mass the way
+    # it slides, and any force into the slope lowers both factors below:
+    # R/(D + T·|arm|) and (R − T·|arm|)/D. No force into the slope can bring
+    # the surface up to the target, and the count below gave a negative
+    # force that the clip published as 0, «needs no support», for a surface
+    # below the target (50 circles of bank problem 037 at target 1.5). See
+    # ``ARM_ABOVE_CENTRE_REFUSED``.
+    if arm < 0.0 and ARM_ABOVE_CENTRE_REFUSED:
+        return BackAnalysisSurfaceResult(
+            surface=surface_dict, target_fos=target_fos,
+            notes={"above_centre": RM.run_note(
+                RM.BACK_SURFACE_ABOVE_CENTRE, y=elevation,
+                yc=float(getattr(surface, "centre_y", math.nan)))})
 
     res = BackAnalysisSurfaceResult(surface=surface_dict,
                                     target_fos=target_fos)
@@ -546,6 +565,15 @@ def required_force(slices, surface, target_fos, method_id="bishop_simplified",
 # analysed every surface (until v0.1.440) and a test can demand that the
 # screens move the answer.
 REFERENCE_SCREENS = True
+
+#: v0.1.516 (D467) -- with Bishop, a surface whose circle has its centre
+#: below the force is left out with its note (the owner's decision of
+#: 2026-11-28, of three: leave it out, give the force with its sign, or
+#: keep the 0 and warn). The rule is the sign of the arm, geometric and
+#: exact: no factor is read. A module switch, read at call time, so an A/B
+#: can rebuild the clip to 0 of until v0.1.515 and a test can demand that
+#: the rule moves the answer.
+ARM_ABOVE_CENTRE_REFUSED = True
 
 
 def model_of_slices(project):
@@ -710,7 +738,12 @@ def required_force_of_result(result, target_fos, elevation, project,
     # computed on: the drawn-down one under a rapid drawdown
     r = required_force(slices, result.surface, target_fos, method_id,
                        elevation, kh, kv, project=model_of_slices(project))
-    if r is None or r.notes or not REFERENCE_SCREENS:
+    # v0.1.516 (D467) -- a force above the centre (``above_centre``) is
+    # judged after the two screens, as the run judges it: a surface already
+    # at the target needs nothing, and one the force does not touch is said
+    # to be that, whatever the arm.
+    if (r is None or (r.notes and "above_centre" not in r.notes)
+            or not REFERENCE_SCREENS):
         # What the method cannot price is said first, as the run says it
         # (Bishop and a surface that is not a circle, an envelope that did
         # not settle); the two screens are for a surface it can price.
@@ -844,6 +877,7 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
     priced_on = model_of_slices(project)
     n_above = 0
     untouched = []          # the top range of each one left out
+    n_above_centre = 0      # v0.1.516 (D467)
     # The inadmissible surfaces, with their forces: to say whether one of
     # them would have governed (a screen that changed the answer is said;
     # one that did not is not noise worth a note on every run), and to fall
@@ -879,6 +913,13 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
             if top is not None and not force_touches(top, elevation):
                 untouched.append(top)
                 continue
+        # v0.1.516 (D467) -- with Bishop, the force above the centre of the
+        # circle cannot raise its factor: left out and counted, before it is
+        # priced, by the same sign ``required_force`` reads (arm < 0).
+        if (is_bishop and ARM_ABOVE_CENTRE_REFUSED
+                and elevation > ev.surface.centre_y):
+            n_above_centre += 1
+            continue
         r = required_force(slices, ev.surface, target_fos, method_id,
                            elevation, kh, kv, project=priced_on)
         out.surfaces_analysed += 1
@@ -948,7 +989,15 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
     # is no force.
     out.surfaces_above_target = n_above
     out.surfaces_untouched = len(untouched)
+    out.surfaces_above_centre = n_above_centre
     nothing_priced = best is None and not out.surfaces_analysed
+    # v0.1.516 (D467) -- said always, like the untouched ones: those
+    # surfaces stay below the target, and no force at this elevation helps
+    if n_above_centre:
+        out.notes["above_centre_skipped"] = RM.run_note(
+            RM.BACK_NONE_ABOVE_CENTRE if nothing_priced
+            else RM.BACK_ABOVE_CENTRE_LEFT_OUT,
+            n=n_above_centre, y=elevation)
     if untouched:
         if nothing_priced:
             out.notes["untouched_skipped"] = RM.run_note(
@@ -972,6 +1021,8 @@ def run_back_analysis(project, search, target_fos=1.3, elevation=0.0,
         # it.
         if nothing_priced and untouched:
             out.notes["error"] = out.notes["untouched_skipped"]
+        elif nothing_priced and n_above_centre:
+            out.notes["error"] = out.notes["above_centre_skipped"]
         elif nothing_priced and n_above:
             out.notes["error"] = out.notes["above_target"] = RM.run_note(
                 RM.BACK_NONE_ABOVE_TARGET)

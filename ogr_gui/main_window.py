@@ -289,7 +289,7 @@ def undo_step(description: str, attrs=None):
 
 
 class MainWindow(QMainWindow):
-    VERSION = "0.1.515"
+    VERSION = "0.1.516"
 
     def __init__(self) -> None:
         super().__init__()
@@ -2182,7 +2182,10 @@ class MainWindow(QMainWindow):
         # does not touch, first: they stay below it. (The ones already at
         # the target are a note only when they are why there is no force:
         # ``notes["error"]``, below.)
+        # v0.1.516 (D467) — and, with Bishop, the ones below the target
+        # whose circle has its centre below the force: they stay below it too
         own = [res.notes[key] for key in ("untouched_skipped",
+                                          "above_centre_skipped",
                                           "composite_skipped",
                                           "envelope_not_settled",
                                           "not_circular_skipped",

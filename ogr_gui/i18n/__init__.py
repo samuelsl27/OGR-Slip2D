@@ -7242,6 +7242,13 @@ _DICTS: dict[str, dict[str, str]] = {
             'La fuerza a la cota {y:.7g} no toca la masa deslizante de esta '
             'superficie, que llega al terreno entre las cotas {lo:.2f} y '
             '{hi:.2f}: no se da fuerza de soporte.',
+        # v0.1.516 (D467) -- with Bishop, the force above the centre
+        '{n} surface(s) below the target factor were left out: with Bishop, the force at elevation {y:.7g} is above the centre of their circle, so its moment turns the mass the way it slides and no force into the slope can raise their factor. Check them separately, or move the force below their centre.':
+            'Se dejaron fuera {n} superficie(s) que están por debajo del factor objetivo: con Bishop, la fuerza a la cota {y:.7g} está por encima del centro de su círculo, así que su momento hace girar la masa en el sentido en que desliza y ninguna fuerza hacia el talud puede subir su factor. Compruébalas aparte, o baja la fuerza por debajo de su centro.',
+        'With Bishop, the force at elevation {y:.7g} is above the centre of the circle of each of the {n} surface(s) below the target factor that it touches, so no support force is reported: its moment turns the mass the way it slides, and no force into the slope can raise their factor.':
+            'Con Bishop, la fuerza a la cota {y:.7g} está por encima del centro del círculo de cada una de las {n} superficie(s) que están por debajo del factor objetivo y que toca, así que no se da fuerza de soporte: su momento hace girar la masa en el sentido en que desliza, y ninguna fuerza hacia el talud puede subir su factor.',
+        'With Bishop, the force at elevation {y:.7g} is above the centre of this circle ({yc:.7g}): its moment turns the mass the way it slides, so no force into the slope can raise its factor, and no support force is reported.':
+            'Con Bishop, la fuerza a la cota {y:.7g} está por encima del centro de este círculo ({yc:.7g}): su momento hace girar la masa en el sentido en que desliza, así que ninguna fuerza hacia el talud puede subir su factor, y no se da fuerza de soporte.',
         'Back analysis is only available for {methods}.':
             'El retroanálisis solo está disponible para {methods}.',
         'search failed: {error}':

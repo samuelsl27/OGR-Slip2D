@@ -139,7 +139,9 @@ stability analysis read the field.
   defined by hand included. Two kinds are left out: the ones already at
   the target (surfaces_above_target) and the ones below it whose sliding
   mass the force does not touch (surfaces_untouched, and a note: the force
-  does nothing for them). Give elevation a y ON the slope face: the
+  does nothing for them). With Bishop, also the ones whose circle has its
+  centre below the force (surfaces_above_centre, and a note): its moment
+  turns the mass the way it slides, so no force into the slope helps. Give elevation a y ON the slope face: the
   default, 0, usually touches nothing, and then there is no force and
   notes.error says between which elevations the masses meet the ground.
   The force is horizontal on purpose and has no angle: an anchor or a

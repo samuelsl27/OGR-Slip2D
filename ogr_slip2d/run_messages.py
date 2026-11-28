@@ -44,6 +44,10 @@ BACK_NONE_UNTOUCHED = "run.back_none_untouched"
 BACK_SURFACE_ABOVE_TARGET = "run.back_surface_above_target"
 BACK_SURFACE_UNTOUCHED = "run.back_surface_untouched"
 BACK_SUPPORTS = "run.back_supports"
+# v0.1.516 (D467) -- with Bishop, the force above the centre of the circle
+BACK_ABOVE_CENTRE_LEFT_OUT = "run.back_above_centre_left_out"
+BACK_NONE_ABOVE_CENTRE = "run.back_none_above_centre"
+BACK_SURFACE_ABOVE_CENTRE = "run.back_surface_above_centre"
 SWEEP_ENABLE_DRAWDOWN = "run.sweep_enable_drawdown"
 SEARCH_NOT_BUILT = "run.search_not_built"
 
@@ -130,6 +134,24 @@ RUN_NOTES = {s.code: s for s in (
                 "mass of this surface, which meets the ground between "
                 "elevations {lo:.2f} and {hi:.2f}: no support force is "
                 "reported."),
+    MessageSpec(BACK_ABOVE_CENTRE_LEFT_OUT,
+                "{n} surface(s) below the target factor were left out: with "
+                "Bishop, the force at elevation {y:.7g} is above the centre "
+                "of their circle, so its moment turns the mass the way it "
+                "slides and no force into the slope can raise their factor. "
+                "Check them separately, or move the force below their "
+                "centre."),
+    MessageSpec(BACK_NONE_ABOVE_CENTRE,
+                "With Bishop, the force at elevation {y:.7g} is above the "
+                "centre of the circle of each of the {n} surface(s) below "
+                "the target factor that it touches, so no support force is "
+                "reported: its moment turns the mass the way it slides, and "
+                "no force into the slope can raise their factor."),
+    MessageSpec(BACK_SURFACE_ABOVE_CENTRE,
+                "With Bishop, the force at elevation {y:.7g} is above the "
+                "centre of this circle ({yc:.7g}): its moment turns the mass "
+                "the way it slides, so no force into the slope can raise its "
+                "factor, and no support force is reported."),
     MessageSpec(SEARCH_NOT_BUILT, "Could not build the search for: {methods}",
                 kinds=(("methods", "method_list"),)),
     MessageSpec(BACK_SUPPORTS,

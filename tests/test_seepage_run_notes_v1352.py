@@ -335,7 +335,31 @@ _LATER = [
   'english': 'The force at elevation 12.5 does not touch the sliding mass of '
              'this surface, which meets the ground between elevations 15.74 '
              'and 25.00: no support force is reported.',
-  'args': {'y': 12.5, 'lo': 15.7446, 'hi': 25.0}}]
+  'args': {'y': 12.5, 'lo': 15.7446, 'hi': 25.0}},
+ # v0.1.516 (D467): with Bishop, the force above the centre of the circle
+ {'cat': 'run',
+  'code': 'run.back_above_centre_left_out',
+  'english': '50 surface(s) below the target factor were left out: with '
+             'Bishop, the force at elevation 15.5 is above the centre of '
+             'their circle, so its moment turns the mass the way it slides '
+             'and no force into the slope can raise their factor. Check them '
+             'separately, or move the force below their centre.',
+  'args': {'n': 50, 'y': 15.5}},
+ {'cat': 'run',
+  'code': 'run.back_none_above_centre',
+  'english': 'With Bishop, the force at elevation 23.5 is above the centre '
+             'of the circle of each of the 1 surface(s) below the target '
+             'factor that it touches, so no support force is reported: its '
+             'moment turns the mass the way it slides, and no force into the '
+             'slope can raise their factor.',
+  'args': {'n': 1, 'y': 23.5}},
+ {'cat': 'run',
+  'code': 'run.back_surface_above_centre',
+  'english': 'With Bishop, the force at elevation 23.5 is above the centre '
+             'of this circle (22): its moment turns the mass the way it '
+             'slides, so no force into the slope can raise its factor, and no '
+             'support force is reported.',
+  'args': {'y': 23.5, 'yc': 22.0}}]
 
 
 def _cat(name):

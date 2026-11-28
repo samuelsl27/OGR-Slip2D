@@ -2259,7 +2259,8 @@ class InterpretWindow(QMainWindow):
         # analyse, by the rule the run uses (the owner's decision): one
         # already at the target printed "active: 0.00, passive: 0.00", and
         # one the force does not touch printed a force.
-        for key in ("above_target", "untouched"):
+        # v0.1.516 (D467) -- and, with Bishop, the force above the centre
+        for key in ("above_target", "untouched", "above_centre"):
             if r.notes.get(key):
                 from .core_messages import note_text
                 self._info(note_text(r.notes[key]))
